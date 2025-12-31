@@ -176,9 +176,9 @@ cd "$TEST_PATHS"
 
 # Backup existing baseline if present
 BASELINE_BACKUP=""
-if [ -f ".neochrome-baseline" ]; then
-  BASELINE_BACKUP=".neochrome-baseline.backup.$$"
-  cp ".neochrome-baseline" "$BASELINE_BACKUP"
+if [ -f ".hcc-baseline" ]; then
+  BASELINE_BACKUP=".hcc-baseline.backup.$$"
+  cp ".hcc-baseline" "$BASELINE_BACKUP"
   echo -e "${YELLOW}→ Backed up existing baseline to $BASELINE_BACKUP${NC}"
   echo ""
 fi
@@ -190,7 +190,7 @@ fi
 print_test_header "Baseline Generation"
 
 # Remove any existing baseline
-rm -f ".neochrome-baseline"
+rm -f ".hcc-baseline"
 
 # Generate baseline
 # Disable set -e temporarily to capture exit code without terminating
@@ -200,8 +200,8 @@ EXIT_CODE=$?
 set -e
 
 # Check if baseline file was created
-if [ -f ".neochrome-baseline" ]; then
-  BASELINE_COUNT=$(grep -v "^#" ".neochrome-baseline" | grep -v "^$" | wc -l | tr -d '[:space:]')
+if [ -f ".hcc-baseline" ]; then
+  BASELINE_COUNT=$(grep -v "^#" ".hcc-baseline" | grep -v "^$" | wc -l | tr -d '[:space:]')
   pass_test "Baseline file created with $BASELINE_COUNT entries"
 else
   fail_test "Baseline file was not created"
@@ -257,7 +257,7 @@ echo ""
 print_test_header "New Issue Detection"
 
 # Create a temporary PHP file with a known issue
-TEST_FILE="$TEST_PATHS/neochrome-baseline-test-temp.php"
+TEST_FILE="$TEST_PATHS/hcc-baseline-test-temp.php"
 cat > "$TEST_FILE" << 'EOF'
 <?php
 // Temporary test file for baseline testing
@@ -316,9 +316,9 @@ print_test_header "Stale Baseline Detection"
 
 # Modify baseline to have higher counts than actual findings
 # This simulates fixing issues after baseline was generated
-if [ -f ".neochrome-baseline" ]; then
+if [ -f ".hcc-baseline" ]; then
   # Add a fake entry with high count
-  echo "unbounded-posts-per-page|fake-file.php|0|999|*" >> ".neochrome-baseline"
+  echo "unbounded-posts-per-page|fake-file.php|0|999|*" >> ".hcc-baseline"
   
   # Run check (should detect stale entry)
   OUTPUT=$("$CHECK_SCRIPT" --paths "$TEST_PATHS" --format json --no-log 2>&1)
@@ -377,14 +377,14 @@ echo ""
 echo -e "${BOLD}Cleanup${NC}"
 
 # Remove test baseline
-if [ -f ".neochrome-baseline" ]; then
-  rm -f ".neochrome-baseline"
+if [ -f ".hcc-baseline" ]; then
+  rm -f ".hcc-baseline"
   echo -e "  ${GREEN}✓${NC} Removed test baseline"
 fi
 
 # Restore original baseline if it existed
 if [ -n "$BASELINE_BACKUP" ] && [ -f "$BASELINE_BACKUP" ]; then
-  mv "$BASELINE_BACKUP" ".neochrome-baseline"
+  mv "$BASELINE_BACKUP" ".hcc-baseline"
   echo -e "  ${GREEN}✓${NC} Restored original baseline"
 fi
 

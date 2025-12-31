@@ -91,7 +91,7 @@ FORMAT=json
 
 ```bash
 # Use a baseline file
-BASELINE=.neochrome-baseline
+BASELINE=.hcc-baseline
 
 # Custom log directory
 LOG_DIR=./custom-logs
@@ -202,7 +202,7 @@ Use templates in CI/CD pipelines:
 2. Add baseline to template:
    ```bash
    # In my-plugin.txt
-   BASELINE=.neochrome-baseline
+   BASELINE=.hcc-baseline
    ```
 
 3. Future scans only report NEW issues

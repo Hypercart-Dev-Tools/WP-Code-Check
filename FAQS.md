@@ -90,7 +90,7 @@ This is perfect for:
 - Large plugins/themes where fixing everything at once isn't practical
 - Teams that want to prevent regression without a massive refactor
 
-The baseline file (`.neochrome-baseline`) is human-readable and can be committed to version control.
+The baseline file (`.hcc-baseline`) is human-readable and can be committed to version control.
 
 ---
 

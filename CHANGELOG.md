@@ -5,12 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.59] - 2025-12-31
+
+### Changed
+- **Baseline File Renamed** - Renamed `.neochrome-baseline` to `.hcc-baseline` (HCC = Hypercart Code Check)
+  - Updated default baseline filename in `check-performance.sh`
+  - Updated all documentation references
+  - Updated test fixtures and test scripts
+  - Updated `.gitignore` patterns
+  - Renamed `dist/tests/fixtures/.neochrome-baseline` to `.hcc-baseline`
+
+---
+
 ## [1.0.58] - 2025-12-31
 
 ### Fixed
-- **Test Fixture Baseline File** - Added `.neochrome-baseline` test fixture to git
+- **Test Fixture Baseline File** - Added `.hcc-baseline` test fixture to git
   - File was being ignored by `.gitignore`, causing CI test failures
-  - Added exception in `.gitignore` for `dist/tests/fixtures/.neochrome-baseline`
+  - Added exception in `.gitignore` for `dist/tests/fixtures/.hcc-baseline`
   - Fixes "JSON baseline behavior" test failure in GitHub Actions
 
 ### Added
@@ -609,7 +621,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Baseline regression coverage**
-  - Added a dedicated `.neochrome-baseline` fixture and JSON-based test in `dist/tests/run-fixture-tests.sh` to validate `baselined` and `stale_baseline` behavior end-to-end.
+  - Added a dedicated `.hcc-baseline` fixture and JSON-based test in `dist/tests/run-fixture-tests.sh` to validate `baselined` and `stale_baseline` behavior end-to-end.
 - **Developer documentation updates**
   - Updated `dist/README.md` with JSON output and baseline usage instructions for CI/tooling, and bumped example/version references to 1.0.33.
 
@@ -620,7 +632,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Baseline support for performance findings**
-  - New `--generate-baseline` flag to scan the current codebase and write a `.neochrome-baseline` file with per-rule, per-file allowed counts
+  - New `--generate-baseline` flag to scan the current codebase and write a `.hcc-baseline` file with per-rule, per-file allowed counts
   - New `--baseline` flag to point to a custom baseline file path and `--ignore-baseline` to disable baseline usage when needed
   - Runtime checks now consult the baseline and suppress findings that are within the recorded allowance while still emitting new or increased findings
   - JSON summary now includes `baselined` (total suppressed findings) and `stale_baseline` (entries where the recorded allowance exceeds current matches)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.58
+# Version: 1.0.59
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -18,8 +18,8 @@
 #   --no-log                 Disable logging to file
 #   --no-context             Disable context lines around findings
 #   --context-lines N        Number of context lines to show (default: 3)
-#   --generate-baseline      Generate .neochrome-baseline from current findings
-#   --baseline <path>        Use custom baseline file path (default: .neochrome-baseline)
+#   --generate-baseline      Generate .hcc-baseline from current findings
+#   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
 #   --ignore-baseline        Ignore baseline file even if present
 #   --help                   Show this help message
 
@@ -49,7 +49,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 EXCLUDE_DIRS="vendor node_modules .git tests"
 
 # Baseline configuration
-BASELINE_FILE=".neochrome-baseline"
+BASELINE_FILE=".hcc-baseline"
 GENERATE_BASELINE=false
 IGNORE_BASELINE=false
 BASELINE_ENABLED=false
@@ -1157,7 +1157,7 @@ generate_baseline_file() {
 	done
 
 	local tmp
-	tmp="$(mktemp 2>/dev/null || echo "/tmp/neochrome-baseline.$$")"
+	tmp="$(mktemp 2>/dev/null || echo "/tmp/hcc-baseline.$$")"
 
 	for i in "${!NEW_BASELINE_KEYS[@]}"; do
 		local key="${NEW_BASELINE_KEYS[$i]}"
@@ -1171,7 +1171,7 @@ generate_baseline_file() {
 	done
 
 	{
-		echo "# .neochrome-baseline"
+		echo "# .hcc-baseline"
 		echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S')"
 		echo "# Tool: WP Code Check by Hypercart $(grep -m1 'Version:' "$0" 2>/dev/null | sed 's/^# Version: //')"
 		echo "# Total baselined: ${total}"

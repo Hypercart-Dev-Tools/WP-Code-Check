@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/YOUR_ORG/wp-code-check/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/wp-code-check/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.58-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.59-green.svg)](CHANGELOG.md)
 
 ---
 

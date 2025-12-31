@@ -53,8 +53,8 @@ VERSION=''
 
 # Baseline file for suppressing known issues
 # Use this to track and suppress existing issues while preventing new ones
-# Default: .neochrome-baseline
-# BASELINE=.neochrome-baseline
+# Default: .hcc-baseline
+# BASELINE=.hcc-baseline
 
 # Custom log directory
 # Where to store scan logs and reports

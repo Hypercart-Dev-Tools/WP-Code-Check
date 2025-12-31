@@ -134,7 +134,7 @@ VERSION='2.1.3'
 # ============================================================
 
 # Baseline file for suppressing known issues
-# BASELINE=.neochrome-baseline
+# BASELINE=.hcc-baseline
 
 # Custom log directory
 # LOG_DIR=./logs

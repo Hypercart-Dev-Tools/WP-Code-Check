@@ -56,7 +56,7 @@ The `.gitignore` file ensures users won't accidentally commit:
 - ✅ **Logs** (`dist/logs/*.log`, `dist/logs/*.json`)
 - ✅ **Reports** (`dist/reports/*.html`)
 - ✅ **User templates** (`dist/TEMPLATES/*.txt` except base files)
-- ✅ **Baseline files** (`.neochrome-baseline`)
+- ✅ **Baseline files** (`.hcc-baseline`)
 - ✅ **Credentials** (`.env`, `*.pem`, `*.key`)
 
 ---
