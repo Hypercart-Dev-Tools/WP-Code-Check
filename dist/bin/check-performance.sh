@@ -683,9 +683,9 @@ generate_html_report() {
   if [ "$exit_code" -ne 0 ]; then
     status_class="fail"
     if [ "$total_errors" -gt 0 ]; then
-      status_message="✗ Check failed with $total_errors error(s)"
+      status_message="✗ Check failed with $total_errors error type(s)"
     elif [ "$strict_mode" = "true" ] && [ "$total_warnings" -gt 0 ]; then
-      status_message="✗ Check failed in strict mode with $total_warnings warning(s)"
+      status_message="✗ Check failed in strict mode with $total_warnings warning type(s)"
     fi
   fi
 
@@ -2266,9 +2266,9 @@ else
   text_echo ""
 
   if [ "$ERRORS" -gt 0 ]; then
-    text_echo "${RED}✗ Check failed with $ERRORS error(s)${NC}"
+    text_echo "${RED}✗ Check failed with $ERRORS error type(s)${NC}"
   elif [ "$STRICT" = "true" ] && [ "$WARNINGS" -gt 0 ]; then
-    text_echo "${YELLOW}✗ Check failed in strict mode with $WARNINGS warning(s)${NC}"
+    text_echo "${YELLOW}✗ Check failed in strict mode with $WARNINGS warning type(s)${NC}"
   else
     text_echo "${GREEN}✓ All critical checks passed!${NC}"
   fi
