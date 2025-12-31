@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Neochrome WP Toolkit - Fixture Validation Tests
-# Version: 1.0.58
+# Version: 1.0.60
 #
 # Runs check-performance.sh against test fixtures and validates expected counts.
 # This prevents regressions when modifying detection patterns.

@@ -1,6 +1,6 @@
 # WP Code Check by Hypercart - Performance & Security Analyzer
 
-**Version:** 1.0.59
+**Version:** 1.0.60
 © Copyright 2025 Hypercart (a DBA of Neochrome, Inc.)
 
 ---

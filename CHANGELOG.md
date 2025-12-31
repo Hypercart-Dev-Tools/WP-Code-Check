@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.60] - 2025-12-31
+
+### Added
+- **Severity Level Configuration File** - Created `/dist/config/severity-levels.json` with all 28 checks and their factory default severity levels
+  - **Purpose:** Foundation for Day 2 implementation of customizable severity rankings (PROJECT-SELF-RANK-SEVERITY.md)
+  - **Structure:** JSON file with metadata, rule IDs, names, severity levels, categories, and descriptions
+  - **Coverage:** All 28 checks (12 CRITICAL, 9 HIGH, 6 MEDIUM, 1 LOW)
+  - **Categories:** 10 security checks, 17 performance checks, 1 maintenance check
+  - **Location:** `dist/config/severity-levels.json`
+  - **Usage (Day 2):** Users will copy this file, edit `level` fields, and pass `--severity-config <path>` to customize severity rankings
+  - **Factory Defaults:** Each check includes `factory_default` field for reference (users can always see original values)
+  - **Self-Documenting:** Includes instructions, version, last_updated, and total_checks in metadata
+  - **Comment Field Support:** Any field starting with underscore (`_comment`, `_note`, `_reason`, `_ticket`, etc.) is ignored by parser
+    - **Purpose:** Users can document why they changed severity levels
+    - **Examples:** `_comment: "Upgraded per security audit"`, `_ticket: "JIRA-1234"`, `_date: "2025-12-31"`
+    - **Parser Behavior:** Underscore-prefixed fields are filtered out during parsing (won't affect functionality)
+    - **Use Cases:** Document incidents, reference tickets, track authors, add dates, explain decisions
+  - **Rule IDs Mapped:**
+    - CRITICAL: spo-001-debug-code, hcc-001-localstorage-exposure, hcc-002-client-serialization, spo-003-insecure-deserialization, unbounded-posts-per-page, unbounded-numberposts, nopaging-true, unbounded-wc-get-orders, get-users-no-limit, get-terms-no-limit, pre-get-posts-unbounded, rest-no-pagination
+    - HIGH: spo-002-superglobals, admin-no-capability-check, ajax-no-nonce, ajax-polling-unbounded, hcc-005-expensive-polling, unbounded-sql-terms, cron-interval-unvalidated, file-get-contents-url, order-by-rand
+    - MEDIUM: hcc-008-unsafe-regexp, like-leading-wildcard, n-plus-one-pattern, transient-no-expiration, script-versioning-time, http-no-timeout
+    - LOW: timezone-sensitive
+  - **Next Steps (Day 2):** Implement `load_severity_defaults()`, `load_custom_severity_config()`, and `get_severity()` functions in check-performance.sh
+
+- **Example Configuration File** - Created `/dist/config/severity-levels.example.json` showing how to customize severity levels
+  - **Purpose:** Demonstrates comment field usage and severity customization patterns
+  - **Examples:** Shows upgrading/downgrading severity levels with documentation
+  - **Comment Examples:** Demonstrates `_comment`, `_note`, `_reason`, `_ticket`, `_date`, `_author` fields
+  - **Workflow Guide:** Includes step-by-step instructions in `_notes` section
+
+- **Configuration Documentation** - Created `/dist/config/README.md` with comprehensive usage guide
+  - **Quick Start:** Copy, edit, and use custom config files
+  - **Comment Field Reference:** Table of common underscore field names and their purposes
+  - **Field Reference:** Which fields are editable vs. read-only
+  - **Best Practices:** DOs and DON'Ts for config customization
+  - **Example Workflow:** Complete workflow from copy to CI/CD integration
+
 ## [1.0.59] - 2025-12-31
 
 ### Fixed
