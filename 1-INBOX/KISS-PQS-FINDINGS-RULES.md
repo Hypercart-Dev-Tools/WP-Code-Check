@@ -130,9 +130,11 @@ Regex cannot reliably detect if expiry logic exists elsewhere in the code flow. 
 ### 3. Performance - Unbounded Polling (HIGH)
 
 #### Rule: HCC-005 - Expensive Server Calls in Polling Loops
+**Status:** ✅ **IMPLEMENTED** (2025-12-31)
 **Audit Finding:** Issue #3 - get_plugins() called every 30s
 **Impact:** HIGH
 **Can Be Caught:** ✅ YES (Enhanced)
+**Location:** Lines 1612-1668 in dist/bin/check-performance.sh
 
 **Pattern:**
 ```bash
@@ -163,6 +165,13 @@ Extends the existing AJAX polling check to specifically detect expensive WordPre
 
 **Recommendation:**
 Flag any setInterval that calls: get_plugins(), get_themes(), get_posts(), new WP_Query(), get_users(), or filesystem operations.
+
+**Implementation Notes:**
+- Scans both `.js` and `.php` files (PHP files may contain inline `<script>` tags)
+- Searches for `setInterval()` calls, then checks 20 lines of context for expensive functions
+- Detects: `get_plugins()`, `get_themes()`, `get_posts()`, `WP_Query`, `get_users()`, `wp_get_recent_posts()`, `get_categories()`, `get_terms()`
+- Works even when expensive functions are mentioned in comments (helps catch documentation of backend calls)
+- Separate from the basic AJAX polling check - focuses specifically on expensive operations
 
 ---
 

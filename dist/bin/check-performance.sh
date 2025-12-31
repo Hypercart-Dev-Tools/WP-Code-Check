@@ -1609,6 +1609,63 @@ else
 fi
 text_echo ""
 
+# HCC-005: Expensive WordPress functions in polling intervals
+text_echo "${BLUE}▸ Expensive WP functions in polling intervals (HCC-005) ${RED}[HIGH]${NC}"
+EXPENSIVE_POLLING=false
+EXPENSIVE_POLLING_FINDING_COUNT=0
+EXPENSIVE_POLLING_VISIBLE=""
+# Scan both JS and PHP files for setInterval (PHP files may have inline <script> tags)
+POLLING_MATCHES_HCC005=$(grep -rHn $EXCLUDE_ARGS --include="*.js" --include="*.php" -E "setInterval[[:space:]]*\\(" $PATHS 2>/dev/null || true)
+if [ -n "$POLLING_MATCHES_HCC005" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9][0-9]*$ ]]; then
+      continue
+    fi
+
+    # Check for expensive WP functions in a wider context (20 lines after setInterval)
+    start_line=$lineno
+    end_line=$((lineno + 20))
+    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null)
+
+    # Detect expensive WordPress functions
+    if echo "$context" | grep -qE "get_plugins\\(|get_themes\\(|get_posts\\(|WP_Query|get_users\\(|wp_get_recent_posts\\(|get_categories\\(|get_terms\\("; then
+      if should_suppress_finding "hcc-005-expensive-polling" "$file"; then
+        continue
+      fi
+
+      EXPENSIVE_POLLING=true
+      ((EXPENSIVE_POLLING_FINDING_COUNT++))
+      add_json_finding "hcc-005-expensive-polling" "error" "HIGH" "$file" "${lineno:-0}" "Expensive WordPress function called in polling interval" "$code"
+      if [ -z "$EXPENSIVE_POLLING_VISIBLE" ]; then
+        EXPENSIVE_POLLING_VISIBLE="$match"
+      else
+        EXPENSIVE_POLLING_VISIBLE="${EXPENSIVE_POLLING_VISIBLE}
+$match"
+      fi
+    fi
+  done <<< "$POLLING_MATCHES_HCC005"
+fi
+if [ "$EXPENSIVE_POLLING" = true ]; then
+  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$EXPENSIVE_POLLING_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$EXPENSIVE_POLLING_VISIBLE" | head -5)"
+  fi
+  ((ERRORS++))
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "passed" 0
+fi
+text_echo ""
+
 text_echo "${BLUE}▸ REST endpoints without pagination/limits ${RED}[CRITICAL]${NC}"
 REST_UNBOUNDED=false
 REST_FINDING_COUNT=0
