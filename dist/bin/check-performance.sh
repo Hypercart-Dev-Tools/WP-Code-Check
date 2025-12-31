@@ -1462,6 +1462,17 @@ run_check "ERROR" "CRITICAL" "Serialization of objects to client storage" "hcc-0
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
+# HCC-008: Unsafe RegExp construction with user input
+# Detects RegExp constructors that concatenate variables (likely user input) without escaping.
+# This can lead to ReDoS attacks or unexpected regex behavior.
+# Catches patterns like: new RegExp('\\b' + query + '\\b') or RegExp(`pattern${userInput}`)
+# Note: Uses single -E with alternation (|) for BSD grep compatibility
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx --include=*.php"
+run_check "ERROR" "MEDIUM" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
+  "-E ((new[[:space:]]+)?RegExp[[:space:]]*\\([^)]*[[:space:]]\\+[[:space:]])|((new[[:space:]]+)?RegExp.*\\$\\{)"
+unset OVERRIDE_GREP_INCLUDE
+text_echo ""
+
 # Direct superglobal manipulation
 run_check "ERROR" "HIGH" "Direct superglobal manipulation" "spo-002-superglobals" \
   "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \

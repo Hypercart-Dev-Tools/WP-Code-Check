@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added inline comments in bash script explaining the path structure
 
 ### Added
-- **HCC Security & Performance Rules** - Added 3 new checks based on KISS Plugin Quick Search audit
+- **HCC Security & Performance Rules** - Added 4 new checks based on KISS Plugin Quick Search audit
   - **HCC-001:** Sensitive data in localStorage/sessionStorage (CRITICAL)
     - Detects when sensitive plugin/user/admin/settings data is stored in browser storage
     - Catches patterns like: `localStorage.setItem('plugin_cache', ...)`
@@ -57,7 +57,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Impact: HIGH - Prevents performance degradation from polling expensive operations
     - Location: Lines 1612-1668 in check-performance.sh
     - Example: Catches `setInterval()` that calls `get_plugins()` every 30 seconds
-  - **Testing:** All rules verified with test files and real-world code
+  - **HCC-008:** User input in RegExp without escaping (MEDIUM)
+    - Detects unsafe RegExp construction with concatenated variables
+    - Catches patterns like: `new RegExp('\\b' + query + '\\b')` and `RegExp(\`pattern${userInput}\`)`
+    - Impact: MEDIUM - Can lead to ReDoS attacks or unexpected regex behavior
+    - Location: Lines 1465-1474 in check-performance.sh
+    - Uses single `-E` pattern with alternation for BSD grep compatibility
+    - Example: Catches the exact KISS Plugin Quick Search pattern
+    - Note: Cannot detect if variables are properly escaped (expected false positives)
+  - **Testing:** All rules verified with comprehensive test files and real-world code
   - **Based on:** AUDIT-2025-12-31.md findings from KISS Plugin Quick Search
   - **Documentation:** See `1-INBOX/KISS-PQS-FINDINGS-RULES.md` for full rule specifications
 

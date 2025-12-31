@@ -242,9 +242,11 @@ This would catch the specific `highlightSettings` typo but is not a general solu
 ### 5. Unsafe RegExp Construction (MEDIUM)
 
 #### Rule: HCC-008 - User Input in RegExp Without Escaping
+**Status:** ✅ **IMPLEMENTED** (2025-12-31)
 **Audit Finding:** Issue #5 - new RegExp('\\b' + lowerQuery + '\\b', 'i') with raw input
 **Impact:** MEDIUM
 **Can Be Caught:** ✅ YES
+**Location:** Lines 1465-1474 in dist/bin/check-performance.sh
 
 **Pattern:**
 ```bash
@@ -260,6 +262,15 @@ Detects RegExp constructors that concatenate variables (likely user input) witho
 
 **Recommendation:**
 Flag all dynamic RegExp construction and require escaping via a helper function.
+
+**Implementation Notes:**
+- Scans `.js`, `.jsx`, `.ts`, `.tsx`, and `.php` files
+- Uses single `-E` pattern with alternation (`|`) for BSD grep compatibility
+- Pattern 1: Detects string concatenation with `+` operator: `RegExp(...) + `
+- Pattern 2: Detects template literals with variables: `RegExp...${`
+- Catches both `new RegExp()` and `RegExp()` (without `new`)
+- **Known Limitation:** Cannot detect if variables have been properly escaped (e.g., `query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`)
+- **Expected False Positives:** Properly escaped variables will still be flagged (developers must manually verify escaping)
 
 ---
 
