@@ -193,8 +193,11 @@ print_test_header "Baseline Generation"
 rm -f ".neochrome-baseline"
 
 # Generate baseline
+# Disable set -e temporarily to capture exit code without terminating
+set +e
 OUTPUT=$("$CHECK_SCRIPT" --paths "$TEST_PATHS" --generate-baseline --no-log 2>&1)
 EXIT_CODE=$?
+set -e
 
 # Check if baseline file was created
 if [ -f ".neochrome-baseline" ]; then
@@ -213,8 +216,11 @@ echo ""
 print_test_header "Baseline Suppression"
 
 # Run check with baseline (should suppress all issues)
+# Disable set -e temporarily to capture exit code without terminating
+set +e
 OUTPUT=$("$CHECK_SCRIPT" --paths "$TEST_PATHS" --format json --no-log 2>&1)
 EXIT_CODE=$?
+set -e
 
 # Parse JSON output
 TOTAL_ERRORS=$(echo "$OUTPUT" | grep -o '"total_errors": [0-9]*' | head -1 | cut -d':' -f2 | tr -d '[:space:]')
@@ -266,8 +272,11 @@ function test_unbounded_query() {
 EOF
 
 # Run check again (should detect new issue)
+# Disable set -e temporarily to capture exit code without terminating
+set +e
 OUTPUT=$("$CHECK_SCRIPT" --paths "$TEST_PATHS" --format json --no-log 2>&1)
 EXIT_CODE=$?
+set -e
 
 # Parse JSON output
 TOTAL_ERRORS=$(echo "$OUTPUT" | grep -o '"total_errors": [0-9]*' | head -1 | cut -d':' -f2 | tr -d '[:space:]')
@@ -335,8 +344,11 @@ echo ""
 print_test_header "Baseline Ignore Flag"
 
 # Run with --ignore-baseline (should show all issues)
+# Disable set -e temporarily to capture exit code without terminating
+set +e
 OUTPUT=$("$CHECK_SCRIPT" --paths "$TEST_PATHS" --ignore-baseline --format json --no-log 2>&1)
 EXIT_CODE=$?
+set -e
 
 # Parse JSON output
 TOTAL_ERRORS=$(echo "$OUTPUT" | grep -o '"total_errors": [0-9]*' | head -1 | cut -d':' -f2 | tr -d '[:space:]')

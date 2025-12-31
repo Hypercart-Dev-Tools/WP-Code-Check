@@ -67,6 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Behavior**: Non-numeric line numbers are now silently skipped instead of causing script errors
   - **Impact**: More robust JSON generation even when scanning binary files or encountering unexpected grep output
 
+- **Baseline Test Script Exit Code Handling** - Fixed `test-baseline-functionality.sh` to properly capture exit codes with `set -e`
+  - **Issue**: Script uses `set -e` which terminates immediately on non-zero exit codes
+  - **Problem**: When `check-performance.sh` returns non-zero (expected when errors are found), the test script would terminate before capturing `$EXIT_CODE`
+  - **Fix**: Temporarily disable `set -e` around command execution using `set +e` / `set -e` wrapper
+  - **Locations Fixed**: All 4 test scenarios (baseline generation, suppression, new issue detection, ignore-baseline)
+  - **Impact**: Tests can now properly validate exit codes without premature termination
+
 - **HTML Report Path Display** - Fixed "Paths Scanned" showing `.` instead of full absolute path
   - **Issue**: When scanning with `--paths .`, the HTML report header showed "Paths Scanned: ." instead of the full directory path
   - **Root Cause**: Display was using the original relative path variable instead of the resolved absolute path
