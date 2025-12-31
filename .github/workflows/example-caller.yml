@@ -1,0 +1,62 @@
+# Example: How to call the reusable WP Performance workflow from your plugin
+# Version: 1.0.0
+#
+# Copy this file to your plugin's .github/workflows/ directory and customize.
+# Rename to something like "ci.yml" or "performance.yml"
+
+name: CI - Performance Checks
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Option 1: Call the reusable workflow from the central repo
+  # Uncomment and update the repository reference when published
+  #
+  # performance:
+  #   uses: neochrome/automated-wp-code-testing/.github/workflows/wp-performance.yml@main
+  #   with:
+  #     paths: 'includes/ src/'
+  #     php-version: '8.2'
+  #     fail-on-warning: false
+
+  # Option 2: Run checks directly (for standalone use)
+  performance-standalone:
+    name: Performance Checks (Standalone)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Performance Checks
+        run: |
+          # Run the local check script if available
+          if [ -f "./bin/check-performance.sh" ]; then
+            chmod +x ./bin/check-performance.sh
+            ./bin/check-performance.sh --paths "." --strict
+          else
+            echo "No local check script found. Running inline checks..."
+            
+            # Inline grep checks (same as reusable workflow)
+            FAILED=0
+            
+            echo "🔍 Checking for unbounded queries..."
+            if grep -rn --include="*.php" --exclude-dir=vendor --exclude-dir=node_modules \
+              -e "posts_per_page[[:space:]]*=>[[:space:]]*-1" \
+              -e "numberposts[[:space:]]*=>[[:space:]]*-1" \
+              -e "nopaging[[:space:]]*=>[[:space:]]*true" .; then
+              echo "::error::Found unbounded query patterns!"
+              FAILED=1
+            fi
+            
+            if [ "$FAILED" = "1" ]; then
+              exit 1
+            fi
+            
+            echo "✅ All checks passed!"
+          fi
+

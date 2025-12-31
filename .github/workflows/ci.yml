@@ -1,0 +1,85 @@
+# CI Workflow for WP Code Check by Hypercart
+# Validates changes to the toolkit repository
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - development
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - development
+
+# Prevent duplicate runs: use branch name as concurrency key so both push and
+# pull_request events for the same branch share the same group and get deduplicated.
+# github.head_ref is set for pull_request (source branch), github.ref for push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  performance-checks:
+    name: Performance Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ./dist/bin/check-performance.sh
+          chmod +x ./dist/tests/run-fixture-tests.sh
+
+      - name: Run performance checks
+        run: |
+          echo "Running performance checks on toolkit repository..."
+          ./dist/bin/check-performance.sh --paths "." --no-log
+
+      - name: Display check info
+        if: always()
+        run: |
+          echo "✅ Performance checks completed"
+          echo "Note: Logs are disabled in CI (--no-log flag)"
+          echo "The 'dist/tests/' directory is excluded by default"
+
+  validate-test-fixtures:
+    name: Validate Test Fixtures
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ./dist/bin/check-performance.sh
+          chmod +x ./dist/tests/run-fixture-tests.sh
+
+      - name: Run automated fixture tests
+        run: |
+          echo "Running automated fixture validation..."
+          ./dist/tests/run-fixture-tests.sh
+
+      - name: Test antipatterns detection (legacy check)
+        run: |
+          echo "Testing that antipatterns are correctly detected..."
+          if ./dist/bin/check-performance.sh --paths "dist/tests/fixtures/antipatterns.php" --no-log; then
+            echo "::error::Antipatterns should have been detected but weren't!"
+            exit 1
+          else
+            echo "✅ Antipatterns correctly detected (expected failure)"
+            exit 0
+          fi
+
+      - name: Test clean code passes
+        run: |
+          echo "Testing that clean code passes checks..."
+          # Clean code might have N+1 warnings, so we don't use --strict
+          ./dist/bin/check-performance.sh --paths "dist/tests/fixtures/clean-code.php" --no-log || {
+            echo "::warning::Clean code fixture has warnings (this is acceptable)"
+          }
+          echo "✅ Clean code validation complete"

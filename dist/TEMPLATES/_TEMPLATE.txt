@@ -1,0 +1,75 @@
+# WP Code Check - Project Configuration Template
+# This is a reference template. Copy and customize for your projects.
+
+# ============================================================
+# BASIC CONFIGURATION
+# ============================================================
+
+# Project identifier (used with 'run' command)
+# This should match your template filename (e.g., acme.txt → PROJECT_NAME=acme)
+PROJECT_NAME=
+
+# Project path (REQUIRED)
+# Absolute path to your WordPress plugin/theme directory
+PROJECT_PATH=''
+
+# Auto-detected metadata
+# Plugin/theme name and version (extracted from plugin header)
+NAME=''
+VERSION=''
+
+# ============================================================
+# COMMON OPTIONS
+# ============================================================
+
+# Skip specific rules (comma-separated)
+# Available rules: nonce-check, sql-injection, n-plus-one, direct-db-query,
+#                  unescaped-output, transient-expiration, file-get-contents-url,
+#                  http-no-timeout, cron-interval-validation
+# Example: SKIP_RULES=nonce-check,n-plus-one
+# SKIP_RULES=
+
+# Error/warning thresholds (fail if exceeded)
+# Set to 0 for strict mode (no errors/warnings allowed)
+# MAX_ERRORS=0
+# MAX_WARNINGS=10
+
+# ============================================================
+# OUTPUT OPTIONS
+# ============================================================
+
+# Output format: text, json, html
+# Default: text
+# FORMAT=text
+
+# Show full file paths (vs relative paths)
+# Default: false
+# SHOW_FULL_PATHS=false
+
+# ============================================================
+# ADVANCED OPTIONS
+# (Modify these settings only if you understand their impact)
+# ============================================================
+
+# Baseline file for suppressing known issues
+# Use this to track and suppress existing issues while preventing new ones
+# Default: .neochrome-baseline
+# BASELINE=.neochrome-baseline
+
+# Custom log directory
+# Where to store scan logs and reports
+# Default: ./logs
+# LOG_DIR=./logs
+
+# Include/exclude file patterns (grep-compatible regex)
+# Useful for focusing scans or excluding vendor code
+# INCLUDE_PATTERN=
+# EXCLUDE_PATTERN=node_modules|vendor
+
+# Performance tuning
+# Maximum file size to scan (in KB)
+# MAX_FILE_SIZE_KB=1000
+
+# Number of parallel jobs (for future use)
+# PARALLEL_JOBS=4
+

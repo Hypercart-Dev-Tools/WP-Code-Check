@@ -1,0 +1,120 @@
+# WP Code Check - Public Repository .gitignore
+# Protects user-generated content and proprietary information
+
+# ============================================
+# USER-GENERATED CONTENT (Never commit these)
+# ============================================
+
+# Log files from scans
+dist/logs/
+dist/logs/*.log
+!dist/logs/.gitkeep
+
+# HTML reports from scans
+dist/reports/
+dist/reports/*.html
+!dist/reports/.gitkeep
+
+# User-created project templates
+dist/TEMPLATES/*.txt
+!dist/TEMPLATES/_TEMPLATE.txt
+!dist/TEMPLATES/_AI_INSTRUCTIONS.md
+!dist/TEMPLATES/README.md
+!dist/TEMPLATES/.gitkeep
+
+# Baseline files (contain project-specific findings)
+.neochrome-baseline
+*.neochrome-baseline
+
+# ============================================
+# DEVELOPMENT & TESTING
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.bak
+*.tmp
+*.temp
+
+# ============================================
+# DEPENDENCIES (if added in future)
+# ============================================
+
+# Node modules (if JS tooling added)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Composer (if PHP dependencies added)
+vendor/
+composer.lock
+
+# ============================================
+# BUILD ARTIFACTS
+# ============================================
+
+# Compressed archives
+*.zip
+*.tar.gz
+*.tgz
+
+# ============================================
+# SECURITY & CREDENTIALS
+# ============================================
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+
+# API keys and secrets
+secrets.txt
+credentials.json
+
+# ============================================
+# TESTING & CI/CD
+# ============================================
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# PHPUnit
+phpunit.xml
+.phpunit.result.cache
+
+# ============================================
+# MISC
+# ============================================
+
+# Temporary files
+tmp/
+temp/
+*.cache
+

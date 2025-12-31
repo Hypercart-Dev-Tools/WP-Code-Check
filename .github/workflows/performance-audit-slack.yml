@@ -1,0 +1,63 @@
+name: Performance Audit with Slack Notifications
+
+on:
+  push:
+    branches: [ main, development ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggers
+
+jobs:
+  performance-audit:
+    name: Run Performance Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install jq (for Slack integration)
+        run: sudo apt-get update && sudo apt-get install -y jq
+      
+      - name: Run performance audit
+        id: audit
+        run: |
+          # Run audit in JSON mode and capture exit code before || true
+          ./dist/bin/check-performance.sh \
+            --paths "." \
+            --format json \
+            --strict \
+            > audit-results.json && EXIT_CODE=0 || EXIT_CODE=$?
+
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Show summary in workflow logs
+          echo "## Performance Audit Summary"
+          jq -r '.summary' audit-results.json
+        continue-on-error: true
+      
+      - name: Post results to Slack
+        if: always()  # Run even if audit fails
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            ./dist/bin/post-to-slack.sh audit-results.json --format detailed
+          else
+            echo "⚠️  SLACK_WEBHOOK_URL not configured, skipping notification"
+          fi
+      
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-audit-results
+          path: audit-results.json
+          retention-days: 30
+      
+      - name: Fail if audit failed
+        if: steps.audit.outputs.exit_code != '0'
+        run: |
+          echo "❌ Performance audit failed with exit code ${{ steps.audit.outputs.exit_code }}"
+          exit ${{ steps.audit.outputs.exit_code }}
+
