@@ -26,14 +26,15 @@ Thank you for your interest in contributing to **WP Code Check**! We welcome con
 
 ### Submitting Pull Requests
 
-1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/my-new-check`)
-3. **Make your changes**
-4. **Add tests** (see `dist/tests/fixtures/` for examples)
-5. **Run the test suite** (`dist/tests/run-fixture-tests.sh`)
-6. **Update documentation** (README.md, CHANGELOG.md)
-7. **Commit with clear messages** (see commit guidelines below)
-8. **Push to your fork** and submit a pull request
+1. **Sign the Contributor License Agreement (CLA)** - See [CLA Requirements](#-contributor-license-agreement-cla) below
+2. **Fork the repository**
+3. **Create a feature branch** (`git checkout -b feature/my-new-check`)
+4. **Make your changes**
+5. **Add tests** (see `dist/tests/fixtures/` for examples)
+6. **Run the test suite** (`dist/tests/run-fixture-tests.sh`)
+7. **Update documentation** (README.md, CHANGELOG.md)
+8. **Commit with clear messages** (see commit guidelines below)
+9. **Push to your fork** and submit a pull request
 
 ---
 
@@ -155,6 +156,45 @@ If you discover a security vulnerability, please email **security@hypercart.com*
 By contributing, you agree that your contributions will be licensed under the **Apache License 2.0**, the same license as the project.
 
 See [LICENSE](LICENSE) for full terms.
+
+---
+
+## 📝 Contributor License Agreement (CLA)
+
+### Why We Require a CLA
+
+WP Code Check is dual-licensed under Apache 2.0 (open source) and commercial licenses. The CLA ensures:
+
+1. **Legal clarity** - You confirm you have the right to contribute
+2. **Dual licensing** - Your contributions can be included in both open source and commercial versions
+3. **Patent protection** - Explicit patent grants protect all users
+4. **Community protection** - Prevents legal issues that could harm the project
+
+### How to Sign the CLA
+
+**For Individual Contributors:**
+
+1. Read the [Individual Contributor License Agreement (CLA.md)](CLA.md)
+2. On your first pull request, add a comment: **"I have read and agree to the CLA"**
+3. Alternatively, email a signed copy to `cla@hypercart.com`
+
+**For Corporate Contributors:**
+
+If you're contributing on behalf of your employer:
+
+1. Your employer must sign the [Corporate CLA (CLA-CORPORATE.md)](CLA-CORPORATE.md)
+2. You must also sign the Individual CLA
+3. Contact `cla@hypercart.com` to submit the Corporate CLA
+
+### Key Points
+
+- ✅ **You retain copyright** to your contributions
+- ✅ **You can use your code elsewhere** - No restrictions on your own use
+- ✅ **Open source stays open** - Apache 2.0 version always available
+- ✅ **One-time process** - Sign once, contribute forever
+- ✅ **Standard practice** - Based on Apache Software Foundation's CLA
+
+**Questions about the CLA?** Email `cla@hypercart.com`
 
 ---
 

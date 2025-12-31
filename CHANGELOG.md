@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.59] - 2025-12-31
 
+### Added
+- **Contributor License Agreement (CLA)** - Added CLA requirement for contributors
+  - Created `CLA.md` - Individual Contributor License Agreement
+  - Created `CLA-CORPORATE.md` - Corporate Contributor License Agreement
+  - Updated `CONTRIBUTING.md` with CLA signing instructions
+  - Updated `README.md` to mention CLA requirement
+  - Updated `LICENSE-SUMMARY.md` with CLA information
+  - CLA is fully compatible with Apache 2.0 and dual-license model
+  - Based on Apache Software Foundation's CLA template
+  - Allows contributions to be distributed under both open source and commercial licenses
+
 ### Changed
 - **Baseline File Renamed** - Renamed `.neochrome-baseline` to `.hcc-baseline` (HCC = Hypercart Code Check)
   - Updated default baseline filename in `check-performance.sh`

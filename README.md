@@ -189,6 +189,8 @@ wp-code-check:
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+**Note:** Contributors must sign a [Contributor License Agreement (CLA)](CLA.md) before their first pull request can be merged. This is a one-time process that ensures legal clarity for the dual-license model.
+
 ---
 
 ## 📄 License
