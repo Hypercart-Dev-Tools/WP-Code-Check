@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.59] - 2025-12-31
 
 ### Fixed
+- **Version Drift Bug** - Created single source of truth for version number to prevent version inconsistencies
+  - **Issue:** Script had 4 different hardcoded version strings that were out of sync (header: 1.0.59, banner/logs/JSON: 1.0.58)
+  - **Root Cause:** Version number was hardcoded in 4 different locations instead of using a single variable
+  - **Fix:** Created `SCRIPT_VERSION="1.0.59"` constant at top of script and replaced all hardcoded references
+  - **Impact:** Version now displays consistently across banner, logs, and JSON output
+  - **Locations Updated:**
+    - Line 50: Created `SCRIPT_VERSION` variable (single source of truth)
+    - Line 415: Log file version (now uses `$SCRIPT_VERSION`)
+    - Line 608: JSON output version (now uses `$SCRIPT_VERSION`)
+    - Line 1216: Banner version (now uses `$SCRIPT_VERSION`)
+  - **Future-Proof:** Only need to update ONE line (line 50) when bumping versions
+
 - **Template Loading Path** - Fixed `REPO_ROOT` variable in bash script to correctly load templates from `dist/TEMPLATES/`
   - **Issue:** Script was looking for templates in repository root `/TEMPLATES/` instead of `dist/TEMPLATES/`
   - **Root Cause:** `REPO_ROOT` was set to `$SCRIPT_DIR/../..` (repository root) instead of `$SCRIPT_DIR/..` (dist directory)

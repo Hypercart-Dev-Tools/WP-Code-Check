@@ -41,6 +41,14 @@ source "$LIB_DIR/colors.sh"
 # shellcheck source=dist/bin/lib/common-helpers.sh
 source "$LIB_DIR/common-helpers.sh"
 
+# ============================================================
+# VERSION - SINGLE SOURCE OF TRUTH
+# ============================================================
+# This is the ONLY place the version number should be defined.
+# All other references (logs, JSON, banners) use this variable.
+# Update this ONE line when bumping versions - never hardcode elsewhere.
+SCRIPT_VERSION="1.0.59"
+
 # Defaults
 PATHS="."
 STRICT=false
@@ -404,7 +412,7 @@ if [ "$ENABLE_LOGGING" = true ]; then
 
       echo "Generated (UTC):  $(date -u +"%Y-%m-%d %H:%M:%S")"
       echo "Local Time:      $(get_local_timestamp)"
-        echo "Script Version:   1.0.58"
+        echo "Script Version:   $SCRIPT_VERSION"
       echo "Paths Scanned:    $PATHS"
       echo "Strict Mode:      $STRICT"
       echo "Verbose Mode:     $VERBOSE"
@@ -597,7 +605,7 @@ output_json() {
 
     cat <<EOF
 {
-  "version": "1.0.58",
+  "version": "$SCRIPT_VERSION",
   "timestamp": "$timestamp",
   "project": $project_info,
   "paths_scanned": "$(json_escape "$PATHS")",
@@ -1205,7 +1213,7 @@ PROJECT_NAME=$(echo "$PROJECT_INFO_JSON" | grep -o '"name": "[^"]*"' | cut -d'"'
 PROJECT_VERSION=$(echo "$PROJECT_INFO_JSON" | grep -o '"version": "[^"]*"' | cut -d'"' -f4)
 
 			text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-			text_echo "${BLUE}  WP Code Check by Hypercart - Performance Analyzer v1.0.58${NC}"
+			text_echo "${BLUE}  WP Code Check by Hypercart - Performance Analyzer v$SCRIPT_VERSION${NC}"
 		text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 text_echo ""
 
