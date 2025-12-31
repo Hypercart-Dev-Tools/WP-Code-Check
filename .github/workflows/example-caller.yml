@@ -1,16 +1,34 @@
 # Example: How to call the reusable WP Performance workflow from your plugin
-# Version: 1.0.0
+# Version: 1.0.1
 #
+# ⚠️  THIS IS AN EXAMPLE/TEMPLATE FILE - NOT AN ACTIVE WORKFLOW
+#
+# This file is for DOCUMENTATION purposes only.
 # Copy this file to your plugin's .github/workflows/ directory and customize.
 # Rename to something like "ci.yml" or "performance.yml"
+#
+# DO NOT activate this workflow in the wp-code-check repository itself!
+# The active workflow for this repo is ci.yml
 
-name: CI - Performance Checks
+name: CI - Performance Checks (EXAMPLE - DO NOT USE)
 
+# TRIGGERS DISABLED - This is a template file that will never run automatically
+# When using in your own plugin, replace the 'on:' section below with real triggers
 on:
-  push:
-    branches: [main, development]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:  # Only manual trigger - prevents automatic runs
+    inputs:
+      note:
+        description: 'This is a template file. Copy to your plugin repo to use.'
+        required: false
+        default: 'See README for usage instructions'
+
+# EXAMPLE TRIGGERS (uncomment and customize when using in your plugin):
+#
+# on:
+#   push:
+#     branches: [main, development]
+#   pull_request:
+#     branches: [main]
 
 jobs:
   # Option 1: Call the reusable workflow from the central repo

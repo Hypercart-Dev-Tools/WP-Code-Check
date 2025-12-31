@@ -22,6 +22,8 @@ dist/TEMPLATES/*.txt
 !dist/TEMPLATES/.gitkeep
 
 # Baseline files (contain project-specific findings)
+# Exception: Test fixture baseline is needed for CI tests
+!dist/tests/fixtures/.neochrome-baseline
 .neochrome-baseline
 *.neochrome-baseline
 **/.neochrome-baseline
@@ -144,6 +146,7 @@ jest.config.js
 # Temporary files
 tmp/
 temp/
+temp*
 *.cache
 .cache/
 

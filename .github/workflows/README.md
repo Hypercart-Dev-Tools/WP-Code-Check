@@ -38,17 +38,17 @@
 ### `ci.yml` - Consolidated CI Workflow
 
 **Triggers:**
-- `push` to main/development branches
-- `pull_request` to main/development branches  
+- `pull_request` to main/development branches (PRIMARY)
 - `workflow_dispatch` for manual runs
+- Does NOT trigger on `push` to reduce CI noise
 
 **Jobs:**
 
 1. **performance-checks**
    - Runs performance audit in JSON mode
-   - Conditional Slack notifications:
-     - Push to main/development: Always notify
-     - Pull requests: Only notify on failures
+   - Slack notifications:
+     - Only sends to Slack when PR audit fails
+     - Reduces notification noise while maintaining visibility
    - Uploads audit results as artifacts
    - Handles missing SLACK_WEBHOOK_URL gracefully
 
@@ -63,6 +63,14 @@
 - Used by other repositories to run performance checks
 - NOT triggered by events in this repository
 - This is OK to keep as it's not causing duplicate runs
+
+### `example-caller.yml` - Template/Example File
+
+**Purpose:** Documentation and example for plugin developers
+- Shows how to use the reusable workflow in other repos
+- **DISABLED in this repo** - only triggers on `workflow_dispatch` (manual)
+- When copying to your plugin, uncomment the real triggers
+- This is OK to keep as it won't run automatically
 
 ## How to Modify CI Behavior
 

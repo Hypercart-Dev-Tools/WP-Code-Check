@@ -1,0 +1,6 @@
+# .neochrome-baseline
+# Baseline for test fixtures (antipatterns.php)
+# Format: rule|file|line|count|snippet_hash
+unbounded-posts-per-page|./tests/fixtures/antipatterns.php|0|999|*
+transient-no-expiration|./tests/fixtures/antipatterns.php|0|999|*
+
