@@ -5,17 +5,16 @@
 # USER-GENERATED CONTENT (Never commit these)
 # ============================================
 
-# Log files from scans
-dist/logs/
+# Log files from scans (may contain file paths and code snippets)
 dist/logs/*.log
+dist/logs/*.json
 !dist/logs/.gitkeep
 
-# HTML reports from scans
-dist/reports/
+# HTML reports from scans (may contain proprietary code)
 dist/reports/*.html
 !dist/reports/.gitkeep
 
-# User-created project templates
+# User-created project templates (contain absolute paths)
 dist/TEMPLATES/*.txt
 !dist/TEMPLATES/_TEMPLATE.txt
 !dist/TEMPLATES/_AI_INSTRUCTIONS.md
@@ -25,6 +24,7 @@ dist/TEMPLATES/*.txt
 # Baseline files (contain project-specific findings)
 .neochrome-baseline
 *.neochrome-baseline
+**/.neochrome-baseline
 
 # ============================================
 # DEVELOPMENT & TESTING
@@ -35,16 +35,20 @@ dist/TEMPLATES/*.txt
 .AppleDouble
 .LSOverride
 ._*
+.Spotlight-V100
+.Trashes
 
 # Linux
 *~
 .directory
+.fuse_hidden*
 
 # Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+*.lnk
 
 # IDE & Editors
 .vscode/
@@ -55,6 +59,9 @@ $RECYCLE.BIN/
 *.bak
 *.tmp
 *.temp
+.project
+.settings/
+.classpath
 
 # ============================================
 # DEPENDENCIES (if added in future)
@@ -65,6 +72,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+package-lock.json
 
 # Composer (if PHP dependencies added)
 vendor/
@@ -78,6 +86,12 @@ composer.lock
 *.zip
 *.tar.gz
 *.tgz
+*.rar
+*.7z
+
+# Distribution builds
+dist-release/
+build/
 
 # ============================================
 # SECURITY & CREDENTIALS
@@ -87,15 +101,25 @@ composer.lock
 .env
 .env.local
 .env.*.local
+.env.production
 
 # SSH keys
 *.pem
 *.key
+*.pub
 id_rsa*
+id_ed25519*
 
 # API keys and secrets
 secrets.txt
 credentials.json
+*.credentials
+.secrets/
+
+# SSL certificates
+*.crt
+*.cer
+*.p12
 
 # ============================================
 # TESTING & CI/CD
@@ -104,10 +128,14 @@ credentials.json
 # Test coverage
 coverage/
 .nyc_output/
+htmlcov/
 
 # PHPUnit
 phpunit.xml
 .phpunit.result.cache
+
+# Jest
+jest.config.js
 
 # ============================================
 # MISC
@@ -117,4 +145,21 @@ phpunit.xml
 tmp/
 temp/
 *.cache
+.cache/
+
+# Generic log files (but not our dist/logs/ folder which has .gitkeep)
+*.log
+*.log.*
+
+# OS generated files
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Backup files
+*.backup
+*.old
+*.orig
 
