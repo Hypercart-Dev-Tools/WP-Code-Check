@@ -45,6 +45,8 @@ Detects when sensitive plugin/user/admin data is being stored in browser storage
 **Recommendation:**
 Flag any localStorage/sessionStorage usage containing keywords: plugin, cache, user, admin, settings, version, activation, capability.
 
+STATUS: COMPLETED
+
 ---
 
 #### Rule: HCC-002 - Serialization of Sensitive Objects to Client Storage
@@ -67,6 +69,8 @@ Detects when objects are being serialized (JSON.stringify) and stored in browser
 
 **Recommendation:**
 Review all client-side serialization to ensure no sensitive data (versions, activation states, settings URLs) is exposed.
+
+STATUS: COMPLETED
 
 ---
 
