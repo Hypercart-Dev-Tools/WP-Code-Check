@@ -38,17 +38,17 @@
 ### `ci.yml` - Consolidated CI Workflow
 
 **Triggers:**
-- `push` to main/development branches
-- `pull_request` to main/development branches  
+- `pull_request` to main/development branches (PRIMARY)
 - `workflow_dispatch` for manual runs
+- Does NOT trigger on `push` to reduce CI noise
 
 **Jobs:**
 
 1. **performance-checks**
    - Runs performance audit in JSON mode
-   - Conditional Slack notifications:
-     - Push to main/development: Always notify
-     - Pull requests: Only notify on failures
+   - Slack notifications:
+     - Only sends to Slack when PR audit fails
+     - Reduces notification noise while maintaining visibility
    - Uploads audit results as artifacts
    - Handles missing SLACK_WEBHOOK_URL gracefully
 

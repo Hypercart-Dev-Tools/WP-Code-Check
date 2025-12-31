@@ -51,13 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `performance-audit-slack-on-failure.yml` - Audit with Slack notifications only on failures
   - **After**: Single consolidated `ci.yml` workflow with conditional Slack notifications
   - **Triggers**:
-    - `push` to main/development branches
-    - `pull_request` to main/development branches
+    - `pull_request` to main/development branches (PRIMARY)
     - `workflow_dispatch` for manual runs
+    - Does NOT trigger on `push` to reduce CI noise and focus on PR review stage
   - **Slack Notification Logic**:
-    - On `push` to main/development: Always send results to Slack (if webhook configured)
-    - On `pull_request`: Only send to Slack if audit fails
+    - Only sends to Slack when PR audit fails
     - Gracefully handles missing `SLACK_WEBHOOK_URL` secret
+    - Reduces notification noise while maintaining visibility on issues
   - **Benefits**:
     - Eliminates duplicate workflow runs (was running 3+ workflows per event)
     - Reduces CI noise while maintaining visibility

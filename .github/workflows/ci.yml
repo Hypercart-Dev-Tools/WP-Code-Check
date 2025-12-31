@@ -7,8 +7,13 @@
 # This consolidated workflow handles ALL CI needs:
 #   - Performance checks and audits
 #   - Test fixture validation
-#   - Slack notifications (conditional based on event type)
+#   - Slack notifications (on PR failures only)
 #   - Artifact uploads
+#
+# TRIGGERS:
+#   - Pull requests to main/development branches
+#   - Manual runs via workflow_dispatch
+#   - Does NOT run on push to reduce CI noise
 #
 # DO NOT create additional workflow files for:
 #   - Slack notifications (already integrated here)
@@ -22,15 +27,12 @@
 #   - Removed: performance-audit-slack.yml
 #   - Removed: performance-audit-slack-on-failure.yml
 #   - Kept: ci.yml (this file) with all functionality merged
+#   - Triggers: Only on PRs (not on push) to reduce CI noise
 #
 # ============================================================================
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - development
   pull_request:
     branches:
       - main
@@ -84,22 +86,8 @@ jobs:
           exit 0
         continue-on-error: true
 
-      - name: Post results to Slack (on push to main/development)
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          if [ -n "$SLACK_WEBHOOK_URL" ]; then
-            echo "📤 Posting results to Slack..."
-            ./dist/bin/post-to-slack.sh audit-results.json --format detailed || {
-              echo "::warning::Failed to post to Slack"
-            }
-          else
-            echo "ℹ️  SLACK_WEBHOOK_URL not configured, skipping Slack notification"
-          fi
-
       - name: Post failure to Slack (on PR failures only)
-        if: github.event_name == 'pull_request' && steps.audit.outputs.exit_code != '0'
+        if: steps.audit.outputs.exit_code != '0'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
