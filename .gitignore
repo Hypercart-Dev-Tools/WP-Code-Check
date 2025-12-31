@@ -146,6 +146,7 @@ jest.config.js
 # Temporary files
 tmp/
 temp/
+temp*
 *.cache
 .cache/
 
