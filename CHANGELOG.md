@@ -44,11 +44,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **GitHub Actions CI Trigger** - Simplified CI workflow to only run on pull requests
-  - **Before**: Workflow ran on both `push` and `pull_request` events for main, development, and feature branches
-  - **After**: Workflow only runs on `pull_request` events targeting main or development branches
-  - **Rationale**: Reduces redundant CI runs and focuses testing on code review stage
-  - **Impact**: CI runs only when PRs are opened/updated, not on every commit to branches
+- **GitHub Actions Workflow Consolidation** - Merged three separate workflows into one comprehensive CI workflow
+  - **Before**: Three workflows running simultaneously:
+    - `ci.yml` - Basic performance checks on PRs
+    - `performance-audit-slack.yml` - Audit with Slack notifications on all events
+    - `performance-audit-slack-on-failure.yml` - Audit with Slack notifications only on failures
+  - **After**: Single consolidated `ci.yml` workflow with conditional Slack notifications
+  - **Triggers**:
+    - `push` to main/development branches
+    - `pull_request` to main/development branches
+    - `workflow_dispatch` for manual runs
+  - **Slack Notification Logic**:
+    - On `push` to main/development: Always send results to Slack (if webhook configured)
+    - On `pull_request`: Only send to Slack if audit fails
+    - Gracefully handles missing `SLACK_WEBHOOK_URL` secret
+  - **Benefits**:
+    - Eliminates duplicate workflow runs (was running 3+ workflows per event)
+    - Reduces CI noise while maintaining visibility
+    - Easier to maintain single workflow file
+    - Consistent artifact naming with run numbers
+  - **Removed Files**:
+    - `.github/workflows/performance-audit-slack.yml`
+    - `.github/workflows/performance-audit-slack-on-failure.yml`
 
 - **DRY Refactor: Consolidated Grouping Logic** - Created centralized `group_and_add_finding()` helper function
   - **Before**: Duplicate grouping logic in `run_check()` function and admin capability check (92 lines duplicated)
