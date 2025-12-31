@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.59] - 2025-12-31
 
 ### Fixed
+- **Timezone-Sensitive Pattern False Positive** - Fixed detection to exclude `gmdate()` (timezone-safe function)
+  - **Issue:** Pattern was flagging `gmdate()` as timezone-sensitive, but `gmdate()` always returns UTC (timezone-safe)
+  - **Root Cause:** Pattern matched any function containing "date" without distinguishing between `date()` and `gmdate()`
+  - **Fix:** Updated pattern to use `grep -v "gmdate"` to exclude timezone-safe `gmdate()` calls
+  - **Impact:** Reduces false positives - only flags `date()` (timezone-dependent) and `current_time('timestamp')`
+  - **Location:** Lines 2071-2082 in check-performance.sh
+  - **Rationale:**
+    - `date()` - Uses PHP's configured timezone (can vary by server) - **SHOULD BE FLAGGED**
+    - `gmdate()` - Always returns UTC/GMT (consistent across environments) - **SHOULD NOT BE FLAGGED**
+    - WordPress stores all dates internally as UTC, so `gmdate()` is the recommended approach
+  - **Testing:** Verified with test file containing both `date()` and `gmdate()` calls
+    - ✅ `date('Y-m-d')` - Correctly flagged
+    - ✅ `gmdate('Y-m-d')` - Correctly NOT flagged
+    - ✅ `current_time('timestamp')` - Correctly flagged
+
 - **Version Drift Bug** - Created single source of truth for version number to prevent version inconsistencies
   - **Issue:** Script had 4 different hardcoded version strings that were out of sync (header: 1.0.59, banner/logs/JSON: 1.0.58)
   - **Root Cause:** Version number was hardcoded in 4 different locations instead of using a single variable

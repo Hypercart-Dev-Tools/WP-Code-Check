@@ -2069,13 +2069,17 @@ text_echo "${YELLOW}━━━ WARNING CHECKS (review recommended) ━━━${NC}
 text_echo ""
 
 # Enhanced timezone check - skip lines with phpcs:ignore comments
+# Note: Only flags date() (timezone-dependent), not gmdate() (timezone-safe, always UTC)
 text_echo "${BLUE}▸ Timezone-sensitive patterns (current_time/date) ${YELLOW}[LOW]${NC}"
 TZ_WARNINGS=0
 TZ_FINDING_COUNT=0
 TZ_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -e "current_time[[:space:]]*([[:space:]]*['\"]timestamp" \
-  -e "date[[:space:]]*([[:space:]]*['\"][YmdHis-]*['\"]" \
+  -E "current_time[[:space:]]*\([[:space:]]*['\"]timestamp" \
   $PATHS 2>/dev/null || true)
+# Add date() matches but exclude gmdate() (which is timezone-safe, always UTC)
+TZ_MATCHES="${TZ_MATCHES}"$'\n'$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
+  -E "[^a-zA-Z_]date[[:space:]]*\(" \
+  $PATHS 2>/dev/null | grep -v "gmdate" || true)
 
 if [ -n "$TZ_MATCHES" ]; then
   # Filter out lines that have phpcs:ignore nearby (check line before)
