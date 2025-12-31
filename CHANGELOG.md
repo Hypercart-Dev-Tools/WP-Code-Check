@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **GitHub Actions CI Trigger** - Simplified CI workflow to only run on pull requests
+  - **Before**: Workflow ran on both `push` and `pull_request` events for main, development, and feature branches
+  - **After**: Workflow only runs on `pull_request` events targeting main or development branches
+  - **Rationale**: Reduces redundant CI runs and focuses testing on code review stage
+  - **Impact**: CI runs only when PRs are opened/updated, not on every commit to branches
+
 - **DRY Refactor: Consolidated Grouping Logic** - Created centralized `group_and_add_finding()` helper function
   - **Before**: Duplicate grouping logic in `run_check()` function and admin capability check (92 lines duplicated)
   - **After**: Single reusable helper function (56 lines) used by both code paths
@@ -66,6 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `format_finding()` function - before context line calculations (line 925)
   - **Behavior**: Non-numeric line numbers are now silently skipped instead of causing script errors
   - **Impact**: More robust JSON generation even when scanning binary files or encountering unexpected grep output
+
+- **GitHub Actions CI Exit Code Handling** - Fixed CI workflow to handle non-zero exit codes gracefully
+  - **Issue**: Performance checks on the toolkit repository itself may find issues (intentional test patterns)
+  - **Problem**: Non-zero exit codes from `check-performance.sh` would fail the CI workflow
+  - **Fix**: Added `|| EXIT_CODE=$?` capture and `exit 0` to make the step informational rather than blocking
+  - **Behavior**: CI now shows a warning if issues are found but doesn't fail the workflow
+  - **Impact**: CI can complete successfully while still reporting any detected issues
 
 - **Baseline Test Script Exit Code Handling** - Fixed `test-baseline-functionality.sh` to properly capture exit codes with `set -e`
   - **Issue**: Script uses `set -e` which terminates immediately on non-zero exit codes
