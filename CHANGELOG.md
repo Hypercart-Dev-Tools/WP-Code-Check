@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.58] - 2025-12-31
 
+### Fixed
+- **Test Fixture Baseline File** - Added `.neochrome-baseline` test fixture to git
+  - File was being ignored by `.gitignore`, causing CI test failures
+  - Added exception in `.gitignore` for `dist/tests/fixtures/.neochrome-baseline`
+  - Fixes "JSON baseline behavior" test failure in GitHub Actions
+
 ### Added
 
 - **Fixture Validation (Proof of Detection)** - Built-in verification that detection patterns work correctly
