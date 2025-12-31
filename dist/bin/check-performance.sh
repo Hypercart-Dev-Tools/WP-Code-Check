@@ -231,10 +231,6 @@ count_lines_of_code() {
 }
 
 # Get local timestamp for user-friendly display
-get_local_timestamp() {
-  date +"%Y-%m-%d %H:%M:%S %Z"
-}
-
 # Detect WordPress plugin or theme information
 # Returns JSON object with project metadata including file/LOC counts
 detect_project_info() {
@@ -411,7 +407,7 @@ if [ "$ENABLE_LOGGING" = true ]; then
       fi
 
       echo "Generated (UTC):  $(date -u +"%Y-%m-%d %H:%M:%S")"
-      echo "Local Time:      $(get_local_timestamp)"
+      echo "Local Time:      $(timestamp_local)"
         echo "Script Version:   $SCRIPT_VERSION"
       echo "Paths Scanned:    $PATHS"
       echo "Strict Mode:      $STRICT"
@@ -460,7 +456,7 @@ log_exit() {
       echo ""
       echo "========================================================================"
       echo "Completed (UTC): $(date -u +"%Y-%m-%d %H:%M:%S")"
-      echo "Local Time:     $(get_local_timestamp)"
+      echo "Local Time:     $(timestamp_local)"
       echo "Exit Code:      $exit_code"
       echo "========================================================================"
     } >> "$LOG_FILE"

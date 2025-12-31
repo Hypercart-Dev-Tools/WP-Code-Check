@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Line 1216: Banner version (now uses `$SCRIPT_VERSION`)
   - **Future-Proof:** Only need to update ONE line (line 50) when bumping versions
 
+- **Duplicate Timestamp Function** - Removed duplicate `get_local_timestamp()` and moved to shared helpers
+  - **Issue:** `get_local_timestamp()` was defined in main script instead of using shared helper library
+  - **Root Cause:** Function was created before `common-helpers.sh` existed
+  - **Fix:**
+    - Added `timestamp_local()` to `dist/bin/lib/common-helpers.sh` (line 23-28)
+    - Replaced 2 calls to `get_local_timestamp()` with `timestamp_local()` (lines 414, 463)
+    - Deleted duplicate function definition from main script
+  - **Impact:** Timestamp function now reusable across all scripts, follows DRY principles
+  - **Benefit:** Future scripts can use `timestamp_local()` without duplicating code
+
 - **Template Loading Path** - Fixed `REPO_ROOT` variable in bash script to correctly load templates from `dist/TEMPLATES/`
   - **Issue:** Script was looking for templates in repository root `/TEMPLATES/` instead of `dist/TEMPLATES/`
   - **Root Cause:** `REPO_ROOT` was set to `$SCRIPT_DIR/../..` (repository root) instead of `$SCRIPT_DIR/..` (dist directory)

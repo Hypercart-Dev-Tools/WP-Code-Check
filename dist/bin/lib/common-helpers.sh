@@ -19,3 +19,10 @@ timestamp_filename() {
 timestamp_iso8601() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
+
+# Generate local timestamp with timezone for display/logs
+# Usage: timestamp_local
+# Returns: 2025-12-31 11:27:32 PST
+timestamp_local() {
+  date +"%Y-%m-%d %H:%M:%S %Z"
+}
