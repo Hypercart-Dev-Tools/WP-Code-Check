@@ -431,7 +431,7 @@ $data = file_get_contents( 'https://api.example.com/data' );
 
 | File | Purpose |
 |------|---------|
-| `bin/check-performance.sh` | Main analyzer - detects 15+ antipatterns |
+| `bin/check-performance.sh` | Main analyzer - detects 28 antipatterns |
 | `tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
 | `tests/run-fixture-tests.sh` | Validation test suite (9 tests) |
 
