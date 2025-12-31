@@ -173,11 +173,13 @@ get_severity() {
 
 ### Example Output (After MVP)
 
+**TEXT REPORT:**
 ```
 WP Code Check v1.0.59
 
 Project: My Plugin v2.1.0 [plugin]
 Scanning paths: .
+Severity config: ./.wp-code-check-severity.json (2 customizations active)
 
 ━━━ CRITICAL CHECKS (will fail build) ━━━
 
@@ -191,20 +193,114 @@ Scanning paths: .
 
 ━━━ HIGH CHECKS ━━━
 
-▸ AJAX missing nonce validation [HIGH]
-  ✗ FAILED (custom: was CRITICAL, now HIGH)
+▸ AJAX missing nonce validation [HIGH → CRITICAL]
+  ✗ FAILED
   ./assets/js/admin.js:78: jQuery.post('/wp-admin/admin-ajax.php')
+  Note: Severity customized (factory: CRITICAL, custom: HIGH)
 
 ━━━ MEDIUM CHECKS ━━━
 
-▸ Using deprecated functions [MEDIUM]
-  ✓ PASSED (custom: downranked from MEDIUM)
+▸ Using deprecated functions [MEDIUM → LOW]
+  ✓ PASSED
   ./includes/legacy.php:92: wp_make_content_safe()
+  Note: Severity customized (factory: MEDIUM, custom: LOW)
 
 ━━━ SUMMARY ━━━
 Errors:   2 (CRITICAL checks)
 Warnings: 1 (HIGH checks)
-Custom severity config applied: ./.wp-code-check-severity.json
+
+⚠️  Severity customizations applied (2/15 checks):
+   - wp-ajax-missing-nonce: CRITICAL → HIGH
+   - deprecated-function: MEDIUM → LOW
+```
+
+**JSON REPORT:**
+```json
+{
+  "metadata": {
+    "version": "1.0.59",
+    "project": "My Plugin",
+    "type": "plugin",
+    "scan_time": "2025-12-31T15:30:45Z",
+    "severity_config": "./.wp-code-check-severity.json",
+    "severity_customizations": {
+      "wp-ajax-missing-nonce": {
+        "factory_default": "CRITICAL",
+        "custom_level": "HIGH",
+        "reason": "User override in project config"
+      },
+      "deprecated-function": {
+        "factory_default": "MEDIUM",
+        "custom_level": "LOW",
+        "reason": "User override in project config"
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "unbounded-rest-endpoint",
+      "severity": "CRITICAL",
+      "severity_customized": false,
+      "file": "./includes/api.php",
+      "line": 42,
+      "code": "register_rest_route()"
+    },
+    {
+      "id": "wp-ajax-missing-nonce",
+      "severity": "HIGH",
+      "severity_customized": true,
+      "factory_default": "CRITICAL",
+      "file": "./assets/js/admin.js",
+      "line": 78,
+      "code": "jQuery.post('/wp-admin/admin-ajax.php')"
+    }
+  ]
+}
+```
+
+**HTML REPORT:**
+```html
+<div class="severity-customizations-banner">
+  <h3>⚠️ Severity Customizations Active</h3>
+  <p>This report uses custom severity levels. 2 out of 15 checks have been customized:</p>
+  <table>
+    <tr>
+      <th>Check</th>
+      <th>Factory Default</th>
+      <th>Custom Level</th>
+    </tr>
+    <tr>
+      <td>AJAX missing nonce</td>
+      <td><span class="badge critical">CRITICAL</span></td>
+      <td><span class="badge high">HIGH</span></td>
+    </tr>
+    <tr>
+      <td>Deprecated functions</td>
+      <td><span class="badge medium">MEDIUM</span></td>
+      <td><span class="badge low">LOW</span></td>
+    </tr>
+  </table>
+  <p><strong>Config file:</strong> ./.wp-code-check-severity.json</p>
+  <button>Restore Factory Defaults</button>
+</div>
+
+<!-- Each finding shows if severity was customized -->
+<div class="finding">
+  <h4>REST endpoints without pagination <span class="badge critical">CRITICAL</span></h4>
+  <p>File: ./includes/api.php:42</p>
+  <p><code>register_rest_route()</code></p>
+  <!-- No custom notice for this one -->
+</div>
+
+<div class="finding">
+  <h4>AJAX missing nonce <span class="badge high">HIGH</span></h4>
+  <p>File: ./assets/js/admin.js:78</p>
+  <p><code>jQuery.post('/wp-admin/admin-ajax.php')</code></p>
+  <div class="custom-severity-notice">
+    <strong>Note:</strong> Severity customized for this rule
+    <br/>Factory default: <span class="badge critical">CRITICAL</span> → Custom: <span class="badge high">HIGH</span>
+  </div>
+</div>
 ```
 
 ### Rules for Users
@@ -243,14 +339,19 @@ Custom severity config applied: ./.wp-code-check-severity.json
 - [ ] Add `load_severity_defaults()` function to setup shipped levels
 - [ ] Add `load_custom_severity_config()` to parse JSON file (use jq)
 - [ ] Add `get_severity(rule_id)` lookup function
+- [ ] Track which checks are customized (array of rule_ids with custom levels)
 - [ ] Update all check output lines to use `get_severity()` instead of hardcoded levels
+- [ ] Show customization notice in text report header (e.g., "2 customizations active")
+- [ ] Add inline notes for customized findings (e.g., "CRITICAL → HIGH")
 - [ ] Add `--severity-config <path>` CLI option
 - [ ] Support config file discovery (project root, home dir)
 
 **Phase 3 Work:**
 - [ ] Unit tests: verify config loading, merging, priority order
-- [ ] Integration tests: run with custom config, verify output
-- [ ] Documentation: README section + examples
+- [ ] Integration tests: run with custom config, verify output includes customization notices
+- [ ] Text report: show banner header with active customizations + inline notes per finding
+- [ ] JSON report: add `severity_customizations` metadata + `severity_customized` flag per finding
+- [ ] HTML report: add customizations banner table + highlight customized findings with badges
 - [ ] Error handling: warn if config missing, invalid JSON, unknown rule IDs
 
 ## Future Extensions (Not MVP)

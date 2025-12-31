@@ -1,6 +1,6 @@
 # WP Code Check by Hypercart - Performance & Security Analyzer
 
-**Version:** 1.0.58
+**Version:** 1.0.59
 © Copyright 2025 Hypercart (a DBA of Neochrome, Inc.)
 
 ---
@@ -22,7 +22,7 @@ You're building a WordPress plugin or theme. Everything works great in developme
 
 ### The Solution
 
-This toolkit **automatically detects 15+ critical WordPress performance and security antipatterns** before they reach production.
+This toolkit **automatically detects 28 critical WordPress performance and security antipatterns** before they reach production.
 
 **Think of it as:**
 - 🛡️ **ESLint/PHPStan for WordPress performance** - catches issues static analysis misses
@@ -57,7 +57,7 @@ This toolkit **automatically detects 15+ critical WordPress performance and secu
 
 ```bash
 # Clone to a central location (anywhere on your machine)
-git clone https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing.git ~/dev/wp-analyzer
+git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git ~/dev/wp-analyzer
 
 # Or download and extract to any directory
 cd ~/dev/wp-analyzer
@@ -280,7 +280,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Clone analyzer
-        run: git clone https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing.git /tmp/analyzer
+        run: git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git /tmp/analyzer
 
       - name: Run audit
         run: /tmp/analyzer/dist/bin/check-performance.sh --paths . --strict --format json
@@ -311,7 +311,7 @@ jobs:
 performance-audit:
   stage: test
   script:
-    - git clone https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing.git /tmp/analyzer
+    - git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git /tmp/analyzer
     - /tmp/analyzer/dist/bin/check-performance.sh --paths . --strict
   only:
     - merge_requests
@@ -523,10 +523,10 @@ echo "dist/logs/" >> .gitignore
 
 ## 🔗 Links & Support
 
-- **Repository:** https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing
-- **Issues:** https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing/issues
+- **Repository:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check
+- **Issues:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues
 - **Documentation:** See `PROJECT/` directory for detailed guides
-- **Contact:** noel@neochro.me
+- **Contact:** noel@hypercart.io
 
 ---
 
