@@ -1427,6 +1427,41 @@ run_check "ERROR" "CRITICAL" "Debug code in production" "spo-001-debug-code" \
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
+# ============================================================================
+# HCC RULES - High-Confidence Checks from KISS Plugin Quick Search Audit
+# Based on: AUDIT-2025-12-31.md findings
+# ============================================================================
+
+# HCC-001: Sensitive data in localStorage/sessionStorage
+# Detects when sensitive plugin/user/admin data is stored in browser storage
+# that is accessible to front-end scripts via browser console.
+# This catches patterns like: localStorage.setItem('pqs_plugin_cache', ...)
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "CRITICAL" "Sensitive data in localStorage/sessionStorage" "hcc-001-localstorage-exposure" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*plugin" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*cache" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*user" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*admin" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*settings" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*plugin" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*cache" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*user" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*admin" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*settings"
+unset OVERRIDE_GREP_INCLUDE
+
+# HCC-002: Serialization of sensitive objects to client storage
+# Detects when objects are being serialized (JSON.stringify) and stored in
+# browser storage, which often contains sensitive metadata (versions, paths, settings).
+# This catches patterns like: localStorage.setItem('key', JSON.stringify(obj))
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "CRITICAL" "Serialization of objects to client storage" "hcc-002-client-serialization" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
+  "-E localStorage\\[[^]]*\\][[:space:]]*=[[:space:]]*JSON\\.stringify"
+unset OVERRIDE_GREP_INCLUDE
+text_echo ""
+
 # Direct superglobal manipulation
 run_check "ERROR" "HIGH" "Direct superglobal manipulation" "spo-002-superglobals" \
   "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \

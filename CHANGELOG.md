@@ -39,6 +39,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added inline comments in bash script explaining the path structure
 
 ### Added
+- **HCC Security Rules (CRITICAL)** - Added 2 new client-side data exposure checks based on KISS Plugin Quick Search audit
+  - **HCC-001:** Sensitive data in localStorage/sessionStorage
+    - Detects when sensitive plugin/user/admin/settings data is stored in browser storage
+    - Catches patterns like: `localStorage.setItem('plugin_cache', ...)`
+    - Impact: CRITICAL - Any visitor can read localStorage via browser console
+    - Location: Lines 1430-1443 in check-performance.sh
+  - **HCC-002:** Serialization of objects to client storage
+    - Detects when objects are serialized (JSON.stringify) and stored in browser storage
+    - Catches patterns like: `localStorage.setItem(key, JSON.stringify(obj))`
+    - Impact: CRITICAL - Serialized data often contains sensitive metadata (versions, paths, settings)
+    - Location: Lines 1445-1451 in check-performance.sh
+  - **Testing:** Verified rules catch all test cases (plugin_cache, user_data, admin_settings)
+  - **Based on:** AUDIT-2025-12-31.md findings from KISS Plugin Quick Search
+  - **Documentation:** See `1-INBOX/KISS-PQS-FINDINGS-RULES.md` for full rule specifications
+
 - **Contributor License Agreement (CLA)** - Added CLA requirement for contributors
   - Created `CLA.md` - Individual Contributor License Agreement
   - Created `CLA-CORPORATE.md` - Corporate Contributor License Agreement
