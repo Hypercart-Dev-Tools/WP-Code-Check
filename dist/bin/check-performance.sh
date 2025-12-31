@@ -922,6 +922,12 @@ format_finding() {
   local lineno=$(echo "$match" | cut -d: -f2)
   local code=$(echo "$match" | cut -d: -f3-)
 
+  # Validate lineno is numeric (skip binary file matches, etc.)
+  if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+    echo -e "${BOLD}${match}${NC}"
+    return
+  fi
+
   # Truncate code to 200 characters
   if [ ${#code} -gt 200 ]; then
     code="${code:0:200}..."
@@ -1250,6 +1256,11 @@ group_and_add_finding() {
       fi
       add_json_finding "$rule_id" "$severity" "$impact" "$last_file" "$group_start_line" "$message" "$group_first_code"
     fi
+    return
+  fi
+
+  # Validate lineno is numeric before arithmetic operations
+  if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
     return
   fi
 

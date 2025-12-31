@@ -57,6 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Robust Line Number Validation** - Added numeric validation for line numbers before arithmetic operations
+  - **Issue**: `grep` can occasionally output non-standard formats (e.g., "Binary file ... matches") that would make `lineno` empty or non-numeric
+  - **Risk**: Using non-numeric `lineno` in bash arithmetic (`$((lineno - last_line))`) would trigger bash errors and break JSON generation
+  - **Fix**: Added `[[ "$lineno" =~ ^[0-9]+$ ]]` validation in three locations:
+    - `run_check()` function - before grouping findings (line 1331)
+    - `group_and_add_finding()` function - before arithmetic operations (line 1262)
+    - `format_finding()` function - before context line calculations (line 925)
+  - **Behavior**: Non-numeric line numbers are now silently skipped instead of causing script errors
+  - **Impact**: More robust JSON generation even when scanning binary files or encountering unexpected grep output
+
 - **HTML Report Path Display** - Fixed "Paths Scanned" showing `.` instead of full absolute path
   - **Issue**: When scanning with `--paths .`, the HTML report header showed "Paths Scanned: ." instead of the full directory path
   - **Root Cause**: Display was using the original relative path variable instead of the resolved absolute path
