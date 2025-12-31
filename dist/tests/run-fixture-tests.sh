@@ -277,7 +277,7 @@ echo ""
 echo -e "${BLUE}▸ Testing: JSON baseline behavior${NC}"
 ((TESTS_RUN++))
 
-BASELINE_FILE="$FIXTURES_DIR/.neochrome-baseline"
+BASELINE_FILE="$FIXTURES_DIR/.hcc-baseline"
 JSON_BASELINE_OUTPUT=$("$BIN_DIR/check-performance.sh" --format json --paths "$FIXTURES_DIR/antipatterns.php" --baseline "$BASELINE_FILE" --no-log 2>&1)
 
 if [[ "$JSON_BASELINE_OUTPUT" == "{"* ]]; then

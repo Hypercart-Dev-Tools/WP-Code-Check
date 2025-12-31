@@ -40,6 +40,17 @@ The **entire core tool** is licensed under Apache License 2.0:
 
 **See:** [LICENSE](LICENSE) for full Apache 2.0 terms
 
+### Contributing to the Project
+
+If you want to contribute code back to WP Code Check:
+
+- 📝 **Sign the CLA** - Contributors must sign a [Contributor License Agreement](CLA.md)
+- 🔄 **One-time process** - Sign once, contribute forever
+- ✅ **Retain your rights** - You keep copyright and can use your code elsewhere
+- 🤝 **Enables dual licensing** - Allows your contributions in both open source and commercial versions
+
+**See:** [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
+
 ---
 
 ## 💼 Commercial License (Optional)

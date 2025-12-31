@@ -189,7 +189,7 @@ wp-analyze ~/Sites/my-plugin --no-context
 # Generate baseline from current state
 wp-analyze ~/Sites/my-plugin --format json --generate-baseline
 
-# This creates .neochrome-baseline in the scanned directory
+# This creates .hcc-baseline in the scanned directory
 # Commit this file to version control
 
 # Future runs will only fail on NEW or INCREASED issues
@@ -220,7 +220,7 @@ Validate that baseline features work correctly on any project:
 ```
 
 **What it tests:**
-- ✅ **Baseline generation**: Creates `.neochrome-baseline` file correctly
+- ✅ **Baseline generation**: Creates `.hcc-baseline` file correctly
 - ✅ **Issue suppression**: Baselined issues don't cause failures
 - ✅ **New issue detection**: Issues above baseline are caught
 - ✅ **Stale baseline detection**: Reduced issues are flagged

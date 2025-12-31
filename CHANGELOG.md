@@ -5,12 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.59] - 2025-12-31
+
+### Fixed
+- **Version Drift Bug** - Created single source of truth for version number to prevent version inconsistencies
+  - **Issue:** Script had 4 different hardcoded version strings that were out of sync (header: 1.0.59, banner/logs/JSON: 1.0.58)
+  - **Root Cause:** Version number was hardcoded in 4 different locations instead of using a single variable
+  - **Fix:** Created `SCRIPT_VERSION="1.0.59"` constant at top of script and replaced all hardcoded references
+  - **Impact:** Version now displays consistently across banner, logs, and JSON output
+  - **Locations Updated:**
+    - Line 50: Created `SCRIPT_VERSION` variable (single source of truth)
+    - Line 415: Log file version (now uses `$SCRIPT_VERSION`)
+    - Line 608: JSON output version (now uses `$SCRIPT_VERSION`)
+    - Line 1216: Banner version (now uses `$SCRIPT_VERSION`)
+  - **Future-Proof:** Only need to update ONE line (line 50) when bumping versions
+
+- **Duplicate Timestamp Function** - Removed duplicate `get_local_timestamp()` and moved to shared helpers
+  - **Issue:** `get_local_timestamp()` was defined in main script instead of using shared helper library
+  - **Root Cause:** Function was created before `common-helpers.sh` existed
+  - **Fix:**
+    - Added `timestamp_local()` to `dist/bin/lib/common-helpers.sh` (line 23-28)
+    - Replaced 2 calls to `get_local_timestamp()` with `timestamp_local()` (lines 414, 463)
+    - Deleted duplicate function definition from main script
+  - **Impact:** Timestamp function now reusable across all scripts, follows DRY principles
+  - **Benefit:** Future scripts can use `timestamp_local()` without duplicating code
+
+- **Template Loading Path** - Fixed `REPO_ROOT` variable in bash script to correctly load templates from `dist/TEMPLATES/`
+  - **Issue:** Script was looking for templates in repository root `/TEMPLATES/` instead of `dist/TEMPLATES/`
+  - **Root Cause:** `REPO_ROOT` was set to `$SCRIPT_DIR/../..` (repository root) instead of `$SCRIPT_DIR/..` (dist directory)
+  - **Fix:** Changed `REPO_ROOT` calculation from `../..` to `..` to point to `dist/` directory
+  - **Impact:** `--project <name>` flag now correctly loads templates from `dist/TEMPLATES/<name>.txt`
+  - Updated `dist/TEMPLATES/_AI_INSTRUCTIONS.md` to clarify templates must be in `dist/TEMPLATES/` (not repository root)
+  - Added inline comments in bash script explaining the path structure
+
+### Added
+- **Contributor License Agreement (CLA)** - Added CLA requirement for contributors
+  - Created `CLA.md` - Individual Contributor License Agreement
+  - Created `CLA-CORPORATE.md` - Corporate Contributor License Agreement
+  - Updated `CONTRIBUTING.md` with CLA signing instructions
+  - Updated `README.md` to mention CLA requirement
+  - Updated `LICENSE-SUMMARY.md` with CLA information
+  - CLA is fully compatible with Apache 2.0 and dual-license model
+  - Based on Apache Software Foundation's CLA template
+  - Allows contributions to be distributed under both open source and commercial licenses
+
+### Changed
+- **Baseline File Renamed** - Renamed `.neochrome-baseline` to `.hcc-baseline` (HCC = Hypercart Code Check)
+  - Updated default baseline filename in `check-performance.sh`
+  - Updated all documentation references
+  - Updated test fixtures and test scripts
+  - Updated `.gitignore` patterns
+  - Renamed `dist/tests/fixtures/.neochrome-baseline` to `.hcc-baseline`
+
+---
+
 ## [1.0.58] - 2025-12-31
 
 ### Fixed
-- **Test Fixture Baseline File** - Added `.neochrome-baseline` test fixture to git
+- **Test Fixture Baseline File** - Added `.hcc-baseline` test fixture to git
   - File was being ignored by `.gitignore`, causing CI test failures
-  - Added exception in `.gitignore` for `dist/tests/fixtures/.neochrome-baseline`
+  - Added exception in `.gitignore` for `dist/tests/fixtures/.hcc-baseline`
   - Fixes "JSON baseline behavior" test failure in GitHub Actions
 
 ### Added
@@ -609,7 +663,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Baseline regression coverage**
-  - Added a dedicated `.neochrome-baseline` fixture and JSON-based test in `dist/tests/run-fixture-tests.sh` to validate `baselined` and `stale_baseline` behavior end-to-end.
+  - Added a dedicated `.hcc-baseline` fixture and JSON-based test in `dist/tests/run-fixture-tests.sh` to validate `baselined` and `stale_baseline` behavior end-to-end.
 - **Developer documentation updates**
   - Updated `dist/README.md` with JSON output and baseline usage instructions for CI/tooling, and bumped example/version references to 1.0.33.
 
@@ -620,7 +674,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Baseline support for performance findings**
-  - New `--generate-baseline` flag to scan the current codebase and write a `.neochrome-baseline` file with per-rule, per-file allowed counts
+  - New `--generate-baseline` flag to scan the current codebase and write a `.hcc-baseline` file with per-rule, per-file allowed counts
   - New `--baseline` flag to point to a custom baseline file path and `--ignore-baseline` to disable baseline usage when needed
   - Runtime checks now consult the baseline and suppress findings that are within the recorded allowance while still emitting new or increased findings
   - JSON summary now includes `baselined` (total suppressed findings) and `stale_baseline` (entries where the recorded allowance exceeds current matches)

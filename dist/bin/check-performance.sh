@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.58
+# Version: 1.0.59
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -18,8 +18,8 @@
 #   --no-log                 Disable logging to file
 #   --no-context             Disable context lines around findings
 #   --context-lines N        Number of context lines to show (default: 3)
-#   --generate-baseline      Generate .neochrome-baseline from current findings
-#   --baseline <path>        Use custom baseline file path (default: .neochrome-baseline)
+#   --generate-baseline      Generate .hcc-baseline from current findings
+#   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
 #   --ignore-baseline        Ignore baseline file even if present
 #   --help                   Show this help message
 
@@ -31,12 +31,23 @@
 # Directories and shared libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# REPO_ROOT points to dist/ directory (not repository root)
+# This ensures templates are loaded from dist/TEMPLATES/ where they belong
+# Changed from ../.. to .. on 2025-12-31 to fix template loading
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=dist/bin/lib/colors.sh
 source "$LIB_DIR/colors.sh"
 # shellcheck source=dist/bin/lib/common-helpers.sh
 source "$LIB_DIR/common-helpers.sh"
+
+# ============================================================
+# VERSION - SINGLE SOURCE OF TRUTH
+# ============================================================
+# This is the ONLY place the version number should be defined.
+# All other references (logs, JSON, banners) use this variable.
+# Update this ONE line when bumping versions - never hardcode elsewhere.
+SCRIPT_VERSION="1.0.59"
 
 # Defaults
 PATHS="."
@@ -49,7 +60,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 EXCLUDE_DIRS="vendor node_modules .git tests"
 
 # Baseline configuration
-BASELINE_FILE=".neochrome-baseline"
+BASELINE_FILE=".hcc-baseline"
 GENERATE_BASELINE=false
 IGNORE_BASELINE=false
 BASELINE_ENABLED=false
@@ -220,10 +231,6 @@ count_lines_of_code() {
 }
 
 # Get local timestamp for user-friendly display
-get_local_timestamp() {
-  date +"%Y-%m-%d %H:%M:%S %Z"
-}
-
 # Detect WordPress plugin or theme information
 # Returns JSON object with project metadata including file/LOC counts
 detect_project_info() {
@@ -400,8 +407,8 @@ if [ "$ENABLE_LOGGING" = true ]; then
       fi
 
       echo "Generated (UTC):  $(date -u +"%Y-%m-%d %H:%M:%S")"
-      echo "Local Time:      $(get_local_timestamp)"
-        echo "Script Version:   1.0.58"
+      echo "Local Time:      $(timestamp_local)"
+        echo "Script Version:   $SCRIPT_VERSION"
       echo "Paths Scanned:    $PATHS"
       echo "Strict Mode:      $STRICT"
       echo "Verbose Mode:     $VERBOSE"
@@ -449,7 +456,7 @@ log_exit() {
       echo ""
       echo "========================================================================"
       echo "Completed (UTC): $(date -u +"%Y-%m-%d %H:%M:%S")"
-      echo "Local Time:     $(get_local_timestamp)"
+      echo "Local Time:     $(timestamp_local)"
       echo "Exit Code:      $exit_code"
       echo "========================================================================"
     } >> "$LOG_FILE"
@@ -594,7 +601,7 @@ output_json() {
 
     cat <<EOF
 {
-  "version": "1.0.58",
+  "version": "$SCRIPT_VERSION",
   "timestamp": "$timestamp",
   "project": $project_info,
   "paths_scanned": "$(json_escape "$PATHS")",
@@ -1157,7 +1164,7 @@ generate_baseline_file() {
 	done
 
 	local tmp
-	tmp="$(mktemp 2>/dev/null || echo "/tmp/neochrome-baseline.$$")"
+	tmp="$(mktemp 2>/dev/null || echo "/tmp/hcc-baseline.$$")"
 
 	for i in "${!NEW_BASELINE_KEYS[@]}"; do
 		local key="${NEW_BASELINE_KEYS[$i]}"
@@ -1171,7 +1178,7 @@ generate_baseline_file() {
 	done
 
 	{
-		echo "# .neochrome-baseline"
+		echo "# .hcc-baseline"
 		echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S')"
 		echo "# Tool: WP Code Check by Hypercart $(grep -m1 'Version:' "$0" 2>/dev/null | sed 's/^# Version: //')"
 		echo "# Total baselined: ${total}"
@@ -1202,7 +1209,7 @@ PROJECT_NAME=$(echo "$PROJECT_INFO_JSON" | grep -o '"name": "[^"]*"' | cut -d'"'
 PROJECT_VERSION=$(echo "$PROJECT_INFO_JSON" | grep -o '"version": "[^"]*"' | cut -d'"' -f4)
 
 			text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-			text_echo "${BLUE}  WP Code Check by Hypercart - Performance Analyzer v1.0.58${NC}"
+			text_echo "${BLUE}  WP Code Check by Hypercart - Performance Analyzer v$SCRIPT_VERSION${NC}"
 		text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 text_echo ""
 

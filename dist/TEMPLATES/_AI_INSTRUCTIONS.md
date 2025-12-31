@@ -4,13 +4,15 @@
 Help users complete WP Code Check project configuration templates.
 
 ## Context
-Users create template files in `/TEMPLATES/` to store project configurations. This allows them to run performance checks with a simple command like `run acme` instead of typing long paths every time.
+Users create template files in `dist/TEMPLATES/` to store project configurations. This allows them to run performance checks with a simple command like `--project acme` instead of typing long paths every time.
+
+**IMPORTANT:** Templates must be stored in `dist/TEMPLATES/` (not repository root `/TEMPLATES/`). The bash script's `REPO_ROOT` variable was updated on 2025-12-31 to point to the `dist/` directory to ensure templates load correctly from `dist/TEMPLATES/`.
 
 ## Workflow
-1. User creates a new `.txt` file in `/TEMPLATES/` (e.g., `acme.txt`)
+1. User creates a new `.txt` file in `dist/TEMPLATES/` (e.g., `acme.txt`)
 2. User pastes an absolute path to a WordPress plugin/theme directory
 3. User asks you to complete the template
-4. You extract metadata and fill in the template using the structure from `_TEMPLATE.txt`
+4. You extract metadata and fill in the template using the structure from `dist/TEMPLATES/_TEMPLATE.txt`
 
 ---
 
@@ -42,10 +44,10 @@ Users create template files in `/TEMPLATES/` to store project configurations. Th
 - Example: `acme.txt` → `PROJECT_NAME=acme`
 
 ### 4. Generate the Full Template
-- Use the structure from `/TEMPLATES/_TEMPLATE.txt`
+- Use the structure from `dist/TEMPLATES/_TEMPLATE.txt`
 - Fill in the **BASIC CONFIGURATION** section:
   - `PROJECT_NAME` (from filename)
-  - `PATH` (from user's pasted path)
+  - `PROJECT_PATH` (from user's pasted path)
   - `NAME` (from plugin header)
   - `VERSION` (from plugin header)
 - Leave all **COMMON OPTIONS** and **ADVANCED OPTIONS** commented out (user can enable as needed)
@@ -69,7 +71,7 @@ If you can't find the plugin file or extract metadata:
 
 ## Example Interaction
 
-**User creates `/TEMPLATES/acme.txt` with:**
+**User creates `dist/TEMPLATES/acme.txt` with:**
 ```
 /Users/noelsaw/Local Sites/bloomzhemp-10-24-25/app/public/wp-content/plugins/acme-plugin
 ```
@@ -134,7 +136,7 @@ VERSION='2.1.3'
 # ============================================================
 
 # Baseline file for suppressing known issues
-# BASELINE=.neochrome-baseline
+# BASELINE=.hcc-baseline
 
 # Custom log directory
 # LOG_DIR=./logs

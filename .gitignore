@@ -23,10 +23,10 @@ dist/TEMPLATES/*.txt
 
 # Baseline files (contain project-specific findings)
 # Exception: Test fixture baseline is needed for CI tests
-!dist/tests/fixtures/.neochrome-baseline
-.neochrome-baseline
-*.neochrome-baseline
-**/.neochrome-baseline
+!dist/tests/fixtures/.hcc-baseline
+.hcc-baseline
+*.hcc-baseline
+**/.hcc-baseline
 
 # ============================================
 # DEVELOPMENT & TESTING
