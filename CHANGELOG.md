@@ -39,6 +39,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added inline comments in bash script explaining the path structure
 
 ### Added
+- **HCC Security & Performance Rules** - Added 4 new checks based on KISS Plugin Quick Search audit
+  - **HCC-001:** Sensitive data in localStorage/sessionStorage (CRITICAL)
+    - Detects when sensitive plugin/user/admin/settings data is stored in browser storage
+    - Catches patterns like: `localStorage.setItem('plugin_cache', ...)`
+    - Impact: CRITICAL - Any visitor can read localStorage via browser console
+    - Location: Lines 1430-1443 in check-performance.sh
+  - **HCC-002:** Serialization of objects to client storage (CRITICAL)
+    - Detects when objects are serialized (JSON.stringify) and stored in browser storage
+    - Catches patterns like: `localStorage.setItem(key, JSON.stringify(obj))`
+    - Impact: CRITICAL - Serialized data often contains sensitive metadata (versions, paths, settings)
+    - Location: Lines 1445-1451 in check-performance.sh
+  - **HCC-005:** Expensive WP functions in polling intervals (HIGH)
+    - Enhances existing AJAX polling check to detect expensive WordPress functions
+    - Scans both `.js` and `.php` files for `setInterval()` calls
+    - Checks 20 lines of context for: `get_plugins()`, `get_themes()`, `get_posts()`, `WP_Query`, `get_users()`, etc.
+    - Impact: HIGH - Prevents performance degradation from polling expensive operations
+    - Location: Lines 1612-1668 in check-performance.sh
+    - Example: Catches `setInterval()` that calls `get_plugins()` every 30 seconds
+  - **HCC-008:** User input in RegExp without escaping (MEDIUM)
+    - Detects unsafe RegExp construction with concatenated variables
+    - Catches patterns like: `new RegExp('\\b' + query + '\\b')` and `RegExp(\`pattern${userInput}\`)`
+    - Impact: MEDIUM - Can lead to ReDoS attacks or unexpected regex behavior
+    - Location: Lines 1465-1474 in check-performance.sh
+    - Uses single `-E` pattern with alternation for BSD grep compatibility
+    - Example: Catches the exact KISS Plugin Quick Search pattern
+    - Note: Cannot detect if variables are properly escaped (expected false positives)
+  - **Testing:** All rules verified with comprehensive test files and real-world code
+  - **Based on:** AUDIT-2025-12-31.md findings from KISS Plugin Quick Search
+  - **Documentation:** See `1-INBOX/KISS-PQS-FINDINGS-RULES.md` for full rule specifications
+
 - **Contributor License Agreement (CLA)** - Added CLA requirement for contributors
   - Created `CLA.md` - Individual Contributor License Agreement
   - Created `CLA-CORPORATE.md` - Corporate Contributor License Agreement
