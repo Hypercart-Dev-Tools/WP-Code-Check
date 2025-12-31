@@ -1,5 +1,29 @@
+# ============================================================================
 # CI Workflow for WP Code Check by Hypercart
-# Consolidated workflow with performance checks, fixture validation, and Slack notifications
+# ============================================================================
+#
+# ⚠️  WARNING: This is the ONLY workflow file that should exist in this repo!
+#
+# This consolidated workflow handles ALL CI needs:
+#   - Performance checks and audits
+#   - Test fixture validation
+#   - Slack notifications (conditional based on event type)
+#   - Artifact uploads
+#
+# DO NOT create additional workflow files for:
+#   - Slack notifications (already integrated here)
+#   - Performance audits (already integrated here)
+#   - Additional CI checks (add them to this file instead)
+#
+# If you need to modify CI behavior, edit THIS file only.
+# Multiple workflows cause duplicate runs and waste CI resources.
+#
+# History: Consolidated from 3 separate workflows on 2025-12-31
+#   - Removed: performance-audit-slack.yml
+#   - Removed: performance-audit-slack-on-failure.yml
+#   - Kept: ci.yml (this file) with all functionality merged
+#
+# ============================================================================
 name: CI
 
 on:
