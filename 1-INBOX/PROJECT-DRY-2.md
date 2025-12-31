@@ -3,6 +3,26 @@
 **Scope:** Bash performance/security scanner (`dist/bin/check-performance.sh`)  
 **Goal:** Highlight consolidation targets so the toolkit keeps a single source of truth for shared behaviors without touching runtime logic yet.
 
+## UPDATE - Desion made to defer most of these and tackle these only instead: 
+
+Phase 1: Critical Bug Fix (30 minutes) - DO NOW
+✅ Fix version drift (Target #2 - partial)
+Define SCRIPT_VERSION="1.0.59" constant
+Replace 4 hardcoded version strings
+Test: Verify version appears correctly in logs/JSON
+Phase 2: Quick Cleanup (15 minutes) - DO NEXT
+
+STATUS: Not started
+
+
+✅ Remove duplicate timestamp function (Target #4)
+Delete get_local_timestamp()
+Use timestamp_iso8601() from common-helpers
+Test: Verify timestamps still work
+
+STATUS: Not started
+
+
 ---
 
 ## 🎯 Summary
