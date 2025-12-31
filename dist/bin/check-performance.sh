@@ -1427,6 +1427,52 @@ run_check "ERROR" "CRITICAL" "Debug code in production" "spo-001-debug-code" \
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
+# ============================================================================
+# HCC RULES - High-Confidence Checks from KISS Plugin Quick Search Audit
+# Based on: AUDIT-2025-12-31.md findings
+# ============================================================================
+
+# HCC-001: Sensitive data in localStorage/sessionStorage
+# Detects when sensitive plugin/user/admin data is stored in browser storage
+# that is accessible to front-end scripts via browser console.
+# This catches patterns like: localStorage.setItem('pqs_plugin_cache', ...)
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "CRITICAL" "Sensitive data in localStorage/sessionStorage" "hcc-001-localstorage-exposure" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*plugin" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*cache" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*user" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*admin" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*settings" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*plugin" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*cache" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*user" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*admin" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*settings"
+unset OVERRIDE_GREP_INCLUDE
+
+# HCC-002: Serialization of sensitive objects to client storage
+# Detects when objects are being serialized (JSON.stringify) and stored in
+# browser storage, which often contains sensitive metadata (versions, paths, settings).
+# This catches patterns like: localStorage.setItem('key', JSON.stringify(obj))
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "CRITICAL" "Serialization of objects to client storage" "hcc-002-client-serialization" \
+  "-E localStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
+  "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
+  "-E localStorage\\[[^]]*\\][[:space:]]*=[[:space:]]*JSON\\.stringify"
+unset OVERRIDE_GREP_INCLUDE
+text_echo ""
+
+# HCC-008: Unsafe RegExp construction with user input
+# Detects RegExp constructors that concatenate variables (likely user input) without escaping.
+# This can lead to ReDoS attacks or unexpected regex behavior.
+# Catches patterns like: new RegExp('\\b' + query + '\\b') or RegExp(`pattern${userInput}`)
+# Note: Uses single -E with alternation (|) for BSD grep compatibility
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx --include=*.php"
+run_check "ERROR" "MEDIUM" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
+  "-E ((new[[:space:]]+)?RegExp[[:space:]]*\\([^)]*[[:space:]]\\+[[:space:]])|((new[[:space:]]+)?RegExp.*\\$\\{)"
+unset OVERRIDE_GREP_INCLUDE
+text_echo ""
+
 # Direct superglobal manipulation
 run_check "ERROR" "HIGH" "Direct superglobal manipulation" "spo-002-superglobals" \
   "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \
@@ -1571,6 +1617,63 @@ if [ "$AJAX_POLLING" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "HIGH" "passed" 0
+fi
+text_echo ""
+
+# HCC-005: Expensive WordPress functions in polling intervals
+text_echo "${BLUE}▸ Expensive WP functions in polling intervals (HCC-005) ${RED}[HIGH]${NC}"
+EXPENSIVE_POLLING=false
+EXPENSIVE_POLLING_FINDING_COUNT=0
+EXPENSIVE_POLLING_VISIBLE=""
+# Scan both JS and PHP files for setInterval (PHP files may have inline <script> tags)
+POLLING_MATCHES_HCC005=$(grep -rHn $EXCLUDE_ARGS --include="*.js" --include="*.php" -E "setInterval[[:space:]]*\\(" $PATHS 2>/dev/null || true)
+if [ -n "$POLLING_MATCHES_HCC005" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9][0-9]*$ ]]; then
+      continue
+    fi
+
+    # Check for expensive WP functions in a wider context (20 lines after setInterval)
+    start_line=$lineno
+    end_line=$((lineno + 20))
+    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null)
+
+    # Detect expensive WordPress functions
+    if echo "$context" | grep -qE "get_plugins\\(|get_themes\\(|get_posts\\(|WP_Query|get_users\\(|wp_get_recent_posts\\(|get_categories\\(|get_terms\\("; then
+      if should_suppress_finding "hcc-005-expensive-polling" "$file"; then
+        continue
+      fi
+
+      EXPENSIVE_POLLING=true
+      ((EXPENSIVE_POLLING_FINDING_COUNT++))
+      add_json_finding "hcc-005-expensive-polling" "error" "HIGH" "$file" "${lineno:-0}" "Expensive WordPress function called in polling interval" "$code"
+      if [ -z "$EXPENSIVE_POLLING_VISIBLE" ]; then
+        EXPENSIVE_POLLING_VISIBLE="$match"
+      else
+        EXPENSIVE_POLLING_VISIBLE="${EXPENSIVE_POLLING_VISIBLE}
+$match"
+      fi
+    fi
+  done <<< "$POLLING_MATCHES_HCC005"
+fi
+if [ "$EXPENSIVE_POLLING" = true ]; then
+  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$EXPENSIVE_POLLING_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$EXPENSIVE_POLLING_VISIBLE" | head -5)"
+  fi
+  ((ERRORS++))
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "passed" 0
 fi
 text_echo ""
 

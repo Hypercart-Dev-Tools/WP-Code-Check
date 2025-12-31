@@ -1,5 +1,5 @@
 # PROJECT-DRY-2 — DRY Opportunities for `check-performance.sh`
-**Date:** 2026-06-13  
+**Date:** 2026-06-13 B
 **Scope:** Bash performance/security scanner (`dist/bin/check-performance.sh`)  
 **Goal:** Highlight consolidation targets so the toolkit keeps a single source of truth for shared behaviors without touching runtime logic yet.
 
