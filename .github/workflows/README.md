@@ -64,6 +64,14 @@
 - NOT triggered by events in this repository
 - This is OK to keep as it's not causing duplicate runs
 
+### `example-caller.yml` - Template/Example File
+
+**Purpose:** Documentation and example for plugin developers
+- Shows how to use the reusable workflow in other repos
+- **DISABLED in this repo** - only triggers on `workflow_dispatch` (manual)
+- When copying to your plugin, uncomment the real triggers
+- This is OK to keep as it won't run automatically
+
 ## How to Modify CI Behavior
 
 ### Adding a New Check

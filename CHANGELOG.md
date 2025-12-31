@@ -68,10 +68,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `.github/workflows/performance-audit-slack-on-failure.yml`
   - **Safeguards Added**:
     - Added prominent warning comments in `ci.yml` header explaining single-workflow policy
+    - Disabled `example-caller.yml` triggers (changed to `workflow_dispatch` only)
+      - This template file was causing duplicate CI runs
+      - Now only runs manually, preventing automatic triggers
+      - Added clear warnings that it's a template/example file
     - Created `.github/workflows/README.md` documenting:
       - Why we use a single workflow
       - How to modify CI behavior without creating new files
       - Checklist before creating new workflows
+      - Documentation of template files (example-caller.yml, wp-performance.yml)
       - History of consolidation to prevent regression
 
 - **DRY Refactor: Consolidated Grouping Logic** - Created centralized `group_and_add_finding()` helper function
