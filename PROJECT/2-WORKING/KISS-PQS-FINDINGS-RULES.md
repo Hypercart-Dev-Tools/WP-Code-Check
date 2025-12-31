@@ -250,9 +250,11 @@ This would catch the specific `highlightSettings` typo but is not a general solu
 
 **Pattern:**
 ```bash
-run_check "ERROR" "MEDIUM" "User input in RegExp constructor without escaping" "hcc-008-unsafe-regexp" \
-  "-E new[[:space:]]+RegExp[[:space:]]*\\([^)]*\\+[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*" \
-  "-E RegExp[[:space:]]*\\([^)]*\\$\\{[^}]*\\}"
+# Note: Uses single -E with alternation (|) for BSD grep compatibility
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx --include=*.php"
+run_check "ERROR" "MEDIUM" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
+  "-E ((new[[:space:]]+)?RegExp[[:space:]]*\\([^)]*[[:space:]]\\+[[:space:]])|((new[[:space:]]+)?RegExp.*\\$\\{)"
+unset OVERRIDE_GREP_INCLUDE
 ```
 
 **Rationale:**
