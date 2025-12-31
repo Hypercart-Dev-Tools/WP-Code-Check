@@ -31,7 +31,10 @@
 # Directories and shared libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# REPO_ROOT points to dist/ directory (not repository root)
+# This ensures templates are loaded from dist/TEMPLATES/ where they belong
+# Changed from ../.. to .. on 2025-12-31 to fix template loading
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=dist/bin/lib/colors.sh
 source "$LIB_DIR/colors.sh"

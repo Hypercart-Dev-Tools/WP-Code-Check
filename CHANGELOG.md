@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.59] - 2025-12-31
 
+### Fixed
+- **Template Loading Path** - Fixed `REPO_ROOT` variable in bash script to correctly load templates from `dist/TEMPLATES/`
+  - **Issue:** Script was looking for templates in repository root `/TEMPLATES/` instead of `dist/TEMPLATES/`
+  - **Root Cause:** `REPO_ROOT` was set to `$SCRIPT_DIR/../..` (repository root) instead of `$SCRIPT_DIR/..` (dist directory)
+  - **Fix:** Changed `REPO_ROOT` calculation from `../..` to `..` to point to `dist/` directory
+  - **Impact:** `--project <name>` flag now correctly loads templates from `dist/TEMPLATES/<name>.txt`
+  - Updated `dist/TEMPLATES/_AI_INSTRUCTIONS.md` to clarify templates must be in `dist/TEMPLATES/` (not repository root)
+  - Added inline comments in bash script explaining the path structure
+
 ### Added
 - **Contributor License Agreement (CLA)** - Added CLA requirement for contributors
   - Created `CLA.md` - Individual Contributor License Agreement
