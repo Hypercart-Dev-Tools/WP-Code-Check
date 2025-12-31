@@ -244,7 +244,39 @@ Error: Permission denied
 **Solution:** Make sure the `run` script is executable:
 ```bash
 chmod +x dist/bin/run
+chmod +x dist/bin/check-performance.sh
 ```
+
+### AI Agent Issues (Gemini, Cursor, etc.)
+
+If your AI coding assistant has trouble running templates:
+
+**Problem:** AI can't execute scripts on external paths
+
+**Solution 1:** Use absolute paths
+```bash
+# Instead of: ./dist/bin/run my-plugin
+# Use full path:
+/full/path/to/wp-code-check/dist/bin/run my-plugin
+```
+
+**Solution 2:** Tell AI where WP Code Check is installed
+```
+"WP Code Check is installed at /Users/noelsaw/Sites/wp-code-check"
+"Please run the template using the absolute path"
+```
+
+**Solution 3:** Check permissions first
+```bash
+# Make scripts executable
+chmod +x /path/to/wp-code-check/dist/bin/run
+chmod +x /path/to/wp-code-check/dist/bin/check-performance.sh
+
+# Then run
+/path/to/wp-code-check/dist/bin/run my-plugin
+```
+
+**For AI Developers:** See [_AI_INSTRUCTIONS.md](_AI_INSTRUCTIONS.md) for detailed troubleshooting
 
 ---
 

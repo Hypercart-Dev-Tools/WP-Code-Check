@@ -178,3 +178,245 @@ VERSION='2.1.3'
 - **Solution:** Check if it's a theme (look for `style.css` with theme header)
 - **Fallback:** Create template with blank NAME/VERSION and warn user
 
+---
+
+## Running Scans on External Paths (Critical for AI Agents)
+
+### The Problem
+
+When users create templates that point to paths **outside** the WP Code Check directory, AI agents may encounter permission or execution issues:
+
+```bash
+# Template points to external path
+PROJECT_PATH='/Users/noelsaw/Sites/my-plugin'
+
+# But WP Code Check is installed here
+/Users/noelsaw/Sites/wp-code-check/
+```
+
+### Common Errors
+
+**Error 1: Permission Denied**
+```
+bash: ./dist/bin/check-performance.sh: Permission denied
+```
+
+**Error 2: Script Not Found**
+```
+bash: dist/bin/check-performance.sh: No such file or directory
+```
+
+**Error 3: Relative Path Issues**
+```
+Error: Cannot find check-performance.sh
+```
+
+---
+
+## Solutions for AI Agents
+
+### 1. Always Use Absolute Paths
+
+**❌ DON'T do this:**
+```bash
+./dist/bin/check-performance.sh --paths /external/path
+```
+
+**✅ DO this instead:**
+```bash
+/full/path/to/wp-code-check/dist/bin/check-performance.sh --paths /external/path
+```
+
+### 2. Check Script Permissions First
+
+Before running any script, verify it's executable:
+
+```bash
+# Check if executable
+if [ ! -x "/path/to/wp-code-check/dist/bin/check-performance.sh" ]; then
+  chmod +x /path/to/wp-code-check/dist/bin/check-performance.sh
+fi
+
+# Then run it
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /external/path
+```
+
+### 3. Use the `run` Script with Absolute Path
+
+The `run` script is designed to handle templates:
+
+```bash
+# Find WP Code Check installation
+WP_CODE_CHECK_DIR="/path/to/wp-code-check"
+
+# Make sure run script is executable
+chmod +x "$WP_CODE_CHECK_DIR/dist/bin/run"
+
+# Run the template
+"$WP_CODE_CHECK_DIR/dist/bin/run" my-plugin
+```
+
+### 4. Determine WP Code Check Location
+
+If you don't know where WP Code Check is installed, help the user find it:
+
+```bash
+# Ask the user
+echo "Where is WP Code Check installed?"
+echo "Common locations:"
+echo "  - ~/Sites/wp-code-check"
+echo "  - ~/Projects/wp-code-check"
+echo "  - /usr/local/wp-code-check"
+
+# Or search for it (if user gives permission)
+find ~ -name "check-performance.sh" -path "*/wp-code-check/dist/bin/*" 2>/dev/null
+```
+
+### 5. Working Directory Matters
+
+The script should be run from **any directory**, but you need the full path:
+
+```bash
+# User is here
+cd /Users/noelsaw/Sites/my-plugin
+
+# But script is here
+/Users/noelsaw/Tools/wp-code-check/dist/bin/check-performance.sh --paths .
+
+# The script will scan the current directory (my-plugin)
+```
+
+---
+
+## Step-by-Step Workflow for AI Agents
+
+### When User Says: "Run the template for my-plugin"
+
+**Step 1: Locate WP Code Check**
+```bash
+# Check common locations or ask user
+WP_CODE_CHECK="/path/to/wp-code-check"
+```
+
+**Step 2: Verify Template Exists**
+```bash
+TEMPLATE_FILE="$WP_CODE_CHECK/dist/TEMPLATES/my-plugin.txt"
+if [ ! -f "$TEMPLATE_FILE" ]; then
+  echo "Error: Template not found at $TEMPLATE_FILE"
+  exit 1
+fi
+```
+
+**Step 3: Make Scripts Executable**
+```bash
+chmod +x "$WP_CODE_CHECK/dist/bin/run"
+chmod +x "$WP_CODE_CHECK/dist/bin/check-performance.sh"
+```
+
+**Step 4: Run the Template**
+```bash
+"$WP_CODE_CHECK/dist/bin/run" my-plugin
+```
+
+---
+
+## Example: Complete AI Agent Workflow
+
+```bash
+#!/bin/bash
+
+# User wants to run template "acme-plugin"
+TEMPLATE_NAME="acme-plugin"
+
+# Step 1: Find WP Code Check (ask user if needed)
+WP_CODE_CHECK="/Users/noelsaw/Tools/wp-code-check"
+
+# Step 2: Verify installation
+if [ ! -d "$WP_CODE_CHECK/dist/bin" ]; then
+  echo "❌ WP Code Check not found at: $WP_CODE_CHECK"
+  echo "Please provide the correct path to WP Code Check installation"
+  exit 1
+fi
+
+# Step 3: Verify template exists
+TEMPLATE_FILE="$WP_CODE_CHECK/dist/TEMPLATES/${TEMPLATE_NAME}.txt"
+if [ ! -f "$TEMPLATE_FILE" ]; then
+  echo "❌ Template not found: $TEMPLATE_FILE"
+  echo "Available templates:"
+  ls -1 "$WP_CODE_CHECK/dist/TEMPLATES/"*.txt 2>/dev/null | xargs -n1 basename
+  exit 1
+fi
+
+# Step 4: Make scripts executable
+chmod +x "$WP_CODE_CHECK/dist/bin/run" 2>/dev/null
+chmod +x "$WP_CODE_CHECK/dist/bin/check-performance.sh" 2>/dev/null
+
+# Step 5: Run the scan
+echo "🚀 Running WP Code Check for: $TEMPLATE_NAME"
+"$WP_CODE_CHECK/dist/bin/run" "$TEMPLATE_NAME"
+```
+
+---
+
+## Quick Reference for AI Agents
+
+### ✅ DO:
+- Use absolute paths to WP Code Check scripts
+- Check and set execute permissions before running
+- Verify template files exist before running
+- Ask user for WP Code Check location if unknown
+- Handle errors gracefully with helpful messages
+
+### ❌ DON'T:
+- Assume relative paths will work
+- Run scripts without checking permissions
+- Assume WP Code Check is in current directory
+- Give up on first error - try fixing permissions
+
+---
+
+## Debugging Commands for AI Agents
+
+### Check if script exists and is executable:
+```bash
+ls -lh /path/to/wp-code-check/dist/bin/check-performance.sh
+```
+
+### Make script executable:
+```bash
+chmod +x /path/to/wp-code-check/dist/bin/check-performance.sh
+```
+
+### Test script runs:
+```bash
+/path/to/wp-code-check/dist/bin/check-performance.sh --help
+```
+
+### List available templates:
+```bash
+ls -1 /path/to/wp-code-check/dist/TEMPLATES/*.txt
+```
+
+### Read template content:
+```bash
+cat /path/to/wp-code-check/dist/TEMPLATES/my-plugin.txt
+```
+
+---
+
+## Error Messages to Watch For
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Permission denied` | Script not executable | `chmod +x script.sh` |
+| `No such file or directory` | Wrong path or script doesn't exist | Use absolute path, verify file exists |
+| `Template not found` | Template file doesn't exist | Check `TEMPLATES/` directory |
+| `command not found: run` | Script not in PATH | Use absolute path to `run` script |
+| `Path does not exist` | Template points to non-existent path | Verify `PROJECT_PATH` in template |
+
+---
+
+**Key Takeaway for AI Agents:**
+
+When running WP Code Check on external paths, **always use absolute paths** to the WP Code Check installation and **verify permissions** before executing scripts. Don't assume the current working directory contains WP Code Check.
+
