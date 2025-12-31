@@ -180,6 +180,45 @@ VERSION='2.1.3'
 
 ---
 
+## Understanding Output Formats and Report Generation
+
+### Important: How Output Formats Work
+
+**The script supports TWO output formats:**
+- `--format text` - Console output (default)
+- `--format json` - JSON output to log file + auto-generates HTML report
+
+**There is NO `--format html` option.** HTML reports are automatically generated from JSON output.
+
+### How HTML Reports Are Generated
+
+When you run with `--format json`:
+
+1. The script outputs JSON to a log file in `dist/logs/`
+2. The script automatically generates an HTML report from that JSON
+3. The HTML report is saved to `dist/reports/` with a timestamp
+4. On macOS/Linux, the report auto-opens in the default browser
+
+**Example:**
+```bash
+# This generates BOTH JSON log AND HTML report
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
+
+# Output locations:
+# - JSON: dist/logs/2025-12-31-035126-UTC.json
+# - HTML: dist/reports/2025-12-31-035126-UTC.html
+```
+
+### Finding Generated Reports
+
+After running a scan, check these directories:
+- **JSON logs**: `dist/logs/` (timestamped `.json` files)
+- **HTML reports**: `dist/reports/` (timestamped `.html` files)
+
+The most recent file in each directory is the latest scan result.
+
+---
+
 ## Running Scans on External Paths (Critical for AI Agents)
 
 ### The Problem
@@ -419,4 +458,71 @@ cat /path/to/wp-code-check/dist/TEMPLATES/my-plugin.txt
 **Key Takeaway for AI Agents:**
 
 When running WP Code Check on external paths, **always use absolute paths** to the WP Code Check installation and **verify permissions** before executing scripts. Don't assume the current working directory contains WP Code Check.
+
+---
+
+## Troubleshooting: What Happened on 2025-12-31
+
+### The Issue
+
+When running `run universal-child-theme-oct-2024 --format html`, the script appeared to hang with no output. This was confusing because:
+
+1. The command seemed to run but produced no visible output
+2. No HTML file appeared in the expected location
+3. The process appeared to complete but silently
+
+### Root Cause
+
+**The `--format html` option does not exist.** The script only supports:
+- `--format text` (default, console output)
+- `--format json` (JSON output + auto-generated HTML)
+
+When an invalid format is passed, the script validation should catch it, but the error handling wasn't immediately visible in the terminal.
+
+### The Solution
+
+**Always use `--format json` to generate HTML reports:**
+
+```bash
+# ✅ CORRECT - Generates HTML report
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
+
+# ❌ WRONG - No such format exists
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format html
+```
+
+### How to Find the Generated Report
+
+After running with `--format json`:
+
+1. Check the `dist/reports/` directory
+2. Look for the most recent `.html` file (sorted by timestamp)
+3. Open it in a browser
+
+**Example workflow:**
+```bash
+# Run the scan
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
+
+# Find the latest report
+ls -lh /path/to/wp-code-check/dist/reports/ | tail -1
+
+# Open it (macOS)
+open /path/to/wp-code-check/dist/reports/2025-12-31-035126-UTC.html
+```
+
+### For Future AI Agents
+
+When a user asks to "run a template and output to HTML":
+
+1. **Use `--format json`** (not `--format html`)
+2. **Wait for the scan to complete** (large themes/plugins may take 1-2 minutes)
+3. **Check `dist/reports/`** for the generated HTML file
+4. **Open the latest `.html` file** in the browser
+
+The script will automatically:
+- Generate JSON output
+- Create an HTML report from the JSON
+- Save both to timestamped files
+- Auto-open the HTML in the browser (on macOS/Linux)
 
