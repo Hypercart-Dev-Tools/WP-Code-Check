@@ -9,9 +9,9 @@
 
 Currently: All teams get the same severity levels. No customization = noise.
 
-## The MVP Approach: Shipped Config + Local Override
+## The MVP Approach: Single Config File with Explicit Override
 
-**Core Concept**: Ship a `/dist/config/severity-levels.json` with the project. Users copy it locally, customize it, and push to CI/CD. Factory defaults live in the file as an escape hatch.
+**Core Concept**: Ship a `/dist/config/severity-levels.json` with factory defaults. Users pass `--severity-config <path>` to override. No auto-discovery, no multiple locations. Simple and explicit.
 
 ### Current State (Before MVP)
 
@@ -79,76 +79,78 @@ text_echo "${BLUE}▸ N+1 patterns ${YELLOW}[MEDIUM]${NC}"
 **Phase 2: How Users Customize**
 
 ```bash
-# Step 1: Copy shipped config to project root or ~/.wp-code-check.json
-cp ./dist/config/severity-levels.json ./.wp-code-check-severity.json
+# Step 1: Copy shipped config to your project
+cp ./dist/config/severity-levels.json ./my-severity-config.json
 
-# Step 2: Edit locally (change "level" field only)
+# Step 2: Edit the copy (change "level" field only)
 # Change deprecated-function from MEDIUM to LOW:
 # "deprecated-function": {
 #   "level": "LOW",           <- Edit this
 #   "factory_default": "MEDIUM" <- Leave this for reference
 
-# Step 3: Run scanner with custom config
-./dist/bin/check-performance.sh --paths . --severity-config ./.wp-code-check-severity.json
+# Step 3: Run scanner with explicit config path
+./dist/bin/check-performance.sh --paths . --severity-config ./my-severity-config.json
 
-# Step 4: If you break it, just check factory_default in the file
-# Or delete the file to use shipped defaults
+# Step 4: If you break it, check factory_default in the file or delete it
+# Without --severity-config, the tool uses /dist/config/severity-levels.json
 ```
 
 **How It Works in the Script:**
 
 ```bash
-# 1. Load shipped defaults
-load_severity_defaults()
+# 1. Load shipped defaults from /dist/config/severity-levels.json
+load_severity_defaults
 
-# 2. Load user config if it exists (overrides shipped)
-if [ -f "$SEVERITY_CONFIG_FILE" ]; then
-  CUSTOM_LEVELS=$(load_custom_severity_config "$SEVERITY_CONFIG_FILE")
+# 2. If --severity-config provided, load and merge overrides
+if [ -n "$SEVERITY_CONFIG_ARG" ]; then
+  load_custom_severity_config "$SEVERITY_CONFIG_ARG"
 fi
 
-# 3. Resolve final severity for display
-get_severity_for_check() {
+# 3. Get severity for any check (custom overrides shipped)
+get_severity() {
   local check_id="$1"
-  # Return custom > shipped
-  echo "${CUSTOM_LEVELS[$check_id]:-${SHIPPED_LEVELS[$check_id]}}"
+  echo "${SEVERITY_CUSTOM[$check_id]:-${SEVERITY_SHIPPED[$check_id]}}"
 }
 ```
 
 **Why This Works:**
-- ✅ Zero complexity (just JSON + array lookup)
-- ✅ Shipped by default (lives in `/dist/config/`)
-- ✅ Self-documenting (factory defaults in same file)
-- ✅ Version controllable (commit to repo for team alignment)
-- ✅ Low risk (users can always reference or delete file to reset)
-- ✅ Multi-location support (project-level, user-level, explicit path)
-- ✅ Integrates seamlessly with existing bash script (jq already used)
+- ✅ **Zero complexity** - Just JSON + array lookup, no auto-discovery logic
+- ✅ **Explicit over implicit** - Users must pass `--severity-config`, no magic file locations
+- ✅ **Self-documenting** - Factory defaults live in the same file as reference
+- ✅ **Version controllable** - Commit custom config to repo for team alignment
+- ✅ **Low risk** - Users can always check `factory_default` or delete custom config
+- ✅ **Simple fallback** - No config arg = use shipped defaults in `/dist/config/`
+- ✅ **Already integrated** - Script already uses `jq` for JSON parsing
 
 ### Data Model (Minimal)
 
 ```bash
-# In the script, after loading config:
-declare -A SEVERITY_OVERRIDES  # Custom severities loaded from file
+# Two associative arrays in the script:
+declare -A SEVERITY_SHIPPED   # Factory defaults from /dist/config/severity-levels.json
+declare -A SEVERITY_CUSTOM    # User overrides from --severity-config (if provided)
 
-# Load shipped defaults into associative array
+# Load shipped defaults from JSON
 load_severity_defaults() {
-  SEVERITY_SHIPPED["wp-ajax-missing-nonce"]="HIGH"
-  SEVERITY_SHIPPED["unbounded-rest-endpoint"]="CRITICAL"
-  SEVERITY_SHIPPED["unbounded-query-get-posts"]="CRITICAL"
-  SEVERITY_SHIPPED["n-plus-one-pattern"]="MEDIUM"
-  SEVERITY_SHIPPED["deprecated-function"]="MEDIUM"
+  local config_file="$SCRIPT_DIR/../config/severity-levels.json"
+  # Parse JSON with jq and populate SEVERITY_SHIPPED array
+  while IFS="=" read -r key value; do
+    SEVERITY_SHIPPED["$key"]="$value"
+  done < <(jq -r '.severity_levels | to_entries[] | "\(.key)=\(.value.level)"' "$config_file")
 }
 
-# Load custom overrides from user config file (if exists)
+# Load custom overrides from user config (only if --severity-config provided)
 load_custom_severity_config() {
   local config_file="$1"
-  # Parse JSON and populate SEVERITY_OVERRIDES array
-  # Use jq or simple grep/sed for portability
+  # Parse JSON with jq and populate SEVERITY_CUSTOM array
+  while IFS="=" read -r key value; do
+    SEVERITY_CUSTOM["$key"]="$value"
+  done < <(jq -r '.severity_levels | to_entries[] | "\(.key)=\(.value.level)"' "$config_file")
 }
 
-# Get final severity (custom > shipped)
+# Get final severity (custom overrides shipped)
 get_severity() {
   local check_id="$1"
-  echo "${SEVERITY_OVERRIDES[$check_id]:-${SEVERITY_SHIPPED[$check_id]}}"
+  echo "${SEVERITY_CUSTOM[$check_id]:-${SEVERITY_SHIPPED[$check_id]}}"
 }
 ```
 
@@ -163,11 +165,11 @@ get_severity() {
 - Parse JSON config file with jq (already used elsewhere in script)
 - Merge user overrides into shipped defaults
 - Update all check output lines to call `get_severity()` instead of hardcoding `[CRITICAL]`
-- Add `--severity-config` CLI option
+- Add `--severity-config <path>` CLI option (explicit path only, no auto-discovery)
 
 **Day 3**: Testing + documentation
-- Test with custom config in different locations (project root, home dir)
-- Verify CLI option works
+- Test with custom config passed via `--severity-config`
+- Test fallback to shipped defaults when no config provided
 - Update README with usage examples
 - Add validation (warn if invalid severity level in config)
 
@@ -179,7 +181,7 @@ WP Code Check v1.0.59
 
 Project: My Plugin v2.1.0 [plugin]
 Scanning paths: .
-Severity config: ./.wp-code-check-severity.json (2 customizations active)
+Severity config: ./my-severity-config.json (2 customizations active)
 
 ━━━ CRITICAL CHECKS (will fail build) ━━━
 
@@ -222,7 +224,7 @@ Warnings: 1 (HIGH checks)
     "project": "My Plugin",
     "type": "plugin",
     "scan_time": "2025-12-31T15:30:45Z",
-    "severity_config": "./.wp-code-check-severity.json",
+    "severity_config": "./my-severity-config.json",
     "severity_customizations": {
       "wp-ajax-missing-nonce": {
         "factory_default": "CRITICAL",
@@ -280,8 +282,8 @@ Warnings: 1 (HIGH checks)
       <td><span class="badge low">LOW</span></td>
     </tr>
   </table>
-  <p><strong>Config file:</strong> ./.wp-code-check-severity.json</p>
-  <button>Restore Factory Defaults</button>
+  <p><strong>Config file:</strong> ./my-severity-config.json</p>
+  <p><em>To restore factory defaults, omit --severity-config or check "factory_default" values in the config file.</em></p>
 </div>
 
 <!-- Each finding shows if severity was customized -->
@@ -305,27 +307,113 @@ Warnings: 1 (HIGH checks)
 
 ### Rules for Users
 
-1. **Where to customize**:
-   - Copy shipped `/dist/config/severity-levels.json` to project root: `./.wp-code-check-severity.json`
-   - Or place in home directory: `~/.wp-code-check-severity.json`
-   - Pass explicit path: `./dist/bin/check-performance.sh --paths . --severity-config ./custom-levels.json`
+1. **How to customize**:
+   - Copy shipped `/dist/config/severity-levels.json` to your project
+   - Edit the copy (change `"level"` field, leave `"factory_default"` for reference)
+   - Pass explicit path: `./dist/bin/check-performance.sh --paths . --severity-config ./my-config.json`
 
 2. **Restore to factory defaults**:
-   - Check `"factory_default"` in the file to see what the original was
-   - Delete your local copy to revert to shipped defaults
+   - Check `"factory_default"` in your config file to see the original value
+   - Delete your custom config and omit `--severity-config` to use shipped defaults
    - Or manually change `"level"` back to match `"factory_default"`
 
-3. **Version control** (optional):
-   - Commit `.wp-code-check-severity.json` to repo for team alignment
-   - All developers on team get same severity customizations
-   - CI/CD automatically uses the project's custom config
+3. **Version control** (recommended):
+   - Commit your custom config to repo for team alignment
+   - All developers use: `--severity-config ./team-severity.json`
+   - CI/CD uses the same config for consistent builds
 
-### Config File Locations (Priority Order)
+### Config File Locations (Simplified)
 
-1. `--severity-config <path>` (explicit argument, highest priority)
-2. `./.wp-code-check-severity.json` (project root)
-3. `~/.wp-code-check-severity.json` (user home)
-4. Shipped defaults in `/dist/config/severity-levels.json` (fallback)
+1. **`--severity-config <path>`** - Explicit path to custom config (user provides)
+2. **`/dist/config/severity-levels.json`** - Factory defaults (always used as fallback)
+
+**No auto-discovery.** No searching project root or home directory. Explicit is better than implicit.
+
+---
+
+## 🎯 Complexity Reductions (v1.1 Simplification)
+
+### ❌ **REMOVED: Multi-Location Config Discovery**
+
+**Before (v1.0):**
+```bash
+# Script searched 4 locations in priority order:
+1. --severity-config <path>
+2. ./.wp-code-check-severity.json (project root)
+3. ~/.wp-code-check-severity.json (user home)
+4. /dist/config/severity-levels.json (fallback)
+```
+
+**After (v1.1 - Simplified):**
+```bash
+# Script only uses 2 locations:
+1. --severity-config <path> (explicit, user must provide)
+2. /dist/config/severity-levels.json (fallback)
+```
+
+**Why?**
+- ✅ **Eliminates file discovery logic** - No need to check if files exist in multiple locations
+- ✅ **Explicit over implicit** - Users know exactly which config is being used
+- ✅ **Reduces debugging complexity** - No "which config file is active?" confusion
+- ✅ **Factory defaults always visible** - Shipped config in `/dist/config/` is the source of truth
+- ✅ **Simpler testing** - Only 2 code paths instead of 4
+
+### ✅ **KEPT: Factory Defaults in Custom Config**
+
+Users still copy `/dist/config/severity-levels.json` and edit it. The `"factory_default"` field remains in the file as a reference, so users can always see what the original value was.
+
+### 📝 **User Workflow (Simplified)**
+
+```bash
+# 1. Copy factory config
+cp ./dist/config/severity-levels.json ./my-team-config.json
+
+# 2. Edit the copy
+vim ./my-team-config.json  # Change "level" fields
+
+# 3. Use it explicitly
+./dist/bin/check-performance.sh --paths . --severity-config ./my-team-config.json
+
+# 4. Commit to repo for team alignment
+git add my-team-config.json
+git commit -m "Add team severity customizations"
+```
+
+**No magic. No auto-discovery. Just explicit paths.**
+
+---
+
+### ✅ **KEPT: Simple JSON Structure**
+
+The JSON config structure remains minimal and self-documenting:
+
+```json
+{
+  "_metadata": { "version": "1.0.59", ... },
+  "severity_levels": {
+    "rule-id": {
+      "id": "rule-id",
+      "level": "HIGH",              // ← User edits this
+      "factory_default": "CRITICAL", // ← Reference (don't edit)
+      "category": "security",
+      "description": "..."
+    }
+  }
+}
+```
+
+**Why this structure?**
+- ✅ **Self-documenting** - Factory defaults visible in same file
+- ✅ **Easy to edit** - Just change `"level"` field
+- ✅ **Easy to parse** - Simple `jq` queries
+- ✅ **Version controllable** - JSON diffs are readable
+- ✅ **No nested complexity** - Flat structure, no inheritance or overrides
+
+**What we're NOT doing:**
+- ❌ No YAML (adds dependency, more complex parsing)
+- ❌ No INI files (harder to parse in bash)
+- ❌ No environment variables (not version controllable)
+- ❌ No database storage (overkill for simple config)
 
 ### Implementation Checklist
 
@@ -336,15 +424,14 @@ Warnings: 1 (HIGH checks)
 - [ ] Document each check with category (security, performance, maintenance)
 
 **Phase 2 Work:**
-- [ ] Add `load_severity_defaults()` function to setup shipped levels
-- [ ] Add `load_custom_severity_config()` to parse JSON file (use jq)
-- [ ] Add `get_severity(rule_id)` lookup function
-- [ ] Track which checks are customized (array of rule_ids with custom levels)
+- [ ] Add `load_severity_defaults()` function to load `/dist/config/severity-levels.json`
+- [ ] Add `load_custom_severity_config()` to parse user config (use jq)
+- [ ] Add `get_severity(rule_id)` lookup function (custom overrides shipped)
+- [ ] Track which checks are customized (compare custom vs shipped arrays)
 - [ ] Update all check output lines to use `get_severity()` instead of hardcoded levels
 - [ ] Show customization notice in text report header (e.g., "2 customizations active")
 - [ ] Add inline notes for customized findings (e.g., "CRITICAL → HIGH")
-- [ ] Add `--severity-config <path>` CLI option
-- [ ] Support config file discovery (project root, home dir)
+- [ ] Add `--severity-config <path>` CLI option (explicit path only, no auto-discovery)
 
 **Phase 3 Work:**
 - [ ] Unit tests: verify config loading, merging, priority order
