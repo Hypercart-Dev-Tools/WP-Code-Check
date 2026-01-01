@@ -26,16 +26,30 @@ irl/
 
 **Always add `-irl` suffix before the file extension:**
 
-- ✅ `class-wcs-att-admin-irl.php`
-- ✅ `checkout-irl.js`
+- ✅ `class-wcs-att-admin-irl.php` - Audited and documented
+- ✅ `checkout-irl.js` - Audited and documented
+- ✅ `payment-gateway-inbox.php` - Needs pattern library integration later
 - ❌ `class-wcs-att-admin.php` (missing -irl suffix)
 - ❌ `class-wcs-att-admin.php.md` (confusing extension)
+
+**Suffix Meanings:**
+
+| Suffix | Meaning | Use Case |
+|--------|---------|----------|
+| `-irl.php` | Audited IRL example | Fully documented, pattern library updated |
+| `-inbox.php` | Inbox (needs processing) | Example saved for later pattern library integration |
 
 **Why `-irl` suffix?**
 - Still syntax-highlighted in editors
 - Clear it's an IRL example (not production code)
 - Can still run through linters/scanners
 - Easy to find: `find . -name "*-irl.php"`
+
+**Why `-inbox` suffix?**
+- Quick capture of examples when you don't have time to audit
+- Reminder to process later (add annotations, update pattern library)
+- Still scannable by the tool
+- Easy to find pending work: `find . -name "*-inbox.php"`
 
 ## How to Add IRL Examples
 
@@ -58,6 +72,25 @@ AI will:
 2. Audit the code and add inline annotations
 3. Update the pattern JSON file with the example
 4. Suggest scanner improvements if needed
+
+### Quick Capture (Inbox)
+
+Don't have time to audit right now? Use the `-inbox` suffix:
+
+1. **Copy file** to `dist/tests/irl/plugin-name/filename-inbox.php`
+2. **Process later** by saying: "Process inbox files"
+
+AI will batch-process all `-inbox` files, add annotations, and rename to `-irl`.
+
+### Your Own Code
+
+You can also analyze code from **your own projects**:
+
+1. **Copy your PHP/JS file** to `dist/tests/irl/my-project/`
+2. **Use `-irl` or `-inbox` suffix** depending on urgency
+3. **Ask AI to audit**: "Analyze this code I'm working on"
+
+AI will treat it like any other IRL example and help you find issues.
 
 ## Annotation Format
 

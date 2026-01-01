@@ -9,6 +9,10 @@ User says one of:
 - "Audit the IRL file I just added"
 - "I found issues in plugin X, can you audit it?"
 - "Add this file to IRL examples"
+- "Copy this file from my project to IRL folder"
+- "Analyze this code I'm working on"
+
+**Note:** Users may copy PHP/JS files from their own projects into the IRL folder for AI analysis. Treat these as IRL examples and follow the same audit process.
 
 ## Step-by-Step Audit Process
 
@@ -16,12 +20,25 @@ User says one of:
 
 Check that file is in correct location:
 ```
-dist/tests/irl/plugin-name/filename-irl.php
+dist/tests/irl/plugin-name/filename-irl.php    # Fully audited
+dist/tests/irl/plugin-name/filename-inbox.php  # Needs processing later
 ```
 
-If not, ask user to:
+**Filename Suffix Guide:**
+- `-irl.php` = Fully audited with annotations and pattern library updated
+- `-inbox.php` = Quick capture for later processing (no annotations yet)
+
+If not in correct location, ask user to:
 1. Create folder: `dist/tests/irl/plugin-name/`
-2. Copy file with `-irl` suffix: `filename.php` → `filename-irl.php`
+2. Copy file with appropriate suffix:
+   - Use `-irl.php` if you'll audit it now
+   - Use `-inbox.php` if saving for later
+
+**When to use `-inbox` suffix:**
+- User is in a hurry and just wants to save the example
+- User says "I'll audit this later" or "just save this for now"
+- Multiple files being added at once (can't audit all immediately)
+- User wants to batch-process examples later
 
 ### Step 2: Identify Plugin/Theme Metadata
 
@@ -171,9 +188,32 @@ NEXT STEPS:
 - ❌ Add annotations for non-issues
 - ❌ Duplicate annotations
 
+## Processing Inbox Files
+
+When user says "process inbox files" or "audit pending examples":
+
+1. **Find all inbox files:**
+   ```bash
+   find dist/tests/irl -name "*-inbox.php"
+   ```
+
+2. **For each file:**
+   - Run full audit process (Steps 1-7)
+   - Add annotations
+   - Update pattern library
+   - Rename: `filename-inbox.php` → `filename-irl.php`
+
+3. **Report to user:**
+   - Number of files processed
+   - Patterns found
+   - New patterns discovered
+   - Files that need manual review
+
 ## Example Output
 
-See `dist/tests/irl/woocommerce-all-products-for-subscriptions/class-wcs-att-admin-irl.php` for a complete example.
+See these complete examples:
+- `dist/tests/irl/woocommerce-all-products-for-subscriptions/class-wcs-att-admin-irl.php`
+- `dist/tests/irl/kiss-woo-coupon-debugger/AdminUI-irl.php`
 
 ## Troubleshooting
 

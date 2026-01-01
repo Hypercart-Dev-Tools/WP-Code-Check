@@ -11,10 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **IRL (In Real Life) Examples System** - Real-world code examples from production plugins/themes
   - **Purpose:** Validate patterns exist in production, discover new anti-patterns, document real vulnerabilities
   - **Structure:** `dist/tests/irl/plugin-name/filename-irl.php` with inline audit annotations
-  - **Filename Convention:** Add `-irl` suffix before extension (e.g., `class-name-irl.php`)
+  - **Filename Conventions:**
+    - `-irl.php` = Fully audited with annotations and pattern library updated
+    - `-inbox.php` = Quick capture for later processing (no annotations yet)
   - **Annotation Format:** File header summary + inline comments at each anti-pattern
-  - **First Example:** WooCommerce All Products for Subscriptions v6.0.6 - `class-wcs-att-admin-irl.php`
+  - **Examples Added:**
+    - WooCommerce All Products for Subscriptions v6.0.6 - `class-wcs-att-admin-irl.php` (1 violation)
+    - KISS Woo Coupon Debugger v2.1.0 - `AdminUI-irl.php` (2 violations)
+  - **User-Submitted Code:** Users can copy PHP/JS files from their own projects for AI analysis
   - **Documentation:** `dist/tests/irl/README.md` and `dist/tests/irl/_AI_AUDIT_INSTRUCTIONS.md`
+
+- **Baseline Files Generated** - Suppress known issues for ongoing monitoring
+  - KISS Debugger: 22 findings baselined
+  - WooCommerce All Products for Subscriptions: 73 findings baselined
+  - Purpose: Track new issues without noise from existing known issues
 
 - **Pattern Library Separation (Integrated!)** - First pattern now loads from JSON
   - **Pattern Definitions:** JSON files in `dist/patterns/` directory
@@ -27,13 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Status:** ✅ Integrated - one pattern using JSON, remaining 32 patterns still hardcoded
 
 ### Changed
-- **Pattern JSON:** Updated `unsanitized-superglobal-isset-bypass.json` with IRL example reference
-  - Added WooCommerce All Products for Subscriptions example (line 58/451)
-  - Includes plugin name, version, context, and original line number
+- **Pattern JSON:** Updated `unsanitized-superglobal-isset-bypass.json` with 3 IRL examples
+  - WooCommerce All Products for Subscriptions: Line 451 (isset bypass in admin scripts)
+  - KISS Debugger: Line 434 (boolean cast without sanitization)
+  - KISS Debugger: Line 472 (string comparison without sanitization)
+  - Each includes: plugin name, version, context, original line number
 - **Gitignore:** Added rules for IRL folder
   - Keeps: `dist/tests/irl/`, `README.md`, `_AI_AUDIT_INSTRUCTIONS.md`, `.gitkeep`
   - Ignores: All user-created IRL example files (may contain proprietary code)
   - Rationale: Users can collect real-world examples without committing them to public repo
+
+### Fixed
+- **Version Number:** Updated SCRIPT_VERSION to 1.0.68 (was showing 1.0.66)
+- **Bash Error:** Removed `local` keyword outside function (line 434) - was causing error on script start
 
 ## [1.0.67] - 2026-01-01
 

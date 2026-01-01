@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.66"
+SCRIPT_VERSION="1.0.68"
 
 # Defaults
 PATHS="."
@@ -431,7 +431,7 @@ if [ "$ENABLE_LOGGING" = true ]; then
           echo "Version:          $PROJECT_VERSION_LOG"
         fi
         # Map project type to display label
-        local type_display_log="$PROJECT_TYPE_LOG"
+        type_display_log="$PROJECT_TYPE_LOG"
         case "$PROJECT_TYPE_LOG" in
           plugin) type_display_log="WordPress Plugin" ;;
           theme) type_display_log="WordPress Theme" ;;
