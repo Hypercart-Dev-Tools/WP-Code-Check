@@ -137,13 +137,14 @@ These patterns **will crash your site** under production load:
 
 ### ⚠️ High Priority Warnings
 
-These patterns **create security vulnerabilities** and should be fixed immediately:
+These patterns **create security vulnerabilities or severe performance issues** and should be fixed immediately:
 
 | Pattern | Why It Matters | Impact |
 |---------|---------------|--------|
 | **Unsanitized `$_GET`/`$_POST`** read | XSS and parameter tampering | Attacker can inject malicious scripts or manipulate application logic |
 | **Direct superglobal manipulation** | Bypasses WordPress security | Modifying `$_GET`/`$_POST` directly breaks sanitization |
 | **Admin functions without capability checks** | Privilege escalation vulnerability | Subscribers can access admin functions, modify settings, or delete data |
+| **WooCommerce N+1 patterns** | Query multiplication in WC loops | 100 orders × 3 meta queries = 300 queries → 5-10 second page loads |
 
 ### ⚠️ Medium Priority Warnings
 

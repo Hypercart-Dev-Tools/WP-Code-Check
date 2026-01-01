@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.64
+# Version: 1.0.66
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -48,7 +48,7 @@ source "$LIB_DIR/common-helpers.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.64"
+SCRIPT_VERSION="1.0.66"
 
 # Defaults
 PATHS="."
@@ -2620,6 +2620,94 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 	  text_echo "${GREEN}  ✓ No obvious N+1 patterns${NC}"
 	  add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "passed" 0
 	fi
+text_echo ""
+
+# WooCommerce N+1 pattern check - WC-specific functions in loops
+WC_N1_SEVERITY=$(get_severity "wc-n-plus-one-pattern" "HIGH")
+WC_N1_COLOR="${YELLOW}"
+if [ "$WC_N1_SEVERITY" = "CRITICAL" ] || [ "$WC_N1_SEVERITY" = "HIGH" ]; then WC_N1_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ WooCommerce N+1 patterns (WC functions in loops) ${WC_N1_COLOR}[$WC_N1_SEVERITY]${NC}"
+WC_N1_FAILED=false
+WC_N1_FINDING_COUNT=0
+WC_N1_VISIBLE=""
+
+# Find files with WC-specific N+1 patterns
+# Strategy: Find foreach/while loops, then check if loop body contains WC N+1 patterns
+WC_N1_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "foreach[[:space:]]*\\(|while[[:space:]]*\\(" $PATHS 2>/dev/null | \
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    # Check if this is a WC-related loop by looking at context (previous 5 lines + current line)
+    context_start=$((lineno - 5))
+    if [ $context_start -lt 1 ]; then context_start=1; fi
+    pre_context=$(sed -n "${context_start},${lineno}p" "$file" 2>/dev/null || true)
+
+    # Skip if not a WC-related loop (orders, products, etc.)
+    if ! echo "$pre_context" | grep -qE "wc_get_orders|wc_get_products|shop_order|product|order_id|product_id|\\\$orders|\\\$products"; then
+      continue
+    fi
+
+    # Check if the loop body (next 20 lines) contains WC N+1 patterns
+    start_line=$lineno
+    end_line=$((lineno + 20))
+    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
+
+    # Look for N+1 patterns in the loop body
+    if echo "$context" | grep -qE "wc_get_order[[:space:]]*\\(|wc_get_product[[:space:]]*\\(|get_post_meta[[:space:]]*\\(|get_user_meta[[:space:]]*\\(|->get_meta[[:space:]]*\\("; then
+      echo "$match"
+    fi
+  done || true)
+
+if [ -n "$WC_N1_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    if should_suppress_finding "wc-n-plus-one-pattern" "$file"; then
+      continue
+    fi
+
+    WC_N1_FAILED=true
+    ((WC_N1_FINDING_COUNT++))
+    add_json_finding "wc-n-plus-one-pattern" "warning" "$WC_N1_SEVERITY" "$file" "$lineno" "WooCommerce N+1 pattern: WC function calls in loop over orders/products" "$code"
+
+    if [ -z "$WC_N1_VISIBLE" ]; then
+      WC_N1_VISIBLE="$match"
+    else
+      WC_N1_VISIBLE="${WC_N1_VISIBLE}
+$match"
+    fi
+  done <<< "$WC_N1_MATCHES"
+fi
+
+if [ "$WC_N1_FAILED" = true ]; then
+  if [ "$WC_N1_SEVERITY" = "CRITICAL" ] || [ "$WC_N1_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$WC_N1_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$WC_N1_VISIBLE" | head -5)"
+  fi
+  add_json_check "WooCommerce N+1 patterns (WC functions in loops)" "$WC_N1_SEVERITY" "failed" "$WC_N1_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "WooCommerce N+1 patterns (WC functions in loops)" "$WC_N1_SEVERITY" "passed" 0
+fi
 text_echo ""
 
 # Transient abuse check - transients without expiration

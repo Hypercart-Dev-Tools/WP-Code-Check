@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.66] - 2026-01-01
+
+### Added
+- **Enhancement #10: WooCommerce N+1 Query Patterns** - Detects WC-specific N+1 performance issues
+  - **Rule ID:** `wc-n-plus-one-pattern`
+  - **Severity:** HIGH (customizable via severity config)
+  - **Category:** performance
+  - **Rationale:** WooCommerce functions called inside loops cause query multiplication (100 orders × 3 meta queries = 300 queries per page)
+  - **Detection:** Finds `wc_get_order()`, `wc_get_product()`, `get_post_meta()`, `get_user_meta()`, `->get_meta()` called inside loops over WC orders/products
+  - **Test Fixture:** Added `dist/tests/fixtures/wc-n-plus-one.php` with examples of violations and valid code (pre-fetching, caching)
+
+### Changed
+- **Check Count:** Increased from 32 to 33 checks (+1 new WooCommerce-specific check)
+- **Documentation:** Updated README files to reflect new check and count
+- **Severity Config:** Updated `severity-levels.json` to include new rule ID
+
 ## [1.0.65] - 2026-01-01
 
 ### Added

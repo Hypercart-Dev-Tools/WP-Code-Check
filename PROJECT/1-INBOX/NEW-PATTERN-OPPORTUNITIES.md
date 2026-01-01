@@ -241,25 +241,24 @@ $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->posts} WHERE ID = %d", $_GET[
 
 ---
 
-### 10. **Enhance: N+1 Pattern Detection** — STATUS: NOT STARTED
+### 10. **Enhance: N+1 Pattern Detection** — STATUS: ✅ COMPLETE (v1.0.66)
 
-**Current Check:** `n-plus-one-pattern` (MEDIUM → CRITICAL)
-**Current Pattern:** Detects `get_post_meta` in loops
-**Enhancement:** Also detect `wc_get_product()` in loops (WooCommerce-specific)
+**Current Check:** `n-plus-one-pattern` (MEDIUM) - General N+1 detection
+**New Check:** `wc-n-plus-one-pattern` (HIGH) - WooCommerce-specific N+1 detection
+**Enhancement:** Created dedicated WooCommerce N+1 check that detects WC functions in loops
 
-**Before:**
+**Implementation:**
 ```bash
-# Only detects meta functions
-grep "get_post_meta\|get_user_meta\|get_term_meta"
+# New dedicated check: wc-n-plus-one-pattern
+# Detects loops over WC orders/products, then checks loop body for:
+# - wc_get_order()
+# - wc_get_product()
+# - get_post_meta()
+# - get_user_meta()
+# - ->get_meta()
 ```
 
-**After:**
-```bash
-# Add WooCommerce product instantiation
-grep "get_post_meta\|get_user_meta\|get_term_meta\|wc_get_product\|new WC_Product"
-```
-
-**Impact:** Would catch WooCommerce-specific N+1 patterns
+**Impact:** ✅ Successfully catches WooCommerce-specific N+1 patterns (7 violations detected in test fixture)
 
 ---
 
@@ -290,12 +289,12 @@ grep "get_post_meta\|get_user_meta\|get_term_meta\|wc_get_product\|new WC_Produc
 
 **Deliverable:** 4 new/enhanced checks, +CRITICAL security coverage
 
-### Phase 2: WooCommerce-Specific (2-3 hours)
-- ✅ Pattern #5: WCS queries without limits
-- ✅ Enhancement #10: WooCommerce N+1 patterns
-- ✅ Pattern #2: Admin capability checks
+### Phase 2: WooCommerce-Specific (2-3 hours) — ✅ COMPLETE (v1.0.66)
+- ✅ Pattern #5: WCS queries without limits (v1.0.65)
+- ✅ Enhancement #10: WooCommerce N+1 patterns (v1.0.66)
+- ✅ Pattern #2: Admin capability checks (v1.0.65)
 
-**Deliverable:** 3 new checks, better WooCommerce coverage
+**Deliverable:** ✅ COMPLETE - 3 new checks, better WooCommerce coverage
 
 ### Phase 3: Code Quality (3-4 hours)
 - ✅ Pattern #3: Complex conditionals
