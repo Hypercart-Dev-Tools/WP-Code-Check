@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.69] - 2026-01-01
+
+### Added
+- **Pattern Library JSON Files** - Created 3 new pattern definition files
+  - `dist/patterns/unsanitized-superglobal-read.json` - Direct superglobal access without sanitization (HIGH severity)
+  - `dist/patterns/wpdb-query-no-prepare.json` - Database queries without prepare() (CRITICAL severity)
+  - `dist/patterns/get-users-no-limit.json` - Unbounded user queries (CRITICAL severity)
+  - **Purpose:** Separate pattern definitions from scanner logic for modularity and community contributions
+  - **Schema:** Each includes detection logic, test fixtures, IRL examples, remediation guidance, references
+  - **IRL Examples:** All 3 patterns include real-world examples from WP Activity Log v5.5.4
+  - **Total Patterns:** 4 JSON files (including existing `unsanitized-superglobal-isset-bypass.json`)
+
+- **WP Activity Log IRL Examples** - 3 annotated files from production security plugin
+  - `dist/tests/irl/wp-security-audit-log/class-select2-wpws-irl.php` (530 lines)
+    - 2 unbounded get_users() violations (lines 230, 444)
+    - AJAX user search without limits - can crash sites with 10k+ users
+  - `dist/tests/irl/wp-security-audit-log/class-wp-security-audit-log-irl.php` (1,517 lines)
+    - 1 unsanitized superglobal read (line 1261)
+    - Type juggling vulnerability in plugin visibility control
+  - `dist/tests/irl/wp-security-audit-log/class-migration-irl.php` (1,527 lines)
+    - 1 direct database query without prepare() (line 226)
+    - SQL injection risk in migration function
+  - **Total:** 3,574 lines of annotated production code
+  - **Detection Rate:** 100% - Scanner found all 3 documented violations plus 57 additional issues
+  - **Summary Document:** `PROJECT/WP-SECURITY-AUDIT-LOG-IRL-SUMMARY.md`
+
+### Changed
+- **Pattern JSON Files:** Now 4 total pattern definitions (was 1)
+  - Existing: `unsanitized-superglobal-isset-bypass.json` (isset-bypass variant)
+  - New: `unsanitized-superglobal-read.json` (direct read variant)
+  - New: `wpdb-query-no-prepare.json` (SQL injection)
+  - New: `get-users-no-limit.json` (performance)
+  - **Note:** These are distinct patterns, not duplicates
+
+### Documentation
+- **Pattern JSON Schema:** Each file includes:
+  - Pattern ID, version, severity, category
+  - Detection logic (grep patterns, exclusions, post-processing)
+  - Test fixture path and expected violation counts
+  - IRL examples with file, line, plugin, code, context, risk assessment
+  - Remediation examples (bad vs good code)
+  - References to WordPress documentation
+  - Performance impact analysis (for performance patterns)
+  - False positive guidance
+
 ## [1.0.68] - 2026-01-01
 
 ### Added
