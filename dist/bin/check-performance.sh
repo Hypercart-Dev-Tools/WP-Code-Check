@@ -1687,7 +1687,7 @@ group_count=0
 group_first_code=""
 group_threshold=10
 
-ADMIN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "function[[:space:]]+[a-zA-Z0-9_]*admin[a-zA-Z0-9_]*[[:space:]]*\\(|add_action[[:space:]]*\\([^)]*admin" $PATHS 2>/dev/null || true)
+ADMIN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "function[[:space:]]+[a-zA-Z0-9_]*admin[a-zA-Z0-9_]*[[:space:]]*\\(|add_action[[:space:]]*\\([^)]*admin|add_menu_page[[:space:]]*\\(|add_submenu_page[[:space:]]*\\(|add_options_page[[:space:]]*\\(|add_management_page[[:space:]]*\\(" $PATHS 2>/dev/null || true)
 if [ -n "$ADMIN_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -2008,6 +2008,71 @@ run_check "ERROR" "$(get_severity "nopaging-true" "CRITICAL")" "nopaging => true
 
 run_check "ERROR" "$(get_severity "unbounded-wc-get-orders" "CRITICAL")" "Unbounded wc_get_orders limit" "unbounded-wc-get-orders" \
   "-e 'limit'[[:space:]]*=>[[:space:]]*-1"
+
+# WooCommerce Subscriptions queries without limits
+text_echo ""
+WCS_SEVERITY=$(get_severity "wcs-get-subscriptions-no-limit" "MEDIUM")
+WCS_COLOR="${YELLOW}"
+if [ "$WCS_SEVERITY" = "CRITICAL" ] || [ "$WCS_SEVERITY" = "HIGH" ]; then WCS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ WooCommerce Subscriptions queries without limits ${WCS_COLOR}[$WCS_SEVERITY]${NC}"
+WCS_FAILED=false
+WCS_FINDING_COUNT=0
+WCS_VISIBLE=""
+
+# Find wcs_get_subscriptions* functions called without 'limit' parameter
+WCS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "wcs_get_subscriptions[a-zA-Z_]*[[:space:]]*\\(" $PATHS 2>/dev/null | \
+  grep -v "'limit'" | \
+  grep -v '"limit"' | \
+  grep -v '//.*wcs_get_subscriptions' || true)
+
+if [ -n "$WCS_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    if should_suppress_finding "wcs-get-subscriptions-no-limit" "$file"; then
+      continue
+    fi
+
+    WCS_FAILED=true
+    ((WCS_FINDING_COUNT++))
+    add_json_finding "wcs-get-subscriptions-no-limit" "warning" "$WCS_SEVERITY" "$file" "$lineno" "WooCommerce Subscriptions query without limit parameter" "$code"
+
+    if [ -z "$WCS_VISIBLE" ]; then
+      WCS_VISIBLE="$match"
+    else
+      WCS_VISIBLE="${WCS_VISIBLE}
+$match"
+    fi
+  done <<< "$WCS_MATCHES"
+fi
+
+if [ "$WCS_FAILED" = true ]; then
+  if [ "$WCS_SEVERITY" = "CRITICAL" ] || [ "$WCS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$WCS_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$WCS_VISIBLE" | head -5)"
+  fi
+  add_json_check "WooCommerce Subscriptions queries without limits" "$WCS_SEVERITY" "failed" "$WCS_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "WooCommerce Subscriptions queries without limits" "$WCS_SEVERITY" "passed" 0
+fi
+text_echo ""
 
 # get_users check - unbounded user queries (can crash sites with many users)
 USERS_SEVERITY=$(get_severity "get-users-no-limit" "CRITICAL")

@@ -143,6 +143,7 @@ These patterns **create security vulnerabilities** and should be fixed immediate
 |---------|---------------|--------|
 | **Unsanitized `$_GET`/`$_POST`** read | XSS and parameter tampering | Attacker can inject malicious scripts or manipulate application logic |
 | **Direct superglobal manipulation** | Bypasses WordPress security | Modifying `$_GET`/`$_POST` directly breaks sanitization |
+| **Admin functions without capability checks** | Privilege escalation vulnerability | Subscribers can access admin functions, modify settings, or delete data |
 
 ### ⚠️ Medium Priority Warnings
 
@@ -156,6 +157,7 @@ These patterns **degrade performance** and should be fixed:
 | **`current_time('timestamp')`** | Deprecated, timezone issues | Use `current_datetime()` instead |
 | **HTTP requests** without timeout | External API hangs → site hangs | 5-30 second page loads if API is slow |
 | **PHP short tags** (`<?=` or `<? `) | Not guaranteed to work on all servers | Code fails to parse if `short_open_tag` is disabled |
+| **WooCommerce Subscriptions queries without limits** | Performance degradation with large subscription counts | 10,000 subscriptions → memory exhaustion |
 
 ---
 

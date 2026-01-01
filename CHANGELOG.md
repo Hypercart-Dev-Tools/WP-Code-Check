@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.65] - 2026-01-01
+
+### Added
+- **Enhanced Pattern #2: Admin Functions Without Capability Checks** - Expanded detection coverage
+  - **Rule ID:** `admin-no-capability-check`
+  - **Severity:** HIGH (customizable via severity config)
+  - **Enhancement:** Now detects `add_menu_page`, `add_submenu_page`, `add_options_page`, and `add_management_page` callbacks missing capability checks (in addition to existing AJAX handler detection)
+  - **Test Fixture:** Added `dist/tests/fixtures/admin-no-capability.php` with examples of violations and valid code
+
+- **New Pattern #5: WooCommerce Subscriptions Queries Without Limits** - Prevents performance issues
+  - **Rule ID:** `wcs-get-subscriptions-no-limit`
+  - **Severity:** MEDIUM (customizable via severity config)
+  - **Category:** performance
+  - **Rationale:** WooCommerce Subscriptions functions should include 'limit' parameter to prevent performance degradation with large subscription counts
+  - **Detection:** Finds `wcs_get_subscriptions`, `wcs_get_subscriptions_for_order`, `wcs_get_subscriptions_for_product`, `wcs_get_subscriptions_for_user` called without 'limit' parameter
+  - **Test Fixture:** Added `dist/tests/fixtures/wcs-no-limit.php` with examples of violations and valid code
+
+### Changed
+- **Check Count:** Increased from 31 to 32 checks (+1 new check, +1 enhanced check)
+- **Documentation:** Updated README files to reflect new checks and count
+- **Severity Config:** Updated `severity-levels.json` to include new rule ID
+
 ## [1.0.64] - 2026-01-01
 
 ### Added

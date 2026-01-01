@@ -50,10 +50,10 @@ if ( isset( $_GET['tab'] ) && sanitize_key( $_GET['tab'] ) === 'subscriptions' )
 
 ---
 
-### 2. **Missing Capability Checks in Admin Functions** ⭐ HIGH PRIORITY — STATUS: NOT STARTED
+### 2. **Missing Capability Checks in Admin Functions** ⭐ HIGH PRIORITY — STATUS: ✅ ENHANCED (v1.0.65)
 
-**Current Status:** Partially detected  
-**Gap:** Current check looks for AJAX handlers, but misses regular admin functions
+**Current Status:** ✅ COMPLETE
+**Enhancement:** Now detects `add_menu_page`, `add_submenu_page`, `add_options_page`, `add_management_page` in addition to AJAX handlers
 
 **Proposed Pattern:**
 ```bash
@@ -133,10 +133,10 @@ function get_subscription_schemes( $product_id ) {
 
 ---
 
-### 5. **Subscription/Order Queries Without Limits** ⭐ MEDIUM PRIORITY — STATUS: NOT STARTED
+### 5. **Subscription/Order Queries Without Limits** ⭐ MEDIUM PRIORITY — STATUS: ✅ COMPLETE (v1.0.65)
 
-**Current Status:** Partially detected (wc_get_orders covered)  
-**Gap:** WooCommerce Subscriptions-specific functions not covered
+**Current Status:** ✅ COMPLETE
+**Implementation:** WooCommerce Subscriptions functions now detected (`wcs_get_subscriptions*` without 'limit' parameter)
 
 **Proposed Pattern:**
 ```bash
