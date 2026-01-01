@@ -1,9 +1,9 @@
 {
   "_metadata": {
-    "version": "1.0.63",
+    "version": "1.0.66",
     "description": "WP Code Check - Severity Level Customization",
-    "last_updated": "2025-12-31",
-    "total_checks": 29,
+    "last_updated": "2026-01-01",
+    "total_checks": 33,
     "instructions": "Copy this file and edit 'level' fields to customize severity. Leave 'factory_default' unchanged for reference. Use --severity-config <path> to apply customizations. Any field starting with underscore (_comment, _note, _reason, _ticket, etc.) is ignored by the parser and can be used for documentation.",
     "_comment": "Example: This comment field is ignored during parsing. Use it to document your configuration decisions."
   },
@@ -243,6 +243,38 @@
       "factory_default": "MEDIUM",
       "category": "compatibility",
       "description": "PHP short tags (<?= or <? ) are used. WordPress Coding Standards require full <?php tags for server compatibility"
+    },
+    "wpdb-query-no-prepare": {
+      "id": "wpdb-query-no-prepare",
+      "name": "Direct database queries without $wpdb->prepare()",
+      "level": "CRITICAL",
+      "factory_default": "CRITICAL",
+      "category": "security",
+      "description": "$wpdb->query, get_var, get_row, get_results, or get_col called without $wpdb->prepare() - SQL injection risk"
+    },
+    "unsanitized-superglobal-read": {
+      "id": "unsanitized-superglobal-read",
+      "name": "Unsanitized superglobal read ($_GET/$_POST)",
+      "level": "HIGH",
+      "factory_default": "HIGH",
+      "category": "security",
+      "description": "Direct access to $_GET, $_POST, or $_REQUEST without sanitization functions (sanitize_*, esc_*, absint, intval, wc_clean, wp_unslash)"
+    },
+    "wcs-get-subscriptions-no-limit": {
+      "id": "wcs-get-subscriptions-no-limit",
+      "name": "WooCommerce Subscriptions queries without limits",
+      "level": "MEDIUM",
+      "factory_default": "MEDIUM",
+      "category": "performance",
+      "description": "WooCommerce Subscriptions functions (wcs_get_subscriptions, wcs_get_subscriptions_for_order, etc.) called without 'limit' parameter - can cause performance issues with large subscription counts"
+    },
+    "wc-n-plus-one-pattern": {
+      "id": "wc-n-plus-one-pattern",
+      "name": "WooCommerce N+1 patterns (WC functions in loops)",
+      "level": "HIGH",
+      "factory_default": "HIGH",
+      "category": "performance",
+      "description": "WooCommerce functions (wc_get_order, wc_get_product, get_post_meta, get_user_meta, ->get_meta) called inside loops over orders/products - causes query multiplication (100 orders × 3 meta queries = 300 queries)"
     }
   }
 }
