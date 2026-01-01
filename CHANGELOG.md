@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.68] - 2026-01-01
+
+### Added
+- **IRL (In Real Life) Examples System** - Real-world code examples from production plugins/themes
+  - **Purpose:** Validate patterns exist in production, discover new anti-patterns, document real vulnerabilities
+  - **Structure:** `dist/tests/irl/plugin-name/filename-irl.php` with inline audit annotations
+  - **Filename Convention:** Add `-irl` suffix before extension (e.g., `class-name-irl.php`)
+  - **Annotation Format:** File header summary + inline comments at each anti-pattern
+  - **First Example:** WooCommerce All Products for Subscriptions v6.0.6 - `class-wcs-att-admin-irl.php`
+  - **Documentation:** `dist/tests/irl/README.md` and `dist/tests/irl/_AI_AUDIT_INSTRUCTIONS.md`
+
+- **Pattern Library Separation (Integrated!)** - First pattern now loads from JSON
+  - **Pattern Definitions:** JSON files in `dist/patterns/` directory
+  - **Pattern Loader:** `dist/lib/pattern-loader.sh` - Bash library to load patterns from JSON
+  - **First Pattern:** `unsanitized-superglobal-isset-bypass.json` with full metadata
+  - **Schema:** Pattern ID, version, severity, detection logic, test fixtures, IRL examples, remediation
+  - **Integration:** Scanner now loads `unsanitized-superglobal-isset-bypass` pattern from JSON (line 1529-1540)
+  - **Fallback:** If JSON not found, falls back to hardcoded values (graceful degradation)
+  - **Benefits:** Modularity, versioning, easier testing, community contributions
+  - **Status:** ✅ Integrated - one pattern using JSON, remaining 32 patterns still hardcoded
+
+### Changed
+- **Pattern JSON:** Updated `unsanitized-superglobal-isset-bypass.json` with IRL example reference
+  - Added WooCommerce All Products for Subscriptions example (line 58/451)
+  - Includes plugin name, version, context, and original line number
+- **Gitignore:** Added rules for IRL folder
+  - Keeps: `dist/tests/irl/`, `README.md`, `_AI_AUDIT_INSTRUCTIONS.md`, `.gitkeep`
+  - Ignores: All user-created IRL example files (may contain proprietary code)
+  - Rationale: Users can collect real-world examples without committing them to public repo
+
+## [1.0.67] - 2026-01-01
+
+### Fixed
+- **CRITICAL BUG: Path Quoting in Grep Commands** - Fixed all 16 grep commands to properly quote `$PATHS` variable
+  - **Impact:** Scanner was completely broken for any project path containing spaces (e.g., `/Users/name/Local Sites/project/`)
+  - **Root Cause:** Unquoted `$PATHS` variable caused shell to split paths on spaces, breaking grep searches
+  - **Affected Checks:** ALL pattern-based checks (unsanitized superglobals, SQL injection, N+1 queries, etc.)
+  - **Fix:** Added quotes around all `$PATHS` references in grep commands: `$PATHS` → `"$PATHS"`
+  - **Verification:** Tested with WooCommerce All Products for Subscriptions plugin in path with spaces - now correctly detects 7 errors + 1 warning (previously reported 0 issues)
+  - **Files Changed:** `dist/bin/check-performance.sh` (lines 1373, 1541, 1647, 1719, 1798, 1862, 1926, 1987, 2057, 2122, 2188, 2228, 2272, 2627, 2676, 2759)
+  - **Safeguards Added:** Inline comments at each grep command referencing SAFEGUARDS.md to prevent future regressions
+
+### Improved
+- **Enhanced Pattern: Unsanitized Superglobal Read** - Now catches `isset()` bypass pattern
+  - **Pattern:** `isset( $_GET['x'] ) && $_GET['x'] === 'value'` (isset check + direct usage on same line)
+  - **Detection Logic:** Counts superglobal occurrences per line - skips if only 1 occurrence with isset/empty (existence check), reports if 2+ occurrences (isset + usage)
+  - **Example Violations Found:**
+    - `isset( $_GET['tab'] ) && $_GET['tab'] === 'subscriptions'` (line 451, class-wcs-att-admin.php)
+    - `isset( $_GET['switch-subscription'] ) && isset( $_GET['item'] )` (line 86, class-wcs-att-manage-switch.php)
+    - `! empty( $_REQUEST['add-to-cart'] ) && is_numeric( $_REQUEST['add-to-cart'] )` (line 108, class-wcs-att-manage-switch.php)
+  - **Test Fixture:** `dist/tests/fixtures/unsanitized-superglobal-isset-bypass.php` (5 violations, 6 valid examples)
+
+### Added
+- **SAFEGUARDS.md** - Critical implementation safeguards documentation
+  - **Purpose:** Prevent catastrophic regressions by documenting critical implementation details that must not be changed
+  - **Contents:**
+    - Path variable quoting rules (with line numbers for all 16 affected grep commands)
+    - isset() bypass detection logic explanation
+    - Version increment checklist
+    - Critical test cases for verification
+    - Debugging guide for silent failures
+  - **Inline References:** Added safeguard comments at all 16 grep commands pointing to SAFEGUARDS.md
+
 ## [1.0.66] - 2026-01-01
 
 ### Added

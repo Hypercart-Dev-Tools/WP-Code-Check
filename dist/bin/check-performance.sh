@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.66
+# Version: 1.0.68
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -41,6 +41,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$LIB_DIR/colors.sh"
 # shellcheck source=dist/bin/lib/common-helpers.sh
 source "$LIB_DIR/common-helpers.sh"
+# shellcheck source=dist/lib/pattern-loader.sh
+source "$REPO_ROOT/lib/pattern-loader.sh"
 
 # ============================================================
 # VERSION - SINGLE SOURCE OF TRUTH
@@ -1369,7 +1371,8 @@ run_check() {
    local severity="error"
    [ "$level" = "WARNING" ] && severity="warning"
 
-  if result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns $PATHS 2>/dev/null); then
+  # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+  if result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns "$PATHS" 2>/dev/null); then
 	    local visible_result=""
 	    local visible_count=0
 
@@ -1523,28 +1526,64 @@ run_check "ERROR" "$(get_severity "spo-002-superglobals" "HIGH")" "Direct superg
   "-E \\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*="
 
 # Unsanitized superglobal read (reading $_GET/$_POST without sanitization)
+# PATTERN LIBRARY: Load from JSON (v1.0.68 - first pattern to use JSON)
 text_echo ""
-UNSANITIZED_SEVERITY=$(get_severity "unsanitized-superglobal-read" "HIGH")
+PATTERN_FILE="$REPO_ROOT/patterns/unsanitized-superglobal-isset-bypass.json"
+if [ -f "$PATTERN_FILE" ] && load_pattern "$PATTERN_FILE"; then
+  # Use pattern metadata from JSON
+  UNSANITIZED_SEVERITY=$(get_severity "$pattern_id" "$pattern_severity")
+  UNSANITIZED_TITLE="$pattern_title"
+else
+  # Fallback to hardcoded values if JSON not found
+  UNSANITIZED_SEVERITY=$(get_severity "unsanitized-superglobal-read" "HIGH")
+  UNSANITIZED_TITLE="Unsanitized superglobal read (\$_GET/\$_POST)"
+fi
 UNSANITIZED_COLOR="${YELLOW}"
 if [ "$UNSANITIZED_SEVERITY" = "CRITICAL" ] || [ "$UNSANITIZED_SEVERITY" = "HIGH" ]; then UNSANITIZED_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Unsanitized superglobal read (\$_GET/\$_POST) ${UNSANITIZED_COLOR}[$UNSANITIZED_SEVERITY]${NC}"
+text_echo "${BLUE}▸ ${UNSANITIZED_TITLE} ${UNSANITIZED_COLOR}[$UNSANITIZED_SEVERITY]${NC}"
 UNSANITIZED_FAILED=false
 UNSANITIZED_FINDING_COUNT=0
 UNSANITIZED_VISIBLE=""
 
 # Find all $_GET/$_POST/$_REQUEST access that doesn't have sanitization
-# Exclude lines with: sanitize_*, esc_*, absint, intval, wc_clean, wp_unslash, isset, empty, $allowed_keys
-UNSANITIZED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$_(GET|POST|REQUEST)\[' $PATHS 2>/dev/null | \
+# Exclude lines with: sanitize_*, esc_*, absint, intval, wc_clean, wp_unslash, $allowed_keys
+# Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
+# We'll filter those out in a more sophisticated way below
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+UNSANITIZED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$_(GET|POST|REQUEST)\[' "$PATHS" 2>/dev/null | \
   grep -v 'sanitize_' | \
   grep -v 'esc_' | \
   grep -v 'absint' | \
   grep -v 'intval' | \
   grep -v 'wc_clean' | \
   grep -v 'wp_unslash' | \
-  grep -v 'isset' | \
-  grep -v 'empty' | \
   grep -v '\$allowed_keys' | \
   grep -v '//.*\$_' || true)
+
+# Now filter out lines where isset/empty is used ONLY to check existence (not followed by usage)
+# Pattern: isset($_GET['x']) ) { ... } with no further $_GET['x'] on the same line
+# This is a more nuanced filter that allows isset() checks but catches isset() + direct usage
+UNSANITIZED_MATCHES=$(echo "$UNSANITIZED_MATCHES" | while IFS= read -r line; do
+  [ -z "$line" ] && continue
+
+  # Extract the code part (after line number)
+  code=$(echo "$line" | cut -d: -f3-)
+
+  # Count how many times $_GET/$_POST/$_REQUEST appears in this line
+  superglobal_count=$(echo "$code" | grep -o '\$_\(GET\|POST\|REQUEST\)\[' | wc -l | tr -d ' ')
+
+  # If isset/empty is present AND superglobal appears only once, it's likely just a check
+  # Example: if ( isset( $_GET['x'] ) ) { ... }
+  if echo "$code" | grep -q 'isset\|empty'; then
+    if [ "$superglobal_count" -eq 1 ]; then
+      # This is likely just an existence check - skip it
+      continue
+    fi
+  fi
+
+  # Otherwise, output the line (it's a potential violation)
+  echo "$line"
+done || true)
 
 if [ -n "$UNSANITIZED_MATCHES" ]; then
   while IFS= read -r match; do
@@ -1588,10 +1627,10 @@ if [ "$UNSANITIZED_FAILED" = true ]; then
       format_finding "$match"
     done <<< "$(echo "$UNSANITIZED_VISIBLE" | head -5)"
   fi
-  add_json_check "Unsanitized superglobal read (\$_GET/\$_POST)" "$UNSANITIZED_SEVERITY" "failed" "$UNSANITIZED_FINDING_COUNT"
+  add_json_check "$UNSANITIZED_TITLE" "$UNSANITIZED_SEVERITY" "failed" "$UNSANITIZED_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unsanitized superglobal read (\$_GET/\$_POST)" "$UNSANITIZED_SEVERITY" "passed" 0
+  add_json_check "$UNSANITIZED_TITLE" "$UNSANITIZED_SEVERITY" "passed" 0
 fi
 text_echo ""
 
@@ -1616,7 +1655,8 @@ WPDB_VISIBLE=""
 
 # Find all $wpdb->query, $wpdb->get_var, $wpdb->get_row, $wpdb->get_results, $wpdb->get_col
 # that don't have $wpdb->prepare in the same statement
-WPDB_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(query|get_var|get_row|get_results|get_col)[[:space:]]*\(' $PATHS 2>/dev/null | \
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+WPDB_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(query|get_var|get_row|get_results|get_col)[[:space:]]*\(' "$PATHS" 2>/dev/null | \
   grep -v '\$wpdb->prepare' | \
   grep -v '//.*\$wpdb->' || true)
 
@@ -1687,7 +1727,8 @@ group_count=0
 group_first_code=""
 group_threshold=10
 
-ADMIN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "function[[:space:]]+[a-zA-Z0-9_]*admin[a-zA-Z0-9_]*[[:space:]]*\\(|add_action[[:space:]]*\\([^)]*admin|add_menu_page[[:space:]]*\\(|add_submenu_page[[:space:]]*\\(|add_options_page[[:space:]]*\\(|add_management_page[[:space:]]*\\(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+ADMIN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "function[[:space:]]+[a-zA-Z0-9_]*admin[a-zA-Z0-9_]*[[:space:]]*\\(|add_action[[:space:]]*\\([^)]*admin|add_menu_page[[:space:]]*\\(|add_submenu_page[[:space:]]*\\(|add_options_page[[:space:]]*\\(|add_management_page[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
 if [ -n "$ADMIN_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -1765,7 +1806,8 @@ text_echo "${BLUE}▸ Unbounded AJAX polling (setInterval + fetch/ajax) ${AJAX_P
 AJAX_POLLING=false
 AJAX_POLLING_FINDING_COUNT=0
 AJAX_POLLING_VISIBLE=""
-POLLING_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.js" -E "setInterval[[:space:]]*\\(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+POLLING_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.js" -E "setInterval[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
 if [ -n "$POLLING_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -1828,7 +1870,8 @@ EXPENSIVE_POLLING=false
 EXPENSIVE_POLLING_FINDING_COUNT=0
 EXPENSIVE_POLLING_VISIBLE=""
 # Scan both JS and PHP files for setInterval (PHP files may have inline <script> tags)
-POLLING_MATCHES_HCC005=$(grep -rHn $EXCLUDE_ARGS --include="*.js" --include="*.php" -E "setInterval[[:space:]]*\\(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+POLLING_MATCHES_HCC005=$(grep -rHn $EXCLUDE_ARGS --include="*.js" --include="*.php" -E "setInterval[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
 if [ -n "$POLLING_MATCHES_HCC005" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -1891,7 +1934,8 @@ text_echo "${BLUE}▸ REST endpoints without pagination/limits ${REST_COLOR}[$RE
 REST_UNBOUNDED=false
 REST_FINDING_COUNT=0
 REST_VISIBLE=""
-REST_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "register_rest_route[[:space:]]*\\(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+REST_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "register_rest_route[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
 if [ -n "$REST_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -1951,7 +1995,8 @@ if [ "$AJAX_NONCE_SEVERITY" = "CRITICAL" ] || [ "$AJAX_NONCE_SEVERITY" = "HIGH" 
 text_echo "${BLUE}▸ wp_ajax handlers without nonce validation ${AJAX_NONCE_COLOR}[$AJAX_NONCE_SEVERITY]${NC}"
 AJAX_NONCE_FAIL=false
 AJAX_NONCE_FINDING_COUNT=0
-AJAX_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "wp_ajax" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+AJAX_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "wp_ajax" "$PATHS" 2>/dev/null || true)
 if [ -n "$AJAX_FILES" ]; then
   for file in $AJAX_FILES; do
     hook_count=$(grep -E "wp_ajax" "$file" 2>/dev/null | wc -l | tr -d '[:space:]')
@@ -2020,7 +2065,8 @@ WCS_FINDING_COUNT=0
 WCS_VISIBLE=""
 
 # Find wcs_get_subscriptions* functions called without 'limit' parameter
-WCS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "wcs_get_subscriptions[a-zA-Z_]*[[:space:]]*\\(" $PATHS 2>/dev/null | \
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+WCS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "wcs_get_subscriptions[a-zA-Z_]*[[:space:]]*\\(" "$PATHS" 2>/dev/null | \
   grep -v "'limit'" | \
   grep -v '"limit"' | \
   grep -v '//.*wcs_get_subscriptions' || true)
@@ -2084,7 +2130,8 @@ USERS_FINDING_COUNT=0
 USERS_VISIBLE=""
 
 # Find all get_users() calls with line numbers
-USERS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -e "get_users[[:space:]]*(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+USERS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -e "get_users[[:space:]]*(" "$PATHS" 2>/dev/null || true)
 
 if [ -n "$USERS_MATCHES" ]; then
   while IFS= read -r match; do
@@ -2149,7 +2196,8 @@ TERMS_SEVERITY=$(get_severity "get-terms-no-limit" "CRITICAL")
 TERMS_COLOR="${YELLOW}"
 if [ "$TERMS_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SEVERITY" = "HIGH" ]; then TERMS_COLOR="${RED}"; fi
 text_echo "${BLUE}▸ get_terms without number limit ${TERMS_COLOR}[$TERMS_SEVERITY]${NC}"
-TERMS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "get_terms[[:space:]]*(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+TERMS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "get_terms[[:space:]]*(" "$PATHS" 2>/dev/null || true)
 TERMS_UNBOUNDED=false
 TERMS_FINDING_COUNT=0
 if [ -n "$TERMS_FILES" ]; then
@@ -2191,7 +2239,8 @@ if [ "$PRE_GET_POSTS_SEVERITY" = "CRITICAL" ] || [ "$PRE_GET_POSTS_SEVERITY" = "
 text_echo "${BLUE}▸ pre_get_posts forcing unbounded queries ${PRE_GET_POSTS_COLOR}[$PRE_GET_POSTS_SEVERITY]${NC}"
 PRE_GET_POSTS_UNBOUNDED=false
 PRE_GET_POSTS_FINDING_COUNT=0
-PRE_GET_POSTS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "add_action.*pre_get_posts\|add_filter.*pre_get_posts" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+PRE_GET_POSTS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "add_action.*pre_get_posts\|add_filter.*pre_get_posts" "$PATHS" 2>/dev/null || true)
 if [ -n "$PRE_GET_POSTS_FILES" ]; then
   for file in $PRE_GET_POSTS_FILES; do
     # Check if file sets posts_per_page to -1 or nopaging to true
@@ -2231,7 +2280,8 @@ text_echo "${BLUE}▸ Unbounded SQL on wp_terms/wp_term_taxonomy ${TERMS_SQL_COL
 TERMS_SQL_UNBOUNDED=false
 TERMS_SQL_FINDING_COUNT=0
 # Find lines referencing terms tables in SQL context
-TERMS_SQL_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(terms|term_taxonomy)' $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+TERMS_SQL_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(terms|term_taxonomy)' "$PATHS" 2>/dev/null || true)
 	if [ -n "$TERMS_SQL_MATCHES" ]; then
 	  # Filter out lines that have LIMIT (case-insensitive to catch both 'LIMIT' and 'limit')
 	  UNBOUNDED_MATCHES=$(echo "$TERMS_SQL_MATCHES" | grep -vi "LIMIT" || true)
@@ -2585,7 +2635,8 @@ N1_SEVERITY=$(get_severity "n-plus-one-pattern" "MEDIUM")
 N1_COLOR="${YELLOW}"
 if [ "$N1_SEVERITY" = "CRITICAL" ]; then N1_COLOR="${RED}"; fi
 text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEVERITY]${NC}"
-	N1_FILES=$(grep -rl $EXCLUDE_ARGS --include="*.php" -e "get_post_meta\|get_term_meta\|get_user_meta" $PATHS 2>/dev/null | \
+	# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+	N1_FILES=$(grep -rl $EXCLUDE_ARGS --include="*.php" -e "get_post_meta\|get_term_meta\|get_user_meta" "$PATHS" 2>/dev/null | \
 	           xargs -I{} grep -l "foreach\|while[[:space:]]*(" {} 2>/dev/null | head -5 || true)
 	N1_FINDING_COUNT=0
 	VISIBLE_N1_FILES=""
@@ -2633,7 +2684,8 @@ WC_N1_VISIBLE=""
 
 # Find files with WC-specific N+1 patterns
 # Strategy: Find foreach/while loops, then check if loop body contains WC N+1 patterns
-WC_N1_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "foreach[[:space:]]*\\(|while[[:space:]]*\\(" $PATHS 2>/dev/null | \
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+WC_N1_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "foreach[[:space:]]*\\(|while[[:space:]]*\\(" "$PATHS" 2>/dev/null | \
   while IFS= read -r match; do
     [ -z "$match" ] && continue
     file=$(echo "$match" | cut -d: -f1)
@@ -2715,7 +2767,8 @@ TRANSIENT_SEVERITY=$(get_severity "transient-no-expiration" "MEDIUM")
 TRANSIENT_COLOR="${YELLOW}"
 if [ "$TRANSIENT_SEVERITY" = "CRITICAL" ] || [ "$TRANSIENT_SEVERITY" = "HIGH" ]; then TRANSIENT_COLOR="${RED}"; fi
 text_echo "${BLUE}▸ Transients without expiration ${TRANSIENT_COLOR}[$TRANSIENT_SEVERITY]${NC}"
-TRANSIENT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "set_transient[[:space:]]*\(" $PATHS 2>/dev/null || true)
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
+TRANSIENT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "set_transient[[:space:]]*\(" "$PATHS" 2>/dev/null || true)
 TRANSIENT_ABUSE=false
 TRANSIENT_ISSUES=""
 TRANSIENT_FINDING_COUNT=0
