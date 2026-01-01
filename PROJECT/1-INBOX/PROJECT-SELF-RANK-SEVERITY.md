@@ -161,17 +161,23 @@ get_severity() {
 - Create JSON structure with factory defaults
 - Add metadata (version, last_updated)
 
+STATUS: COMPLETED
+
 **Day 2**: Add `load_custom_severity_config()` + `get_severity()` helpers in `check-performance.sh`
 - Parse JSON config file with jq (already used elsewhere in script)
 - Merge user overrides into shipped defaults
 - Update all check output lines to call `get_severity()` instead of hardcoding `[CRITICAL]`
 - Add `--severity-config <path>` CLI option (explicit path only, no auto-discovery)
 
+STATUS: COMPLETED
+
 **Day 3**: Testing + documentation
 - Test with custom config passed via `--severity-config`
 - Test fallback to shipped defaults when no config provided
 - Update README with usage examples
 - Add validation (warn if invalid severity level in config)
+
+STATUS: NOT STARTED
 
 ### Example Output (After MVP)
 

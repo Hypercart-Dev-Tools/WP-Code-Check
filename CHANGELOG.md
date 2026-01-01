@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.62] - 2025-12-31
+
+### Changed
+- **Day 3: All 28 Checks Now Use Dynamic Severity** - Completed migration of all performance checks to use `get_severity()` function
+  - **Checks Updated:** All 16 remaining checks now use dynamic severity from config files
+  - **Dynamic Display:** All checks show severity level in brackets (e.g., [CRITICAL], [HIGH], [MEDIUM], [LOW])
+  - **Dynamic Colors:** Severity colors update based on level (RED for CRITICAL/HIGH, YELLOW for MEDIUM/LOW)
+  - **Dynamic Error/Warning Logic:** CRITICAL/HIGH = ERROR (fails build), MEDIUM/LOW = WARNING
+  - **Rule ID Consistency:** Fixed rule ID mismatches to align with severity-levels.json
+  - **Checks Migrated:**
+    1. Admin functions without capability checks
+    2. Unbounded AJAX polling
+    3. Expensive WP functions in polling (HCC-005)
+    4. REST endpoints without pagination
+    5. wp_ajax handlers without nonce validation
+    6. get_users without number limit
+    7. get_terms without number limit
+    8. pre_get_posts forcing unbounded queries
+    9. Unbounded SQL on wp_terms/wp_term_taxonomy
+    10. Unvalidated cron intervals
+    11. Timezone-sensitive patterns
+    12. LIKE queries with leading wildcards
+    13. Transients without expiration
+    14. Script/style versioning with time()
+    15. file_get_contents() with external URLs
+    16. HTTP requests without timeout
+
+### Fixed
+- **Rule ID Consistency** - Aligned rule IDs in add_json_finding calls with severity-levels.json
+  - `ajax-polling-setinterval` → `ajax-polling-unbounded`
+  - `unbounded-get-users` → `get-users-no-limit`
+  - `unbounded-terms-sql` → `unbounded-sql-terms`
+  - `unvalidated-cron-interval` → `cron-interval-unvalidated`
+  - `timezone-sensitive-pattern` → `timezone-sensitive-code`
+  - `script-versioning-time` → `asset-version-time`
+  - `wp-ajax-no-nonce` → `ajax-no-nonce`
+  - `rest-endpoint-unbounded` → `rest-no-pagination`
+
+### Technical Details
+- **100% Dynamic Severity:** All 28 checks now query severity from config files at runtime
+- **Zero Hardcoded Severity:** Removed all hardcoded severity levels from text_echo statements
+- **Consistent Pattern:** All checks follow the same pattern: calculate severity → set color → display → count errors/warnings
+- **Backward Compatible:** Script works identically without custom config (uses factory defaults)
+
 ## [1.0.61] - 2025-12-31
 
 ### Added
