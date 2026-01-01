@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.63
+# Version: 1.0.64
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -48,7 +48,7 @@ source "$LIB_DIR/common-helpers.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.63"
+SCRIPT_VERSION="1.0.64"
 
 # Defaults
 PATHS="."
@@ -1516,11 +1516,84 @@ run_check "ERROR" "$(get_severity "hcc-008-unsafe-regexp" "MEDIUM")" "User input
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
-# Direct superglobal manipulation
+# Direct superglobal manipulation (assignment)
 run_check "ERROR" "$(get_severity "spo-002-superglobals" "HIGH")" "Direct superglobal manipulation" "spo-002-superglobals" \
   "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \
   "-E \\$_(GET|POST|REQUEST)[[:space:]]*=" \
   "-E \\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*="
+
+# Unsanitized superglobal read (reading $_GET/$_POST without sanitization)
+text_echo ""
+UNSANITIZED_SEVERITY=$(get_severity "unsanitized-superglobal-read" "HIGH")
+UNSANITIZED_COLOR="${YELLOW}"
+if [ "$UNSANITIZED_SEVERITY" = "CRITICAL" ] || [ "$UNSANITIZED_SEVERITY" = "HIGH" ]; then UNSANITIZED_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Unsanitized superglobal read (\$_GET/\$_POST) ${UNSANITIZED_COLOR}[$UNSANITIZED_SEVERITY]${NC}"
+UNSANITIZED_FAILED=false
+UNSANITIZED_FINDING_COUNT=0
+UNSANITIZED_VISIBLE=""
+
+# Find all $_GET/$_POST/$_REQUEST access that doesn't have sanitization
+# Exclude lines with: sanitize_*, esc_*, absint, intval, wc_clean, wp_unslash, isset, empty, $allowed_keys
+UNSANITIZED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$_(GET|POST|REQUEST)\[' $PATHS 2>/dev/null | \
+  grep -v 'sanitize_' | \
+  grep -v 'esc_' | \
+  grep -v 'absint' | \
+  grep -v 'intval' | \
+  grep -v 'wc_clean' | \
+  grep -v 'wp_unslash' | \
+  grep -v 'isset' | \
+  grep -v 'empty' | \
+  grep -v '\$allowed_keys' | \
+  grep -v '//.*\$_' || true)
+
+if [ -n "$UNSANITIZED_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    if should_suppress_finding "unsanitized-superglobal-read" "$file"; then
+      continue
+    fi
+
+    UNSANITIZED_FAILED=true
+    ((UNSANITIZED_FINDING_COUNT++))
+    add_json_finding "unsanitized-superglobal-read" "error" "$UNSANITIZED_SEVERITY" "$file" "$lineno" "Unsanitized superglobal access" "$code"
+
+    if [ -z "$UNSANITIZED_VISIBLE" ]; then
+      UNSANITIZED_VISIBLE="$match"
+    else
+      UNSANITIZED_VISIBLE="${UNSANITIZED_VISIBLE}
+$match"
+    fi
+  done <<< "$UNSANITIZED_MATCHES"
+fi
+
+if [ "$UNSANITIZED_FAILED" = true ]; then
+  if [ "$UNSANITIZED_SEVERITY" = "CRITICAL" ] || [ "$UNSANITIZED_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$UNSANITIZED_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$UNSANITIZED_VISIBLE" | head -5)"
+  fi
+  add_json_check "Unsanitized superglobal read (\$_GET/\$_POST)" "$UNSANITIZED_SEVERITY" "failed" "$UNSANITIZED_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Unsanitized superglobal read (\$_GET/\$_POST)" "$UNSANITIZED_SEVERITY" "passed" 0
+fi
+text_echo ""
 
 # Insecure data deserialization
 run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \
@@ -1528,6 +1601,73 @@ run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")
   "-E base64_decode[[:space:]]*\\(\\$_" \
   "-E json_decode[[:space:]]*\\(\\$_" \
   "-E maybe_unserialize[[:space:]]*\\(\\$_"
+
+# Direct database queries without $wpdb->prepare() (SQL injection risk)
+# Note: This check requires custom implementation because we need to filter out lines
+# that contain $wpdb->prepare in the same statement (grep -v after initial match)
+text_echo ""
+WPDB_SEVERITY=$(get_severity "wpdb-query-no-prepare" "CRITICAL")
+WPDB_COLOR="${YELLOW}"
+if [ "$WPDB_SEVERITY" = "CRITICAL" ] || [ "$WPDB_SEVERITY" = "HIGH" ]; then WPDB_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Direct database queries without \$wpdb->prepare() ${WPDB_COLOR}[$WPDB_SEVERITY]${NC}"
+WPDB_FAILED=false
+WPDB_FINDING_COUNT=0
+WPDB_VISIBLE=""
+
+# Find all $wpdb->query, $wpdb->get_var, $wpdb->get_row, $wpdb->get_results, $wpdb->get_col
+# that don't have $wpdb->prepare in the same statement
+WPDB_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(query|get_var|get_row|get_results|get_col)[[:space:]]*\(' $PATHS 2>/dev/null | \
+  grep -v '\$wpdb->prepare' | \
+  grep -v '//.*\$wpdb->' || true)
+
+if [ -n "$WPDB_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    if should_suppress_finding "wpdb-query-no-prepare" "$file"; then
+      continue
+    fi
+
+    WPDB_FAILED=true
+    ((WPDB_FINDING_COUNT++))
+    add_json_finding "wpdb-query-no-prepare" "error" "$WPDB_SEVERITY" "$file" "$lineno" "Direct database query without \$wpdb->prepare()" "$code"
+
+    if [ -z "$WPDB_VISIBLE" ]; then
+      WPDB_VISIBLE="$match"
+    else
+      WPDB_VISIBLE="${WPDB_VISIBLE}
+$match"
+    fi
+  done <<< "$WPDB_MATCHES"
+fi
+
+if [ "$WPDB_FAILED" = true ]; then
+  if [ "$WPDB_SEVERITY" = "CRITICAL" ] || [ "$WPDB_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$WPDB_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$WPDB_VISIBLE" | head -5)"
+  fi
+  add_json_check "Direct database queries without \$wpdb->prepare()" "$WPDB_SEVERITY" "failed" "$WPDB_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Direct database queries without \$wpdb->prepare()" "$WPDB_SEVERITY" "passed" 0
+fi
+text_echo ""
 
 # Missing capability checks in admin functions
 ADMIN_CAP_SEVERITY=$(get_severity "admin-no-capability-check" "HIGH")

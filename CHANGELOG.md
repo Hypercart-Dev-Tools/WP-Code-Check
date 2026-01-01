@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.64] - 2026-01-01
+
+### Added
+- **New Check: Direct Database Queries Without $wpdb->prepare()** - Detects SQL injection vulnerabilities
+  - **Rule ID:** `wpdb-query-no-prepare`
+  - **Severity:** CRITICAL (customizable via severity config)
+  - **Category:** security
+  - **Rationale:** All database queries using `$wpdb->query`, `get_var`, `get_row`, `get_results`, or `get_col` must use `$wpdb->prepare()` to prevent SQL injection attacks
+  - **Detection:** Finds direct database calls without `$wpdb->prepare()` in the same statement
+  - **Test Fixture:** Added `dist/tests/fixtures/wpdb-no-prepare.php` with examples of violations and valid code
+
+- **New Check: Unsanitized Superglobal Read** - Detects XSS and parameter tampering vulnerabilities
+  - **Rule ID:** `unsanitized-superglobal-read`
+  - **Severity:** HIGH (customizable via severity config)
+  - **Category:** security
+  - **Rationale:** All access to `$_GET`, `$_POST`, and `$_REQUEST` must be sanitized using WordPress functions to prevent XSS and parameter tampering
+  - **Detection:** Finds direct superglobal access without sanitization wrappers (`sanitize_*`, `esc_*`, `absint`, `intval`, `wc_clean`, `wp_unslash`, `isset`, `empty`)
+  - **Test Fixture:** Added `dist/tests/fixtures/unsanitized-superglobal-read.php` with examples of violations and valid code
+
+### Changed
+- **Check Count:** Increased from 29 to 31 checks (+2 new security checks)
+- **Documentation:** Updated README files to reflect new checks and count
+- **Severity Config:** Updated `severity-levels.json` to include new rule IDs
+
+### Technical Details
+- Both checks use custom implementation (not `run_check` function) to support complex filtering logic
+- Implements allowlist patterns to reduce false positives (e.g., `isset`, `empty`, sanitization functions)
+- Follows the same pattern as admin capability check (manual grep → filter → display → count)
+- Correctly excludes comments and safe patterns from detection
+
 ## [1.0.63] - 2025-12-31
 
 ### Added

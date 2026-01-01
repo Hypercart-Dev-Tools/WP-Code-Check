@@ -122,6 +122,7 @@ These patterns **will crash your site** under production load:
 
 | Pattern | Why It's Dangerous | Real-World Impact |
 |---------|-------------------|-------------------|
+| **`$wpdb->query`** without `prepare()` | SQL injection vulnerability | Attacker can delete database, steal data, or execute arbitrary SQL |
 | **AJAX polling** via `setInterval` + fetch/ajax | Creates request storms that hammer backend | 1000 users = 60,000 requests/min → server meltdown |
 | **`register_rest_route`** without pagination | Unbounded REST data fetch | API returns 50,000 posts → 500MB response → timeout |
 | **`wp_ajax_*`** handlers missing nonce | Unlimited AJAX flood, no CSRF protection | Bots flood endpoint → database locks → site down |
@@ -134,7 +135,16 @@ These patterns **will crash your site** under production load:
 | **Unbounded SQL** on `wp_terms` | Full table scans without limits | Locks database on large sites |
 | **`file_get_contents()`** with URLs | No timeout, no SSL verification, blocks PHP | External API down → entire site hangs for 30+ seconds |
 
-### ⚠️ Warnings (Review Recommended)
+### ⚠️ High Priority Warnings
+
+These patterns **create security vulnerabilities** and should be fixed immediately:
+
+| Pattern | Why It Matters | Impact |
+|---------|---------------|--------|
+| **Unsanitized `$_GET`/`$_POST`** read | XSS and parameter tampering | Attacker can inject malicious scripts or manipulate application logic |
+| **Direct superglobal manipulation** | Bypasses WordPress security | Modifying `$_GET`/`$_POST` directly breaks sanitization |
+
+### ⚠️ Medium Priority Warnings
 
 These patterns **degrade performance** and should be fixed:
 
