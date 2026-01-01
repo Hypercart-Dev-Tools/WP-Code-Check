@@ -1,9 +1,9 @@
 {
   "_metadata": {
-    "version": "1.0.60",
+    "version": "1.0.63",
     "description": "WP Code Check - Severity Level Customization",
     "last_updated": "2025-12-31",
-    "total_checks": 28,
+    "total_checks": 29,
     "instructions": "Copy this file and edit 'level' fields to customize severity. Leave 'factory_default' unchanged for reference. Use --severity-config <path> to apply customizations. Any field starting with underscore (_comment, _note, _reason, _ticket, etc.) is ignored by the parser and can be used for documentation.",
     "_comment": "Example: This comment field is ignored during parsing. Use it to document your configuration decisions."
   },
@@ -235,6 +235,14 @@
       "category": "maintenance",
       "description": "Using current_time() or date() without timezone awareness (can cause issues across timezones)",
       "_ticket": "JIRA-1234 - Downgraded per team discussion 2025-12-31"
+    },
+    "disallowed-php-short-tags": {
+      "id": "disallowed-php-short-tags",
+      "name": "Disallowed PHP short tags",
+      "level": "MEDIUM",
+      "factory_default": "MEDIUM",
+      "category": "compatibility",
+      "description": "PHP short tags (<?= or <? ) are used. WordPress Coding Standards require full <?php tags for server compatibility"
     }
   }
 }

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.63] - 2025-12-31
+
+### Added
+- **New Check: Disallowed PHP Short Tags** - Detects use of PHP short tags (`<?=` and `<? `) which violate WordPress Coding Standards
+  - **Rule ID:** `disallowed-php-short-tags`
+  - **Severity:** MEDIUM (customizable via severity config)
+  - **Category:** compatibility
+  - **Rationale:** WordPress Coding Standards require full `<?php` tags for maximum server compatibility. The `short_open_tag` setting is not guaranteed to be enabled on all hosting environments.
+  - **Detection:** Finds `<?=` (short echo tags) and `<? ` (short open tags) while correctly ignoring `<?php` and `<?xml`
+  - **Test Fixture:** Added `dist/tests/fixtures/php-short-tags.php` with examples of violations and valid code
+
+### Changed
+- **Check Count:** Increased from 28 to 29 checks
+- **Documentation:** Updated README files to reflect new check and count
+
+### Technical Details
+- Implements portable grep patterns that work on both macOS and Linux
+- Uses dynamic severity configuration (responds to custom severity configs)
+- Follows the same pattern as all other checks (get_severity → display → count errors/warnings)
+- Correctly excludes XML declarations and full PHP tags from detection
+
 ## [1.0.62] - 2025-12-31
 
 ### Changed

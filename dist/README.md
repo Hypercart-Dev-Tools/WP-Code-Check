@@ -1,6 +1,6 @@
 # WP Code Check by Hypercart - Performance & Security Analyzer
 
-**Version:** 1.0.62
+**Version:** 1.0.63
 © Copyright 2025 Hypercart (a DBA of Neochrome, Inc.)
 
 ---
@@ -22,7 +22,7 @@ You're building a WordPress plugin or theme. Everything works great in developme
 
 ### The Solution
 
-This toolkit **automatically detects 28 critical WordPress performance and security antipatterns** before they reach production.
+This toolkit **automatically detects 29 critical WordPress performance and security antipatterns** before they reach production.
 
 **Think of it as:**
 - 🛡️ **ESLint/PHPStan for WordPress performance** - catches issues static analysis misses
@@ -145,6 +145,7 @@ These patterns **degrade performance** and should be fixed:
 | **N+1 patterns** (meta in loops) | Query multiplication | 100 posts × 3 meta queries = 300 queries per page |
 | **`current_time('timestamp')`** | Deprecated, timezone issues | Use `current_datetime()` instead |
 | **HTTP requests** without timeout | External API hangs → site hangs | 5-30 second page loads if API is slow |
+| **PHP short tags** (`<?=` or `<? `) | Not guaranteed to work on all servers | Code fails to parse if `short_open_tag` is disabled |
 
 ---
 
