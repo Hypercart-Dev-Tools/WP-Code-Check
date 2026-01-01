@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "added_in_scanner_version": "1.0.60",
   "enabled": true,
+  "detection_type": "aggregated",
   "category": "duplication",
   "severity": "LOW",
   "title": "Duplicate capability strings across files",
   "description": "Detects current_user_can() and user_can() calls with hard-coded capability strings appearing in many files. While some duplication is normal (e.g., 'manage_options'), excessive duplication suggests capability checks should be centralized.",
   "rationale": "Hard-coded capability strings scattered across files make permission changes risky and inconsistent. Centralizing capability checks as helper methods provides a single source of truth and makes it easier to add custom logic (e.g., logging, feature flags).",
-  
+
   "detection": {
     "type": "grep",
     "file_patterns": ["*.php"],

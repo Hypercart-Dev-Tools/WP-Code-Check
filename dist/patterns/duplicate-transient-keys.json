@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "added_in_scanner_version": "1.0.60",
   "enabled": true,
+  "detection_type": "aggregated",
   "category": "duplication",
   "severity": "MEDIUM",
   "title": "Duplicate transient keys across files",
   "description": "Detects get_transient(), set_transient(), and delete_transient() calls with hard-coded transient keys appearing in multiple files. This indicates a DRY violation where transient keys should be centralized as constants.",
   "rationale": "Hard-coded transient keys scattered across files lead to cache invalidation bugs, typos, and make it difficult to track cache usage. Centralizing transient keys as constants ensures consistency and makes cache management easier.",
-  
+
   "detection": {
     "type": "grep",
     "file_patterns": ["*.php"],

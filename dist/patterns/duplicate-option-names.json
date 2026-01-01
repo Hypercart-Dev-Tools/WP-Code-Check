@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "added_in_scanner_version": "1.0.60",
   "enabled": true,
+  "detection_type": "aggregated",
   "category": "duplication",
   "severity": "MEDIUM",
   "title": "Duplicate option names across files",
   "description": "Detects get_option(), update_option(), and delete_option() calls with hard-coded option names appearing in multiple files. This indicates a DRY violation where option names should be centralized as constants.",
   "rationale": "Hard-coded option names scattered across files make refactoring risky, lead to typos/bugs, and make it difficult to track where options are used. Centralizing option names as constants provides a single source of truth and enables IDE autocomplete.",
-  
+
   "detection": {
     "type": "grep",
     "file_patterns": ["*.php"],

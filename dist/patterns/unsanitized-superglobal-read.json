@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "added_in_scanner_version": "1.0.64",
   "enabled": true,
+  "detection_type": "direct",
   "category": "security",
   "severity": "HIGH",
   "title": "Unsanitized superglobal read ($_GET/$_POST/$_REQUEST)",
