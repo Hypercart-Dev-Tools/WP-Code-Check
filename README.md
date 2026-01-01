@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions/workflows/ci.yml/badge.svg)](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.59-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.63-green.svg)](CHANGELOG.md)
 
 ---
 
@@ -71,11 +71,11 @@ cd WP-Code-Check
 
 ## Features
 
-### 🔍 **28 Performance & Security Checks**
+### 🔍 **29 Performance & Security Checks**
 
 - **Critical**: Unbounded queries, insecure deserialization, localStorage sensitive data, client-side serialization
 - **High**: Direct superglobal manipulation, AJAX without nonce validation, unbounded SQL, expensive WP functions in polling
-- **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout, unsafe RegExp construction
+- **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout, unsafe RegExp construction, PHP short tags
 - **Low**: Timezone-sensitive patterns
 
 See [full check list](dist/README.md#what-it-detects).

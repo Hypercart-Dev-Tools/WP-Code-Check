@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.59
+# Version: 1.0.63
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -18,6 +18,7 @@
 #   --no-log                 Disable logging to file
 #   --no-context             Disable context lines around findings
 #   --context-lines N        Number of context lines to show (default: 3)
+#   --severity-config <path> Use custom severity levels from JSON config file
 #   --generate-baseline      Generate .hcc-baseline from current findings
 #   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
 #   --ignore-baseline        Ignore baseline file even if present
@@ -47,7 +48,7 @@ source "$LIB_DIR/common-helpers.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.59"
+SCRIPT_VERSION="1.0.63"
 
 # Defaults
 PATHS="."
@@ -58,6 +59,10 @@ OUTPUT_FORMAT="text"  # text or json
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"
+
+# Severity configuration
+SEVERITY_CONFIG_FILE=""  # Path to custom severity config (empty = use factory defaults)
+SEVERITY_CONFIG_LOADED=false  # Track if config has been loaded
 
 # Baseline configuration
 BASELINE_FILE=".hcc-baseline"
@@ -157,6 +162,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --context-lines)
       CONTEXT_LINES="$2"
+      shift 2
+      ;;
+    --severity-config)
+      SEVERITY_CONFIG_FILE="$2"
+      if [ ! -f "$SEVERITY_CONFIG_FILE" ]; then
+        echo "Error: Severity config file not found: $SEVERITY_CONFIG_FILE"
+        exit 1
+      fi
       shift 2
       ;;
     --help)
@@ -335,6 +348,36 @@ detect_project_info() {
     "lines_of_code": $lines_of_code
   }
 EOF
+}
+
+# ============================================================================
+# Severity Configuration Functions
+# ============================================================================
+
+# Get severity level for a rule ID
+# Returns custom level if set in config file, otherwise returns fallback
+# This function queries the JSON config file directly (Bash 3.2 compatible)
+get_severity() {
+  local rule_id="$1"
+  local fallback="${2:-MEDIUM}"  # Default fallback if not found
+  local severity=""
+
+  # If custom config is specified, try to get severity from it
+  if [ -n "$SEVERITY_CONFIG_FILE" ] && [ -f "$SEVERITY_CONFIG_FILE" ]; then
+    severity=$(jq -r ".severity_levels[\"$rule_id\"].level // empty" "$SEVERITY_CONFIG_FILE" 2>/dev/null)
+  fi
+
+  # If not found in custom config, try factory defaults
+  if [ -z "$severity" ] && [ -f "$REPO_ROOT/config/severity-levels.json" ]; then
+    severity=$(jq -r ".severity_levels[\"$rule_id\"].level // empty" "$REPO_ROOT/config/severity-levels.json" 2>/dev/null)
+  fi
+
+  # If still not found, use fallback
+  if [ -z "$severity" ]; then
+    severity="$fallback"
+  fi
+
+  echo "$severity"
 }
 
 # Setup logging
@@ -1417,7 +1460,7 @@ text_echo ""
 
 # Debug code in production (JS + PHP)
 OVERRIDE_GREP_INCLUDE="--include=*.php --include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
-run_check "ERROR" "CRITICAL" "Debug code in production" "spo-001-debug-code" \
+run_check "ERROR" "$(get_severity "spo-001-debug-code" "CRITICAL")" "Debug code in production" "spo-001-debug-code" \
   "-E console\\.(log|error|warn)[[:space:]]*\\(" \
   "-e debugger;" \
   "-E alert[[:space:]]*\\(" \
@@ -1437,7 +1480,7 @@ text_echo ""
 # that is accessible to front-end scripts via browser console.
 # This catches patterns like: localStorage.setItem('pqs_plugin_cache', ...)
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
-run_check "ERROR" "CRITICAL" "Sensitive data in localStorage/sessionStorage" "hcc-001-localstorage-exposure" \
+run_check "ERROR" "$(get_severity "hcc-001-localstorage-exposure" "CRITICAL")" "Sensitive data in localStorage/sessionStorage" "hcc-001-localstorage-exposure" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*plugin" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*cache" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*user" \
@@ -1455,7 +1498,7 @@ unset OVERRIDE_GREP_INCLUDE
 # browser storage, which often contains sensitive metadata (versions, paths, settings).
 # This catches patterns like: localStorage.setItem('key', JSON.stringify(obj))
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
-run_check "ERROR" "CRITICAL" "Serialization of objects to client storage" "hcc-002-client-serialization" \
+run_check "ERROR" "$(get_severity "hcc-002-client-serialization" "CRITICAL")" "Serialization of objects to client storage" "hcc-002-client-serialization" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
   "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
   "-E localStorage\\[[^]]*\\][[:space:]]*=[[:space:]]*JSON\\.stringify"
@@ -1468,26 +1511,29 @@ text_echo ""
 # Catches patterns like: new RegExp('\\b' + query + '\\b') or RegExp(`pattern${userInput}`)
 # Note: Uses single -E with alternation (|) for BSD grep compatibility
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx --include=*.php"
-run_check "ERROR" "MEDIUM" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
+run_check "ERROR" "$(get_severity "hcc-008-unsafe-regexp" "MEDIUM")" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
   "-E ((new[[:space:]]+)?RegExp[[:space:]]*\\([^)]*[[:space:]]\\+[[:space:]])|((new[[:space:]]+)?RegExp.*\\$\\{)"
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
 # Direct superglobal manipulation
-run_check "ERROR" "HIGH" "Direct superglobal manipulation" "spo-002-superglobals" \
+run_check "ERROR" "$(get_severity "spo-002-superglobals" "HIGH")" "Direct superglobal manipulation" "spo-002-superglobals" \
   "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \
   "-E \\$_(GET|POST|REQUEST)[[:space:]]*=" \
   "-E \\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*="
 
 # Insecure data deserialization
-run_check "ERROR" "CRITICAL" "Insecure data deserialization" "spo-003-insecure-deserialization" \
+run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \
   "-E unserialize[[:space:]]*\\(\\$_" \
   "-E base64_decode[[:space:]]*\\(\\$_" \
   "-E json_decode[[:space:]]*\\(\\$_" \
   "-E maybe_unserialize[[:space:]]*\\(\\$_"
 
 # Missing capability checks in admin functions
-text_echo "${BLUE}▸ Admin functions without capability checks ${RED}[HIGH]${NC}"
+ADMIN_CAP_SEVERITY=$(get_severity "admin-no-capability-check" "HIGH")
+ADMIN_CAP_COLOR="${YELLOW}"
+if [ "$ADMIN_CAP_SEVERITY" = "CRITICAL" ] || [ "$ADMIN_CAP_SEVERITY" = "HIGH" ]; then ADMIN_CAP_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Admin functions without capability checks ${ADMIN_CAP_COLOR}[$ADMIN_CAP_SEVERITY]${NC}"
 ADMIN_CAP_MISSING=false
 ADMIN_CAP_FINDING_COUNT=0
 ADMIN_CAP_VISIBLE=""
@@ -1544,30 +1590,38 @@ $match_output"
     fi
 
     # Use helper function to group findings
-    group_and_add_finding "spo-004-missing-cap-check" "error" "HIGH" "$file" "$lineno" "$code" "Admin function/hook missing capability check near admin context"
+    group_and_add_finding "spo-004-missing-cap-check" "error" "$ADMIN_CAP_SEVERITY" "$file" "$lineno" "$code" "Admin function/hook missing capability check near admin context"
   done <<< "$ADMIN_MATCHES"
 
   # Flush final group
-  group_and_add_finding "spo-004-missing-cap-check" "error" "HIGH" "" "" "" "Admin function/hook missing capability check near admin context" "true"
+  group_and_add_finding "spo-004-missing-cap-check" "error" "$ADMIN_CAP_SEVERITY" "" "" "" "Admin function/hook missing capability check near admin context" "true"
 fi
 
 if [ "$ADMIN_CAP_MISSING" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$ADMIN_CAP_SEVERITY" = "CRITICAL" ] || [ "$ADMIN_CAP_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$ADMIN_CAP_VISIBLE" ]; then
     while IFS= read -r match; do
       [ -z "$match" ] && continue
       format_finding "$match"
     done <<< "$(echo "$ADMIN_CAP_VISIBLE" | head -5)"
   fi
-  ((ERRORS++))
-  add_json_check "Admin functions without capability checks" "HIGH" "failed" "$ADMIN_CAP_FINDING_COUNT"
+  add_json_check "Admin functions without capability checks" "$ADMIN_CAP_SEVERITY" "failed" "$ADMIN_CAP_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Admin functions without capability checks" "HIGH" "passed" 0
+  add_json_check "Admin functions without capability checks" "$ADMIN_CAP_SEVERITY" "passed" 0
 fi
 text_echo ""
 
-text_echo "${BLUE}▸ Unbounded AJAX polling (setInterval + fetch/ajax) ${RED}[HIGH]${NC}"
+AJAX_POLLING_SEVERITY=$(get_severity "ajax-polling-unbounded" "HIGH")
+AJAX_POLLING_COLOR="${YELLOW}"
+if [ "$AJAX_POLLING_SEVERITY" = "CRITICAL" ] || [ "$AJAX_POLLING_SEVERITY" = "HIGH" ]; then AJAX_POLLING_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Unbounded AJAX polling (setInterval + fetch/ajax) ${AJAX_POLLING_COLOR}[$AJAX_POLLING_SEVERITY]${NC}"
 AJAX_POLLING=false
 AJAX_POLLING_FINDING_COUNT=0
 AJAX_POLLING_VISIBLE=""
@@ -1594,7 +1648,7 @@ if [ -n "$POLLING_MATCHES" ]; then
 
       AJAX_POLLING=true
       ((AJAX_POLLING_FINDING_COUNT++))
-      add_json_finding "ajax-polling-setinterval" "error" "HIGH" "$file" "${lineno:-0}" "AJAX polling via setInterval without rate limits" "$code"
+      add_json_finding "ajax-polling-unbounded" "error" "$AJAX_POLLING_SEVERITY" "$file" "${lineno:-0}" "AJAX polling via setInterval without rate limits" "$code"
       if [ -z "$AJAX_POLLING_VISIBLE" ]; then
         AJAX_POLLING_VISIBLE="$match"
       else
@@ -1605,23 +1659,31 @@ $match"
   done <<< "$POLLING_MATCHES"
 fi
 if [ "$AJAX_POLLING" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$AJAX_POLLING_SEVERITY" = "CRITICAL" ] || [ "$AJAX_POLLING_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$AJAX_POLLING_VISIBLE" ]; then
     while IFS= read -r match; do
       [ -z "$match" ] && continue
       format_finding "$match"
     done <<< "$(echo "$AJAX_POLLING_VISIBLE" | head -5)"
   fi
-  ((ERRORS++))
-  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "HIGH" "failed" "$AJAX_POLLING_FINDING_COUNT"
+  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "$AJAX_POLLING_SEVERITY" "failed" "$AJAX_POLLING_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "HIGH" "passed" 0
+  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "$AJAX_POLLING_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # HCC-005: Expensive WordPress functions in polling intervals
-text_echo "${BLUE}▸ Expensive WP functions in polling intervals (HCC-005) ${RED}[HIGH]${NC}"
+HCC005_SEVERITY=$(get_severity "hcc-005-expensive-polling" "HIGH")
+HCC005_COLOR="${YELLOW}"
+if [ "$HCC005_SEVERITY" = "CRITICAL" ] || [ "$HCC005_SEVERITY" = "HIGH" ]; then HCC005_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Expensive WP functions in polling intervals (HCC-005) ${HCC005_COLOR}[$HCC005_SEVERITY]${NC}"
 EXPENSIVE_POLLING=false
 EXPENSIVE_POLLING_FINDING_COUNT=0
 EXPENSIVE_POLLING_VISIBLE=""
@@ -1651,7 +1713,7 @@ if [ -n "$POLLING_MATCHES_HCC005" ]; then
 
       EXPENSIVE_POLLING=true
       ((EXPENSIVE_POLLING_FINDING_COUNT++))
-      add_json_finding "hcc-005-expensive-polling" "error" "HIGH" "$file" "${lineno:-0}" "Expensive WordPress function called in polling interval" "$code"
+      add_json_finding "hcc-005-expensive-polling" "error" "$HCC005_SEVERITY" "$file" "${lineno:-0}" "Expensive WordPress function called in polling interval" "$code"
       if [ -z "$EXPENSIVE_POLLING_VISIBLE" ]; then
         EXPENSIVE_POLLING_VISIBLE="$match"
       else
@@ -1662,22 +1724,30 @@ $match"
   done <<< "$POLLING_MATCHES_HCC005"
 fi
 if [ "$EXPENSIVE_POLLING" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$HCC005_SEVERITY" = "CRITICAL" ] || [ "$HCC005_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$EXPENSIVE_POLLING_VISIBLE" ]; then
     while IFS= read -r match; do
       [ -z "$match" ] && continue
       format_finding "$match"
     done <<< "$(echo "$EXPENSIVE_POLLING_VISIBLE" | head -5)"
   fi
-  ((ERRORS++))
-  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "$HCC005_SEVERITY" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "passed" 0
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "$HCC005_SEVERITY" "passed" 0
 fi
 text_echo ""
 
-text_echo "${BLUE}▸ REST endpoints without pagination/limits ${RED}[CRITICAL]${NC}"
+REST_SEVERITY=$(get_severity "rest-no-pagination" "CRITICAL")
+REST_COLOR="${YELLOW}"
+if [ "$REST_SEVERITY" = "CRITICAL" ] || [ "$REST_SEVERITY" = "HIGH" ]; then REST_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ REST endpoints without pagination/limits ${REST_COLOR}[$REST_SEVERITY]${NC}"
 REST_UNBOUNDED=false
 REST_FINDING_COUNT=0
 REST_VISIBLE=""
@@ -1704,7 +1774,7 @@ if [ -n "$REST_MATCHES" ]; then
 
       REST_UNBOUNDED=true
       ((REST_FINDING_COUNT++))
-      add_json_finding "rest-endpoint-unbounded" "error" "CRITICAL" "$file" "${lineno:-0}" "register_rest_route without per_page/limit pagination guard" "$code"
+      add_json_finding "rest-no-pagination" "error" "$REST_SEVERITY" "$file" "${lineno:-0}" "register_rest_route without per_page/limit pagination guard" "$code"
       if [ -z "$REST_VISIBLE" ]; then
         REST_VISIBLE="$match"
       else
@@ -1715,22 +1785,30 @@ $match"
   done <<< "$REST_MATCHES"
 fi
 if [ "$REST_UNBOUNDED" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$REST_SEVERITY" = "CRITICAL" ] || [ "$REST_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$REST_VISIBLE" ]; then
     while IFS= read -r match; do
       [ -z "$match" ] && continue
       format_finding "$match"
     done <<< "$(echo "$REST_VISIBLE" | head -5)"
   fi
-  ((ERRORS++))
-  add_json_check "REST endpoints without pagination/limits" "CRITICAL" "failed" "$REST_FINDING_COUNT"
+  add_json_check "REST endpoints without pagination/limits" "$REST_SEVERITY" "failed" "$REST_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "REST endpoints without pagination/limits" "CRITICAL" "passed" 0
+  add_json_check "REST endpoints without pagination/limits" "$REST_SEVERITY" "passed" 0
 fi
 text_echo ""
 
-text_echo "${BLUE}▸ wp_ajax handlers without nonce validation ${RED}[HIGH]${NC}"
+AJAX_NONCE_SEVERITY=$(get_severity "ajax-no-nonce" "HIGH")
+AJAX_NONCE_COLOR="${YELLOW}"
+if [ "$AJAX_NONCE_SEVERITY" = "CRITICAL" ] || [ "$AJAX_NONCE_SEVERITY" = "HIGH" ]; then AJAX_NONCE_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ wp_ajax handlers without nonce validation ${AJAX_NONCE_COLOR}[$AJAX_NONCE_SEVERITY]${NC}"
 AJAX_NONCE_FAIL=false
 AJAX_NONCE_FINDING_COUNT=0
 AJAX_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "wp_ajax" $PATHS 2>/dev/null || true)
@@ -1759,35 +1837,43 @@ if [ -n "$AJAX_FILES" ]; then
     lineno=$(grep -n "wp_ajax" "$file" 2>/dev/null | head -1 | cut -d: -f1)
     code=$(grep -n "wp_ajax" "$file" 2>/dev/null | head -1 | cut -d: -f2-)
     text_echo "  $file: wp_ajax handler missing nonce validation"
-    add_json_finding "wp-ajax-no-nonce" "error" "HIGH" "$file" "${lineno:-0}" "wp_ajax handler missing nonce validation" "$code"
+    add_json_finding "ajax-no-nonce" "error" "$AJAX_NONCE_SEVERITY" "$file" "${lineno:-0}" "wp_ajax handler missing nonce validation" "$code"
     AJAX_NONCE_FAIL=true
     ((AJAX_NONCE_FINDING_COUNT++))
   done
 fi
 if [ "$AJAX_NONCE_FAIL" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
-  ((ERRORS++))
-  add_json_check "wp_ajax handlers without nonce validation" "HIGH" "failed" "$AJAX_NONCE_FINDING_COUNT"
+  if [ "$AJAX_NONCE_SEVERITY" = "CRITICAL" ] || [ "$AJAX_NONCE_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "wp_ajax handlers without nonce validation" "$AJAX_NONCE_SEVERITY" "failed" "$AJAX_NONCE_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "wp_ajax handlers without nonce validation" "HIGH" "passed" 0
+  add_json_check "wp_ajax handlers without nonce validation" "$AJAX_NONCE_SEVERITY" "passed" 0
 fi
 text_echo ""
 
-run_check "ERROR" "CRITICAL" "Unbounded posts_per_page" "unbounded-posts-per-page" \
+run_check "ERROR" "$(get_severity "unbounded-posts-per-page" "CRITICAL")" "Unbounded posts_per_page" "unbounded-posts-per-page" \
   "-e posts_per_page[[:space:]]*=>[[:space:]]*-1"
 
-run_check "ERROR" "CRITICAL" "Unbounded numberposts" "unbounded-numberposts" \
+run_check "ERROR" "$(get_severity "unbounded-numberposts" "CRITICAL")" "Unbounded numberposts" "unbounded-numberposts" \
   "-e numberposts[[:space:]]*=>[[:space:]]*-1"
 
-run_check "ERROR" "CRITICAL" "nopaging => true" "nopaging-true" \
+run_check "ERROR" "$(get_severity "nopaging-true" "CRITICAL")" "nopaging => true" "nopaging-true" \
   "-e nopaging[[:space:]]*=>[[:space:]]*true"
 
-run_check "ERROR" "CRITICAL" "Unbounded wc_get_orders limit" "unbounded-wc-get-orders" \
+run_check "ERROR" "$(get_severity "unbounded-wc-get-orders" "CRITICAL")" "Unbounded wc_get_orders limit" "unbounded-wc-get-orders" \
   "-e 'limit'[[:space:]]*=>[[:space:]]*-1"
 
 # get_users check - unbounded user queries (can crash sites with many users)
-text_echo "${BLUE}▸ get_users without number limit ${RED}[CRITICAL]${NC}"
+USERS_SEVERITY=$(get_severity "get-users-no-limit" "CRITICAL")
+USERS_COLOR="${YELLOW}"
+if [ "$USERS_SEVERITY" = "CRITICAL" ] || [ "$USERS_SEVERITY" = "HIGH" ]; then USERS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ get_users without number limit ${USERS_COLOR}[$USERS_SEVERITY]${NC}"
 USERS_UNBOUNDED=false
 USERS_FINDING_COUNT=0
 USERS_VISIBLE=""
@@ -1826,30 +1912,38 @@ if [ -n "$USERS_MATCHES" ]; then
 $match_output"
         fi
         
-        add_json_finding "unbounded-get-users" "error" "CRITICAL" "$file" "$lineno" "get_users() without 'number' limit can fetch ALL users" "$code"
+        add_json_finding "get-users-no-limit" "error" "$USERS_SEVERITY" "$file" "$lineno" "get_users() without 'number' limit can fetch ALL users" "$code"
       fi
     fi
   done <<< "$USERS_MATCHES"
 fi
 
 if [ "$USERS_UNBOUNDED" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
+  if [ "$USERS_SEVERITY" = "CRITICAL" ] || [ "$USERS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$USERS_VISIBLE" ]; then
     while IFS= read -r match; do
       [ -z "$match" ] && continue
       format_finding "$match"
     done <<< "$(echo "$USERS_VISIBLE" | head -10)"
   fi
-  ((ERRORS++))
-  add_json_check "get_users without number limit" "CRITICAL" "failed" "$USERS_FINDING_COUNT"
+  add_json_check "get_users without number limit" "$USERS_SEVERITY" "failed" "$USERS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "get_users without number limit" "CRITICAL" "passed" 0
+  add_json_check "get_users without number limit" "$USERS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # get_terms check - more complex, needs context analysis
-text_echo "${BLUE}▸ get_terms without number limit ${RED}[CRITICAL]${NC}"
+TERMS_SEVERITY=$(get_severity "get-terms-no-limit" "CRITICAL")
+TERMS_COLOR="${YELLOW}"
+if [ "$TERMS_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SEVERITY" = "HIGH" ]; then TERMS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ get_terms without number limit ${TERMS_COLOR}[$TERMS_SEVERITY]${NC}"
 TERMS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "get_terms[[:space:]]*(" $PATHS 2>/dev/null || true)
 TERMS_UNBOUNDED=false
 TERMS_FINDING_COUNT=0
@@ -1863,7 +1957,7 @@ if [ -n "$TERMS_FILES" ]; then
 	        text_echo "  $file: get_terms() may be missing 'number' parameter"
 	        # Get line number for JSON
 	        lineno=$(grep -n "get_terms[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
-	        add_json_finding "get-terms-no-limit" "error" "CRITICAL" "$file" "${lineno:-0}" "get_terms() may be missing 'number' parameter" "get_terms("
+	        add_json_finding "get-terms-no-limit" "error" "$TERMS_SEVERITY" "$file" "${lineno:-0}" "get_terms() may be missing 'number' parameter" "get_terms("
 	        TERMS_UNBOUNDED=true
 	        ((TERMS_FINDING_COUNT++))
 	      fi
@@ -1871,17 +1965,25 @@ if [ -n "$TERMS_FILES" ]; then
   done
 fi
 if [ "$TERMS_UNBOUNDED" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
-  ((ERRORS++))
-  add_json_check "get_terms without number limit" "CRITICAL" "failed" "$TERMS_FINDING_COUNT"
+  if [ "$TERMS_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "get_terms without number limit" "$TERMS_SEVERITY" "failed" "$TERMS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "get_terms without number limit" "CRITICAL" "passed" 0
+  add_json_check "get_terms without number limit" "$TERMS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # pre_get_posts unbounded check - files that hook pre_get_posts and set unbounded queries
-text_echo "${BLUE}▸ pre_get_posts forcing unbounded queries ${RED}[CRITICAL]${NC}"
+PRE_GET_POSTS_SEVERITY=$(get_severity "pre-get-posts-unbounded" "CRITICAL")
+PRE_GET_POSTS_COLOR="${YELLOW}"
+if [ "$PRE_GET_POSTS_SEVERITY" = "CRITICAL" ] || [ "$PRE_GET_POSTS_SEVERITY" = "HIGH" ]; then PRE_GET_POSTS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ pre_get_posts forcing unbounded queries ${PRE_GET_POSTS_COLOR}[$PRE_GET_POSTS_SEVERITY]${NC}"
 PRE_GET_POSTS_UNBOUNDED=false
 PRE_GET_POSTS_FINDING_COUNT=0
 PRE_GET_POSTS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "add_action.*pre_get_posts\|add_filter.*pre_get_posts" $PATHS 2>/dev/null || true)
@@ -1893,7 +1995,7 @@ if [ -n "$PRE_GET_POSTS_FILES" ]; then
 	      if ! should_suppress_finding "pre-get-posts-unbounded" "$file"; then
 	        text_echo "  $file: pre_get_posts hook sets unbounded query"
 	        lineno=$(grep -n "pre_get_posts" "$file" 2>/dev/null | head -1 | cut -d: -f1)
-	        add_json_finding "pre-get-posts-unbounded" "error" "CRITICAL" "$file" "${lineno:-0}" "pre_get_posts hook sets unbounded query" "pre_get_posts"
+	        add_json_finding "pre-get-posts-unbounded" "error" "$PRE_GET_POSTS_SEVERITY" "$file" "${lineno:-0}" "pre_get_posts hook sets unbounded query" "pre_get_posts"
 	        PRE_GET_POSTS_UNBOUNDED=true
 	        ((PRE_GET_POSTS_FINDING_COUNT++))
 	      fi
@@ -1901,18 +2003,26 @@ if [ -n "$PRE_GET_POSTS_FILES" ]; then
   done
 fi
 if [ "$PRE_GET_POSTS_UNBOUNDED" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
-  ((ERRORS++))
-  add_json_check "pre_get_posts forcing unbounded queries" "CRITICAL" "failed" "$PRE_GET_POSTS_FINDING_COUNT"
+  if [ "$PRE_GET_POSTS_SEVERITY" = "CRITICAL" ] || [ "$PRE_GET_POSTS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "pre_get_posts forcing unbounded queries" "$PRE_GET_POSTS_SEVERITY" "failed" "$PRE_GET_POSTS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "pre_get_posts forcing unbounded queries" "CRITICAL" "passed" 0
+  add_json_check "pre_get_posts forcing unbounded queries" "$PRE_GET_POSTS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # Unbounded direct SQL on terms tables
 # Look for lines with wpdb->terms or wpdb->term_taxonomy that don't have LIMIT on the same line
-text_echo "${BLUE}▸ Unbounded SQL on wp_terms/wp_term_taxonomy ${RED}[HIGH]${NC}"
+TERMS_SQL_SEVERITY=$(get_severity "unbounded-sql-terms" "HIGH")
+TERMS_SQL_COLOR="${YELLOW}"
+if [ "$TERMS_SQL_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SQL_SEVERITY" = "HIGH" ]; then TERMS_SQL_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Unbounded SQL on wp_terms/wp_term_taxonomy ${TERMS_SQL_COLOR}[$TERMS_SQL_SEVERITY]${NC}"
 TERMS_SQL_UNBOUNDED=false
 TERMS_SQL_FINDING_COUNT=0
 # Find lines referencing terms tables in SQL context
@@ -1931,7 +2041,7 @@ TERMS_SQL_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(terms
 	      if ! should_suppress_finding "unbounded-terms-sql" "$_file"; then
 	        TERMS_SQL_UNBOUNDED=true
 	        ((TERMS_SQL_FINDING_COUNT++))
-	        add_json_finding "unbounded-terms-sql" "error" "HIGH" "$_file" "${_lineno:-0}" "Unbounded SQL on wp_terms/wp_term_taxonomy" "$_code"
+	        add_json_finding "unbounded-sql-terms" "error" "$TERMS_SQL_SEVERITY" "$_file" "${_lineno:-0}" "Unbounded SQL on wp_terms/wp_term_taxonomy" "$_code"
 	        if [ -z "$VISIBLE_MATCHES" ]; then
 	          VISIBLE_MATCHES="$line"
 	        else
@@ -1950,16 +2060,24 @@ $line"
 	  fi
 	fi
 if [ "$TERMS_SQL_UNBOUNDED" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
-  ((ERRORS++))
-  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "HIGH" "failed" "$TERMS_SQL_FINDING_COUNT"
+  if [ "$TERMS_SQL_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SQL_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "$TERMS_SQL_SEVERITY" "failed" "$TERMS_SQL_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "HIGH" "passed" 0
+  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "$TERMS_SQL_SEVERITY" "passed" 0
 fi
 
 # Unvalidated cron intervals - can cause infinite loops or silent failures
-text_echo "${BLUE}▸ Unvalidated cron intervals ${RED}[HIGH]${NC}"
+CRON_SEVERITY=$(get_severity "cron-interval-unvalidated" "HIGH")
+CRON_COLOR="${YELLOW}"
+if [ "$CRON_SEVERITY" = "CRITICAL" ] || [ "$CRON_SEVERITY" = "HIGH" ]; then CRON_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Unvalidated cron intervals ${CRON_COLOR}[$CRON_SEVERITY]${NC}"
 CRON_INTERVAL_FAIL=false
 CRON_INTERVAL_FINDING_COUNT=0
 
@@ -2045,7 +2163,7 @@ if [ -n "$CRON_FILES" ]; then
               text_echo "    ${YELLOW}→ Use: ${var_name} = absint(${var_name}); if (${var_name} < 1 || ${var_name} > 1440) ${var_name} = 15;${NC}"
             fi
 
-            add_json_finding "unvalidated-cron-interval" "error" "HIGH" "$file" "$lineno" \
+            add_json_finding "cron-interval-unvalidated" "error" "$CRON_SEVERITY" "$file" "$lineno" \
               "Unvalidated cron interval - use absint() and bounds checking (1-1440 minutes) to prevent corrupt data from causing 0-second intervals or infinite loops" \
               "$code"
           fi
@@ -2056,12 +2174,17 @@ if [ -n "$CRON_FILES" ]; then
 fi
 
 if [ "$CRON_INTERVAL_FAIL" = true ]; then
-  text_echo "${RED}  ✗ FAILED${NC}"
-  ((ERRORS++))
-  add_json_check "Unvalidated cron intervals" "HIGH" "failed" "$CRON_INTERVAL_FINDING_COUNT"
+  if [ "$CRON_SEVERITY" = "CRITICAL" ] || [ "$CRON_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "Unvalidated cron intervals" "$CRON_SEVERITY" "failed" "$CRON_INTERVAL_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unvalidated cron intervals" "HIGH" "passed" 0
+  add_json_check "Unvalidated cron intervals" "$CRON_SEVERITY" "passed" 0
 fi
 text_echo ""
 
@@ -2070,7 +2193,10 @@ text_echo ""
 
 # Enhanced timezone check - skip lines with phpcs:ignore comments
 # Note: Only flags date() (timezone-dependent), not gmdate() (timezone-safe, always UTC)
-text_echo "${BLUE}▸ Timezone-sensitive patterns (current_time/date) ${YELLOW}[LOW]${NC}"
+TZ_SEVERITY=$(get_severity "timezone-sensitive-code" "LOW")
+TZ_COLOR="${YELLOW}"
+if [ "$TZ_SEVERITY" = "CRITICAL" ] || [ "$TZ_SEVERITY" = "HIGH" ]; then TZ_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Timezone-sensitive patterns (current_time/date) ${TZ_COLOR}[$TZ_SEVERITY]${NC}"
 TZ_WARNINGS=0
 TZ_FINDING_COUNT=0
 TZ_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
@@ -2113,7 +2239,7 @@ if [ -n "$TZ_MATCHES" ]; then
 	    if [ "$has_ignore" = false ]; then
 	      if ! should_suppress_finding "timezone-sensitive-pattern" "$file"; then
 	        FILTERED_MATCHES="${FILTERED_MATCHES}${match}"$'\n'
-	        add_json_finding "timezone-sensitive-pattern" "warning" "LOW" "$file" "$line_num" "Timezone-sensitive pattern without phpcs:ignore" "$code"
+	        add_json_finding "timezone-sensitive-code" "warning" "$TZ_SEVERITY" "$file" "$line_num" "Timezone-sensitive pattern without phpcs:ignore" "$code"
 	        ((TZ_WARNINGS++)) || true
 	        ((TZ_FINDING_COUNT++)) || true
 	      fi
@@ -2121,7 +2247,13 @@ if [ -n "$TZ_MATCHES" ]; then
   done <<< "$TZ_MATCHES"
 
   if [ "$TZ_WARNINGS" -gt 0 ]; then
-    text_echo "${YELLOW}  ⚠ WARNING ($TZ_WARNINGS occurrence(s) without phpcs:ignore)${NC}"
+    if [ "$TZ_SEVERITY" = "CRITICAL" ] || [ "$TZ_SEVERITY" = "HIGH" ]; then
+      text_echo "${RED}  ✗ FAILED ($TZ_WARNINGS occurrence(s) without phpcs:ignore)${NC}"
+      ((ERRORS++))
+    else
+      text_echo "${YELLOW}  ⚠ WARNING ($TZ_WARNINGS occurrence(s) without phpcs:ignore)${NC}"
+      ((WARNINGS++))
+    fi
     if [ "$OUTPUT_FORMAT" = "text" ]; then
       if [ "$VERBOSE" = "true" ]; then
         echo "$FILTERED_MATCHES"
@@ -2132,24 +2264,26 @@ if [ -n "$TZ_MATCHES" ]; then
         fi
       fi
     fi
-    ((WARNINGS++))
-    add_json_check "Timezone-sensitive patterns (current_time/date)" "LOW" "failed" "$TZ_FINDING_COUNT"
+    add_json_check "Timezone-sensitive patterns (current_time/date)" "$TZ_SEVERITY" "failed" "$TZ_FINDING_COUNT"
   else
     text_echo "${GREEN}  ✓ Passed (all occurrences have phpcs:ignore)${NC}"
-    add_json_check "Timezone-sensitive patterns (current_time/date)" "LOW" "passed" 0
+    add_json_check "Timezone-sensitive patterns (current_time/date)" "$TZ_SEVERITY" "passed" 0
   fi
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Timezone-sensitive patterns (current_time/date)" "LOW" "passed" 0
+  add_json_check "Timezone-sensitive patterns (current_time/date)" "$TZ_SEVERITY" "passed" 0
 fi
 text_echo ""
 
-run_check "WARNING" "HIGH" "Randomized ordering (ORDER BY RAND)" "order-by-rand" \
+run_check "WARNING" "$(get_severity "order-by-rand" "HIGH")" "Randomized ordering (ORDER BY RAND)" "order-by-rand" \
   "-e orderby[[:space:]]*=>[[:space:]]*['\"]rand['\"]" \
   "-E ORDER[[:space:]]+BY[[:space:]]+RAND\("
 
 # LIKE queries with leading wildcards
-text_echo "${BLUE}▸ LIKE queries with leading wildcards ${YELLOW}[MEDIUM]${NC}"
+LIKE_SEVERITY=$(get_severity "like-leading-wildcard" "MEDIUM")
+LIKE_COLOR="${YELLOW}"
+if [ "$LIKE_SEVERITY" = "CRITICAL" ] || [ "$LIKE_SEVERITY" = "HIGH" ]; then LIKE_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ LIKE queries with leading wildcards ${LIKE_COLOR}[$LIKE_SEVERITY]${NC}"
 LIKE_WARNINGS=0
 LIKE_ISSUES=""
 LIKE_FINDING_COUNT=0
@@ -2187,7 +2321,7 @@ META_LIKE=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
 	    if sed -n "${start_line},${end_line}p" "$file" 2>/dev/null | grep -qE "'value'[[:space:]]*=>[[:space:]]*['\"]%"; then
 	      if ! should_suppress_finding "like-leading-wildcard" "$file"; then
 	        LIKE_ISSUES="${LIKE_ISSUES}${match}"$'\n'
-	        add_json_finding "like-leading-wildcard" "warning" "MEDIUM" "$file" "$line_num" "LIKE query with leading wildcard prevents index use" "$code"
+	        add_json_finding "like-leading-wildcard" "warning" "$LIKE_SEVERITY" "$file" "$line_num" "LIKE query with leading wildcard prevents index use" "$code"
 	        ((LIKE_WARNINGS++)) || true
 	        ((LIKE_FINDING_COUNT++)) || true
 	      fi
@@ -2209,7 +2343,7 @@ SQL_LIKE=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
 	    code=$(echo "$match" | cut -d: -f3-)
 	    if ! should_suppress_finding "like-leading-wildcard" "$file"; then
 	      LIKE_ISSUES="${LIKE_ISSUES}${match}"$'\n'
-	      add_json_finding "like-leading-wildcard" "warning" "MEDIUM" "$file" "$line_num" "LIKE query with leading wildcard prevents index use" "$code"
+	      add_json_finding "like-leading-wildcard" "warning" "$LIKE_SEVERITY" "$file" "$line_num" "LIKE query with leading wildcard prevents index use" "$code"
 	      ((LIKE_WARNINGS++)) || true
 	      ((LIKE_FINDING_COUNT++)) || true
 	    fi
@@ -2217,7 +2351,13 @@ SQL_LIKE=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
 	fi
 
 if [ "$LIKE_WARNINGS" -gt 0 ]; then
-  text_echo "${YELLOW}  ⚠ WARNING - LIKE queries with leading wildcards prevent index use:${NC}"
+  if [ "$LIKE_SEVERITY" = "CRITICAL" ] || [ "$LIKE_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - LIKE queries with leading wildcards prevent index use:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - LIKE queries with leading wildcards prevent index use:${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ]; then
     if [ "$VERBOSE" = "true" ]; then
       echo "$LIKE_ISSUES"
@@ -2228,16 +2368,18 @@ if [ "$LIKE_WARNINGS" -gt 0 ]; then
       fi
     fi
   fi
-  ((WARNINGS++))
-  add_json_check "LIKE queries with leading wildcards" "MEDIUM" "failed" "$LIKE_FINDING_COUNT"
+  add_json_check "LIKE queries with leading wildcards" "$LIKE_SEVERITY" "failed" "$LIKE_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "LIKE queries with leading wildcards" "MEDIUM" "passed" 0
+  add_json_check "LIKE queries with leading wildcards" "$LIKE_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # N+1 pattern check (simplified) - includes post, term, and user meta
-text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${YELLOW}[MEDIUM]${NC}"
+N1_SEVERITY=$(get_severity "n-plus-one-pattern" "MEDIUM")
+N1_COLOR="${YELLOW}"
+if [ "$N1_SEVERITY" = "CRITICAL" ]; then N1_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEVERITY]${NC}"
 	N1_FILES=$(grep -rl $EXCLUDE_ARGS --include="*.php" -e "get_post_meta\|get_term_meta\|get_user_meta" $PATHS 2>/dev/null | \
 	           xargs -I{} grep -l "foreach\|while[[:space:]]*(" {} 2>/dev/null | head -5 || true)
 	N1_FINDING_COUNT=0
@@ -2248,30 +2390,38 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${YELLOW}[MEDIUM]${
 	    [ -z "$f" ] && continue
 	    if ! should_suppress_finding "n-plus-1-pattern" "$f"; then
 	      VISIBLE_N1_FILES="${VISIBLE_N1_FILES}${f}"$'\n'
-	      add_json_finding "n-plus-1-pattern" "warning" "MEDIUM" "$f" "0" "File may contain N+1 query pattern (meta in loops)" ""
+	      add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "0" "File may contain N+1 query pattern (meta in loops)" ""
 	      ((N1_FINDING_COUNT++)) || true
 	    fi
 	  done <<< "$N1_FILES"
 
 	  if [ "$N1_FINDING_COUNT" -gt 0 ]; then
-	    text_echo "${YELLOW}  ⚠ Files with potential N+1 patterns:${NC}"
+	    if [ "$N1_SEVERITY" = "CRITICAL" ] || [ "$N1_SEVERITY" = "HIGH" ]; then
+	      text_echo "${RED}  ✗ FAILED${NC}"
+	      ((ERRORS++))
+	    else
+	      text_echo "${YELLOW}  ⚠ Files with potential N+1 patterns:${NC}"
+	      ((WARNINGS++))
+	    fi
 	    if [ "$OUTPUT_FORMAT" = "text" ]; then
 	      echo "$VISIBLE_N1_FILES" | while read f; do [ -n "$f" ] && echo "    - $f"; done
 	    fi
-	    ((WARNINGS++))
-	    add_json_check "Potential N+1 patterns (meta in loops)" "MEDIUM" "failed" "$N1_FINDING_COUNT"
+	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "failed" "$N1_FINDING_COUNT"
 	  else
 	    text_echo "${GREEN}  ✓ No obvious N+1 patterns${NC}"
-	    add_json_check "Potential N+1 patterns (meta in loops)" "MEDIUM" "passed" 0
+	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "passed" 0
 	  fi
 	else
 	  text_echo "${GREEN}  ✓ No obvious N+1 patterns${NC}"
-	  add_json_check "Potential N+1 patterns (meta in loops)" "MEDIUM" "passed" 0
+	  add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "passed" 0
 	fi
 text_echo ""
 
 # Transient abuse check - transients without expiration
-text_echo "${BLUE}▸ Transients without expiration ${YELLOW}[MEDIUM]${NC}"
+TRANSIENT_SEVERITY=$(get_severity "transient-no-expiration" "MEDIUM")
+TRANSIENT_COLOR="${YELLOW}"
+if [ "$TRANSIENT_SEVERITY" = "CRITICAL" ] || [ "$TRANSIENT_SEVERITY" = "HIGH" ]; then TRANSIENT_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Transients without expiration ${TRANSIENT_COLOR}[$TRANSIENT_SEVERITY]${NC}"
 TRANSIENT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "set_transient[[:space:]]*\(" $PATHS 2>/dev/null || true)
 TRANSIENT_ABUSE=false
 TRANSIENT_ISSUES=""
@@ -2289,7 +2439,7 @@ if [ -n "$TRANSIENT_MATCHES" ]; then
 	      code=$(echo "$match" | cut -d: -f3-)
 	      if ! should_suppress_finding "transient-no-expiration" "$file"; then
 	        TRANSIENT_ISSUES="${TRANSIENT_ISSUES}${match}"$'\n'
-	        add_json_finding "transient-no-expiration" "warning" "MEDIUM" "$file" "$line_num" "Transient may be missing expiration parameter" "$code"
+	        add_json_finding "transient-no-expiration" "warning" "$TRANSIENT_SEVERITY" "$file" "$line_num" "Transient may be missing expiration parameter" "$code"
 	        TRANSIENT_ABUSE=true
 	        ((TRANSIENT_FINDING_COUNT++)) || true
 	      fi
@@ -2298,20 +2448,28 @@ if [ -n "$TRANSIENT_MATCHES" ]; then
 fi
 
 if [ "$TRANSIENT_ABUSE" = true ]; then
-  text_echo "${YELLOW}  ⚠ WARNING - Transients may be missing expiration parameter:${NC}"
+  if [ "$TRANSIENT_SEVERITY" = "CRITICAL" ] || [ "$TRANSIENT_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - Transients may be missing expiration parameter:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - Transients may be missing expiration parameter:${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ]; then
     echo "$TRANSIENT_ISSUES" | head -5
   fi
-  ((WARNINGS++))
-  add_json_check "Transients without expiration" "MEDIUM" "failed" "$TRANSIENT_FINDING_COUNT"
+  add_json_check "Transients without expiration" "$TRANSIENT_SEVERITY" "failed" "$TRANSIENT_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Transients without expiration" "MEDIUM" "passed" 0
+  add_json_check "Transients without expiration" "$TRANSIENT_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # Script/style versioning with time() - prevents browser caching
-text_echo "${BLUE}▸ Script/style versioning with time() ${YELLOW}[MEDIUM]${NC}"
+SCRIPT_TIME_SEVERITY=$(get_severity "asset-version-time" "MEDIUM")
+SCRIPT_TIME_COLOR="${YELLOW}"
+if [ "$SCRIPT_TIME_SEVERITY" = "CRITICAL" ] || [ "$SCRIPT_TIME_SEVERITY" = "HIGH" ]; then SCRIPT_TIME_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Script/style versioning with time() ${SCRIPT_TIME_COLOR}[$SCRIPT_TIME_SEVERITY]${NC}"
 SCRIPT_TIME_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "wp_(register|enqueue)_(script|style)[[:space:]]*\([^)]*,[[:space:]]*time[[:space:]]*\(" \
   $PATHS 2>/dev/null || true)
@@ -2326,7 +2484,7 @@ if [ -n "$SCRIPT_TIME_MATCHES" ]; then
     code=$(echo "$match" | cut -d: -f3-)
     if ! should_suppress_finding "script-versioning-time" "$file"; then
       text_echo "  $file:$line_num - using time() as version"
-      add_json_finding "script-versioning-time" "warning" "MEDIUM" "$file" "$line_num" "Using time() as script/style version prevents browser caching - use plugin version instead" "$code"
+      add_json_finding "asset-version-time" "warning" "$SCRIPT_TIME_SEVERITY" "$file" "$line_num" "Using time() as script/style version prevents browser caching - use plugin version instead" "$code"
       SCRIPT_TIME_ISSUES=true
       ((SCRIPT_TIME_FINDING_COUNT++)) || true
     fi
@@ -2334,17 +2492,25 @@ if [ -n "$SCRIPT_TIME_MATCHES" ]; then
 fi
 
 if [ "$SCRIPT_TIME_ISSUES" = true ]; then
-  text_echo "${YELLOW}  ⚠ WARNING - Scripts/styles using time() as version:${NC}"
-  ((WARNINGS++))
-  add_json_check "Script/style versioning with time()" "MEDIUM" "failed" "$SCRIPT_TIME_FINDING_COUNT"
+  if [ "$SCRIPT_TIME_SEVERITY" = "CRITICAL" ] || [ "$SCRIPT_TIME_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - Scripts/styles using time() as version:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - Scripts/styles using time() as version:${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "Script/style versioning with time()" "$SCRIPT_TIME_SEVERITY" "failed" "$SCRIPT_TIME_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Script/style versioning with time()" "MEDIUM" "passed" 0
+  add_json_check "Script/style versioning with time()" "$SCRIPT_TIME_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # file_get_contents() for external URLs - Security & Performance Issue
-text_echo "${BLUE}▸ file_get_contents() with external URLs ${RED}[HIGH]${NC}"
+FILE_GET_CONTENTS_SEVERITY=$(get_severity "file-get-contents-url" "HIGH")
+FILE_GET_CONTENTS_COLOR="${YELLOW}"
+if [ "$FILE_GET_CONTENTS_SEVERITY" = "CRITICAL" ] || [ "$FILE_GET_CONTENTS_SEVERITY" = "HIGH" ]; then FILE_GET_CONTENTS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ file_get_contents() with external URLs ${FILE_GET_CONTENTS_COLOR}[$FILE_GET_CONTENTS_SEVERITY]${NC}"
 FILE_GET_CONTENTS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "file_get_contents[[:space:]]*\([[:space:]]*['\"]https?://" \
   $PATHS 2>/dev/null || true)
@@ -2366,8 +2532,7 @@ if [ -n "$FILE_GET_CONTENTS_MATCHES" ]; then
     code=$(echo "$match" | cut -d: -f3-)
     if ! should_suppress_finding "file-get-contents-url" "$file"; then
       FILE_GET_CONTENTS_ISSUES="${FILE_GET_CONTENTS_ISSUES}${match}"$'\n'
-      add_json_finding "file-get-contents-url" "error" "HIGH" "$file" "$line_num" "file_get_contents() with URL is insecure and slow - use wp_remote_get() instead" "$code"
-      ((ERRORS++)) || true
+      add_json_finding "file-get-contents-url" "error" "$FILE_GET_CONTENTS_SEVERITY" "$file" "$line_num" "file_get_contents() with URL is insecure and slow - use wp_remote_get() instead" "$code"
       ((FILE_GET_CONTENTS_FINDING_COUNT++)) || true
     fi
   done <<< "$FILE_GET_CONTENTS_MATCHES"
@@ -2385,8 +2550,7 @@ if [ -n "$FILE_GET_CONTENTS_VAR" ]; then
     if echo "$code" | grep -qiE '\$(url|uri|endpoint|api|remote|external|http)'; then
       if ! should_suppress_finding "file-get-contents-url" "$file"; then
         FILE_GET_CONTENTS_ISSUES="${FILE_GET_CONTENTS_ISSUES}${match}"$'\n'
-        add_json_finding "file-get-contents-url" "error" "HIGH" "$file" "$line_num" "file_get_contents() with potential URL variable - use wp_remote_get() instead" "$code"
-        ((ERRORS++)) || true
+        add_json_finding "file-get-contents-url" "error" "$FILE_GET_CONTENTS_SEVERITY" "$file" "$line_num" "file_get_contents() with potential URL variable - use wp_remote_get() instead" "$code"
         ((FILE_GET_CONTENTS_FINDING_COUNT++)) || true
       fi
     fi
@@ -2394,19 +2558,28 @@ if [ -n "$FILE_GET_CONTENTS_VAR" ]; then
 fi
 
 if [ "$FILE_GET_CONTENTS_FINDING_COUNT" -gt 0 ]; then
-  text_echo "${RED}  ✗ FAILED - file_get_contents() used for external URLs:${NC}"
+  if [ "$FILE_GET_CONTENTS_SEVERITY" = "CRITICAL" ] || [ "$FILE_GET_CONTENTS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - file_get_contents() used for external URLs:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - file_get_contents() used for external URLs:${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$FILE_GET_CONTENTS_ISSUES" ]; then
     echo "$FILE_GET_CONTENTS_ISSUES" | head -5
   fi
-  add_json_check "file_get_contents with external URLs" "HIGH" "failed" "$FILE_GET_CONTENTS_FINDING_COUNT"
+  add_json_check "file_get_contents with external URLs" "$FILE_GET_CONTENTS_SEVERITY" "failed" "$FILE_GET_CONTENTS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "file_get_contents with external URLs" "HIGH" "passed" 0
+  add_json_check "file_get_contents with external URLs" "$FILE_GET_CONTENTS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
 # HTTP requests without timeout - Can hang entire site
-text_echo "${BLUE}▸ HTTP requests without timeout ${YELLOW}[MEDIUM]${NC}"
+HTTP_TIMEOUT_SEVERITY=$(get_severity "http-no-timeout" "MEDIUM")
+HTTP_TIMEOUT_COLOR="${YELLOW}"
+if [ "$HTTP_TIMEOUT_SEVERITY" = "CRITICAL" ] || [ "$HTTP_TIMEOUT_SEVERITY" = "HIGH" ]; then HTTP_TIMEOUT_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ HTTP requests without timeout ${HTTP_TIMEOUT_COLOR}[$HTTP_TIMEOUT_SEVERITY]${NC}"
 HTTP_NO_TIMEOUT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "wp_remote_(get|post|request|head)[[:space:]]*\(" \
   $PATHS 2>/dev/null || true)
@@ -2467,8 +2640,7 @@ if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
     if [ "$has_timeout" = false ]; then
       if ! should_suppress_finding "http-no-timeout" "$file"; then
         HTTP_NO_TIMEOUT_ISSUES="${HTTP_NO_TIMEOUT_ISSUES}${match}"$'\n'
-        add_json_finding "http-no-timeout" "warning" "MEDIUM" "$file" "$line_num" "HTTP request without explicit timeout can hang site if remote server doesn't respond" "$code"
-        ((WARNINGS++)) || true
+        add_json_finding "http-no-timeout" "warning" "$HTTP_TIMEOUT_SEVERITY" "$file" "$line_num" "HTTP request without explicit timeout can hang site if remote server doesn't respond" "$code"
         ((HTTP_NO_TIMEOUT_FINDING_COUNT++)) || true
       fi
     fi
@@ -2476,14 +2648,88 @@ if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
 fi
 
 if [ "$HTTP_NO_TIMEOUT_FINDING_COUNT" -gt 0 ]; then
-  text_echo "${YELLOW}  ⚠ WARNING - HTTP requests without timeout:${NC}"
+  if [ "$HTTP_TIMEOUT_SEVERITY" = "CRITICAL" ] || [ "$HTTP_TIMEOUT_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - HTTP requests without timeout:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - HTTP requests without timeout:${NC}"
+    ((WARNINGS++))
+  fi
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$HTTP_NO_TIMEOUT_ISSUES" ]; then
     echo "$HTTP_NO_TIMEOUT_ISSUES" | head -5
   fi
-  add_json_check "HTTP requests without timeout" "MEDIUM" "failed" "$HTTP_NO_TIMEOUT_FINDING_COUNT"
+  add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "failed" "$HTTP_NO_TIMEOUT_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "HTTP requests without timeout" "MEDIUM" "passed" 0
+  add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# Disallowed PHP short tags - WordPress Coding Standards violation
+PHP_SHORT_TAGS_SEVERITY=$(get_severity "disallowed-php-short-tags" "MEDIUM")
+PHP_SHORT_TAGS_COLOR="${YELLOW}"
+if [ "$PHP_SHORT_TAGS_SEVERITY" = "CRITICAL" ] || [ "$PHP_SHORT_TAGS_SEVERITY" = "HIGH" ]; then PHP_SHORT_TAGS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Disallowed PHP short tags ${PHP_SHORT_TAGS_COLOR}[$PHP_SHORT_TAGS_SEVERITY]${NC}"
+
+# Find short echo tags (<?=)
+SHORT_ECHO_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
+  -F "<?=" \
+  $PATHS 2>/dev/null || true)
+
+# Find short open tags (<? followed by space/tab/newline, but not <?php or <?xml)
+# We'll use a simple approach: find all "<? " and filter out "<?php" and "<?xml"
+SHORT_OPEN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
+  -E "<\?[[:space:]]" \
+  $PATHS 2>/dev/null | grep -v "<?php" | grep -v "<?xml" || true)
+
+PHP_SHORT_TAGS_ISSUES=""
+PHP_SHORT_TAGS_FINDING_COUNT=0
+
+# Process short echo tags (<?=)
+if [ -n "$SHORT_ECHO_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line_num=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    if ! should_suppress_finding "disallowed-php-short-tags" "$file"; then
+      PHP_SHORT_TAGS_ISSUES="${PHP_SHORT_TAGS_ISSUES}${match}"$'\n'
+      add_json_finding "disallowed-php-short-tags" "warning" "$PHP_SHORT_TAGS_SEVERITY" "$file" "$line_num" "PHP short echo tag (<?=) used - WordPress requires full <?php tags" "$code"
+      ((PHP_SHORT_TAGS_FINDING_COUNT++)) || true
+    fi
+  done <<< "$SHORT_ECHO_MATCHES"
+fi
+
+# Process short open tags (<? )
+if [ -n "$SHORT_OPEN_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line_num=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    if ! should_suppress_finding "disallowed-php-short-tags" "$file"; then
+      PHP_SHORT_TAGS_ISSUES="${PHP_SHORT_TAGS_ISSUES}${match}"$'\n'
+      add_json_finding "disallowed-php-short-tags" "warning" "$PHP_SHORT_TAGS_SEVERITY" "$file" "$line_num" "PHP short open tag (<? ) used - WordPress requires full <?php tags" "$code"
+      ((PHP_SHORT_TAGS_FINDING_COUNT++)) || true
+    fi
+  done <<< "$SHORT_OPEN_MATCHES"
+fi
+
+if [ "$PHP_SHORT_TAGS_FINDING_COUNT" -gt 0 ]; then
+  if [ "$PHP_SHORT_TAGS_SEVERITY" = "CRITICAL" ] || [ "$PHP_SHORT_TAGS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - PHP short tags found:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - PHP short tags found:${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$PHP_SHORT_TAGS_ISSUES" ]; then
+    echo "$PHP_SHORT_TAGS_ISSUES" | head -5
+  fi
+  add_json_check "Disallowed PHP short tags" "$PHP_SHORT_TAGS_SEVERITY" "failed" "$PHP_SHORT_TAGS_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Disallowed PHP short tags" "$PHP_SHORT_TAGS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
