@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.60
+# Version: 1.0.61
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -18,6 +18,7 @@
 #   --no-log                 Disable logging to file
 #   --no-context             Disable context lines around findings
 #   --context-lines N        Number of context lines to show (default: 3)
+#   --severity-config <path> Use custom severity levels from JSON config file
 #   --generate-baseline      Generate .hcc-baseline from current findings
 #   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
 #   --ignore-baseline        Ignore baseline file even if present
@@ -47,7 +48,7 @@ source "$LIB_DIR/common-helpers.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.60"
+SCRIPT_VERSION="1.0.61"
 
 # Defaults
 PATHS="."
@@ -58,6 +59,10 @@ OUTPUT_FORMAT="text"  # text or json
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"
+
+# Severity configuration
+SEVERITY_CONFIG_FILE=""  # Path to custom severity config (empty = use factory defaults)
+SEVERITY_CONFIG_LOADED=false  # Track if config has been loaded
 
 # Baseline configuration
 BASELINE_FILE=".hcc-baseline"
@@ -157,6 +162,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --context-lines)
       CONTEXT_LINES="$2"
+      shift 2
+      ;;
+    --severity-config)
+      SEVERITY_CONFIG_FILE="$2"
+      if [ ! -f "$SEVERITY_CONFIG_FILE" ]; then
+        echo "Error: Severity config file not found: $SEVERITY_CONFIG_FILE"
+        exit 1
+      fi
       shift 2
       ;;
     --help)
@@ -335,6 +348,36 @@ detect_project_info() {
     "lines_of_code": $lines_of_code
   }
 EOF
+}
+
+# ============================================================================
+# Severity Configuration Functions
+# ============================================================================
+
+# Get severity level for a rule ID
+# Returns custom level if set in config file, otherwise returns fallback
+# This function queries the JSON config file directly (Bash 3.2 compatible)
+get_severity() {
+  local rule_id="$1"
+  local fallback="${2:-MEDIUM}"  # Default fallback if not found
+  local severity=""
+
+  # If custom config is specified, try to get severity from it
+  if [ -n "$SEVERITY_CONFIG_FILE" ] && [ -f "$SEVERITY_CONFIG_FILE" ]; then
+    severity=$(jq -r ".severity_levels[\"$rule_id\"].level // empty" "$SEVERITY_CONFIG_FILE" 2>/dev/null)
+  fi
+
+  # If not found in custom config, try factory defaults
+  if [ -z "$severity" ] && [ -f "$REPO_ROOT/config/severity-levels.json" ]; then
+    severity=$(jq -r ".severity_levels[\"$rule_id\"].level // empty" "$REPO_ROOT/config/severity-levels.json" 2>/dev/null)
+  fi
+
+  # If still not found, use fallback
+  if [ -z "$severity" ]; then
+    severity="$fallback"
+  fi
+
+  echo "$severity"
 }
 
 # Setup logging
@@ -1417,7 +1460,7 @@ text_echo ""
 
 # Debug code in production (JS + PHP)
 OVERRIDE_GREP_INCLUDE="--include=*.php --include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
-run_check "ERROR" "CRITICAL" "Debug code in production" "spo-001-debug-code" \
+run_check "ERROR" "$(get_severity "spo-001-debug-code" "CRITICAL")" "Debug code in production" "spo-001-debug-code" \
   "-E console\\.(log|error|warn)[[:space:]]*\\(" \
   "-e debugger;" \
   "-E alert[[:space:]]*\\(" \
@@ -1437,7 +1480,7 @@ text_echo ""
 # that is accessible to front-end scripts via browser console.
 # This catches patterns like: localStorage.setItem('pqs_plugin_cache', ...)
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
-run_check "ERROR" "CRITICAL" "Sensitive data in localStorage/sessionStorage" "hcc-001-localstorage-exposure" \
+run_check "ERROR" "$(get_severity "hcc-001-localstorage-exposure" "CRITICAL")" "Sensitive data in localStorage/sessionStorage" "hcc-001-localstorage-exposure" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*plugin" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*cache" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*user" \
@@ -1455,7 +1498,7 @@ unset OVERRIDE_GREP_INCLUDE
 # browser storage, which often contains sensitive metadata (versions, paths, settings).
 # This catches patterns like: localStorage.setItem('key', JSON.stringify(obj))
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
-run_check "ERROR" "CRITICAL" "Serialization of objects to client storage" "hcc-002-client-serialization" \
+run_check "ERROR" "$(get_severity "hcc-002-client-serialization" "CRITICAL")" "Serialization of objects to client storage" "hcc-002-client-serialization" \
   "-E localStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
   "-E sessionStorage\\.setItem[[:space:]]*\\([^)]*JSON\\.stringify" \
   "-E localStorage\\[[^]]*\\][[:space:]]*=[[:space:]]*JSON\\.stringify"
@@ -1468,19 +1511,19 @@ text_echo ""
 # Catches patterns like: new RegExp('\\b' + query + '\\b') or RegExp(`pattern${userInput}`)
 # Note: Uses single -E with alternation (|) for BSD grep compatibility
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx --include=*.php"
-run_check "ERROR" "MEDIUM" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
+run_check "ERROR" "$(get_severity "hcc-008-unsafe-regexp" "MEDIUM")" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
   "-E ((new[[:space:]]+)?RegExp[[:space:]]*\\([^)]*[[:space:]]\\+[[:space:]])|((new[[:space:]]+)?RegExp.*\\$\\{)"
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
 # Direct superglobal manipulation
-run_check "ERROR" "HIGH" "Direct superglobal manipulation" "spo-002-superglobals" \
+run_check "ERROR" "$(get_severity "spo-002-superglobals" "HIGH")" "Direct superglobal manipulation" "spo-002-superglobals" \
   "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \
   "-E \\$_(GET|POST|REQUEST)[[:space:]]*=" \
   "-E \\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*="
 
 # Insecure data deserialization
-run_check "ERROR" "CRITICAL" "Insecure data deserialization" "spo-003-insecure-deserialization" \
+run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \
   "-E unserialize[[:space:]]*\\(\\$_" \
   "-E base64_decode[[:space:]]*\\(\\$_" \
   "-E json_decode[[:space:]]*\\(\\$_" \
@@ -1560,10 +1603,10 @@ if [ "$ADMIN_CAP_MISSING" = true ]; then
     done <<< "$(echo "$ADMIN_CAP_VISIBLE" | head -5)"
   fi
   ((ERRORS++))
-  add_json_check "Admin functions without capability checks" "HIGH" "failed" "$ADMIN_CAP_FINDING_COUNT"
+  add_json_check "Admin functions without capability checks" "$(get_severity "admin-no-capability-check" "HIGH")" "failed" "$ADMIN_CAP_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Admin functions without capability checks" "HIGH" "passed" 0
+  add_json_check "Admin functions without capability checks" "$(get_severity "admin-no-capability-check" "HIGH")" "passed" 0
 fi
 text_echo ""
 
@@ -1613,10 +1656,10 @@ if [ "$AJAX_POLLING" = true ]; then
     done <<< "$(echo "$AJAX_POLLING_VISIBLE" | head -5)"
   fi
   ((ERRORS++))
-  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "HIGH" "failed" "$AJAX_POLLING_FINDING_COUNT"
+  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "$(get_severity "ajax-polling-unbounded" "HIGH")" "failed" "$AJAX_POLLING_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "HIGH" "passed" 0
+  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "$(get_severity "ajax-polling-unbounded" "HIGH")" "passed" 0
 fi
 text_echo ""
 
@@ -1670,10 +1713,10 @@ if [ "$EXPENSIVE_POLLING" = true ]; then
     done <<< "$(echo "$EXPENSIVE_POLLING_VISIBLE" | head -5)"
   fi
   ((ERRORS++))
-  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "$(get_severity "hcc-005-expensive-polling" "HIGH")" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "HIGH" "passed" 0
+  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "$(get_severity "hcc-005-expensive-polling" "HIGH")" "passed" 0
 fi
 text_echo ""
 
@@ -1723,10 +1766,10 @@ if [ "$REST_UNBOUNDED" = true ]; then
     done <<< "$(echo "$REST_VISIBLE" | head -5)"
   fi
   ((ERRORS++))
-  add_json_check "REST endpoints without pagination/limits" "CRITICAL" "failed" "$REST_FINDING_COUNT"
+  add_json_check "REST endpoints without pagination/limits" "$(get_severity "rest-no-pagination" "CRITICAL")" "failed" "$REST_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "REST endpoints without pagination/limits" "CRITICAL" "passed" 0
+  add_json_check "REST endpoints without pagination/limits" "$(get_severity "rest-no-pagination" "CRITICAL")" "passed" 0
 fi
 text_echo ""
 
@@ -1767,23 +1810,23 @@ fi
 if [ "$AJAX_NONCE_FAIL" = true ]; then
   text_echo "${RED}  ✗ FAILED${NC}"
   ((ERRORS++))
-  add_json_check "wp_ajax handlers without nonce validation" "HIGH" "failed" "$AJAX_NONCE_FINDING_COUNT"
+  add_json_check "wp_ajax handlers without nonce validation" "$(get_severity "ajax-no-nonce" "HIGH")" "failed" "$AJAX_NONCE_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "wp_ajax handlers without nonce validation" "HIGH" "passed" 0
+  add_json_check "wp_ajax handlers without nonce validation" "$(get_severity "ajax-no-nonce" "HIGH")" "passed" 0
 fi
 text_echo ""
 
-run_check "ERROR" "CRITICAL" "Unbounded posts_per_page" "unbounded-posts-per-page" \
+run_check "ERROR" "$(get_severity "unbounded-posts-per-page" "CRITICAL")" "Unbounded posts_per_page" "unbounded-posts-per-page" \
   "-e posts_per_page[[:space:]]*=>[[:space:]]*-1"
 
-run_check "ERROR" "CRITICAL" "Unbounded numberposts" "unbounded-numberposts" \
+run_check "ERROR" "$(get_severity "unbounded-numberposts" "CRITICAL")" "Unbounded numberposts" "unbounded-numberposts" \
   "-e numberposts[[:space:]]*=>[[:space:]]*-1"
 
-run_check "ERROR" "CRITICAL" "nopaging => true" "nopaging-true" \
+run_check "ERROR" "$(get_severity "nopaging-true" "CRITICAL")" "nopaging => true" "nopaging-true" \
   "-e nopaging[[:space:]]*=>[[:space:]]*true"
 
-run_check "ERROR" "CRITICAL" "Unbounded wc_get_orders limit" "unbounded-wc-get-orders" \
+run_check "ERROR" "$(get_severity "unbounded-wc-get-orders" "CRITICAL")" "Unbounded wc_get_orders limit" "unbounded-wc-get-orders" \
   "-e 'limit'[[:space:]]*=>[[:space:]]*-1"
 
 # get_users check - unbounded user queries (can crash sites with many users)
@@ -1841,10 +1884,10 @@ if [ "$USERS_UNBOUNDED" = true ]; then
     done <<< "$(echo "$USERS_VISIBLE" | head -10)"
   fi
   ((ERRORS++))
-  add_json_check "get_users without number limit" "CRITICAL" "failed" "$USERS_FINDING_COUNT"
+  add_json_check "get_users without number limit" "$(get_severity "get-users-no-limit" "CRITICAL")" "failed" "$USERS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "get_users without number limit" "CRITICAL" "passed" 0
+  add_json_check "get_users without number limit" "$(get_severity "get-users-no-limit" "CRITICAL")" "passed" 0
 fi
 text_echo ""
 
@@ -1873,10 +1916,10 @@ fi
 if [ "$TERMS_UNBOUNDED" = true ]; then
   text_echo "${RED}  ✗ FAILED${NC}"
   ((ERRORS++))
-  add_json_check "get_terms without number limit" "CRITICAL" "failed" "$TERMS_FINDING_COUNT"
+  add_json_check "get_terms without number limit" "$(get_severity "get-terms-no-limit" "CRITICAL")" "failed" "$TERMS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "get_terms without number limit" "CRITICAL" "passed" 0
+  add_json_check "get_terms without number limit" "$(get_severity "get-terms-no-limit" "CRITICAL")" "passed" 0
 fi
 text_echo ""
 
@@ -1903,10 +1946,10 @@ fi
 if [ "$PRE_GET_POSTS_UNBOUNDED" = true ]; then
   text_echo "${RED}  ✗ FAILED${NC}"
   ((ERRORS++))
-  add_json_check "pre_get_posts forcing unbounded queries" "CRITICAL" "failed" "$PRE_GET_POSTS_FINDING_COUNT"
+  add_json_check "pre_get_posts forcing unbounded queries" "$(get_severity "pre-get-posts-unbounded" "CRITICAL")" "failed" "$PRE_GET_POSTS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "pre_get_posts forcing unbounded queries" "CRITICAL" "passed" 0
+  add_json_check "pre_get_posts forcing unbounded queries" "$(get_severity "pre-get-posts-unbounded" "CRITICAL")" "passed" 0
 fi
 text_echo ""
 
@@ -1952,10 +1995,10 @@ $line"
 if [ "$TERMS_SQL_UNBOUNDED" = true ]; then
   text_echo "${RED}  ✗ FAILED${NC}"
   ((ERRORS++))
-  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "HIGH" "failed" "$TERMS_SQL_FINDING_COUNT"
+  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "$(get_severity "unbounded-sql-terms" "HIGH")" "failed" "$TERMS_SQL_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "HIGH" "passed" 0
+  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "$(get_severity "unbounded-sql-terms" "HIGH")" "passed" 0
 fi
 
 # Unvalidated cron intervals - can cause infinite loops or silent failures
@@ -2058,10 +2101,10 @@ fi
 if [ "$CRON_INTERVAL_FAIL" = true ]; then
   text_echo "${RED}  ✗ FAILED${NC}"
   ((ERRORS++))
-  add_json_check "Unvalidated cron intervals" "HIGH" "failed" "$CRON_INTERVAL_FINDING_COUNT"
+  add_json_check "Unvalidated cron intervals" "$(get_severity "cron-interval-unvalidated" "HIGH")" "failed" "$CRON_INTERVAL_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unvalidated cron intervals" "HIGH" "passed" 0
+  add_json_check "Unvalidated cron intervals" "$(get_severity "cron-interval-unvalidated" "HIGH")" "passed" 0
 fi
 text_echo ""
 
@@ -2133,18 +2176,18 @@ if [ -n "$TZ_MATCHES" ]; then
       fi
     fi
     ((WARNINGS++))
-    add_json_check "Timezone-sensitive patterns (current_time/date)" "LOW" "failed" "$TZ_FINDING_COUNT"
+    add_json_check "Timezone-sensitive patterns (current_time/date)" "$(get_severity "timezone-sensitive" "LOW")" "failed" "$TZ_FINDING_COUNT"
   else
     text_echo "${GREEN}  ✓ Passed (all occurrences have phpcs:ignore)${NC}"
-    add_json_check "Timezone-sensitive patterns (current_time/date)" "LOW" "passed" 0
+    add_json_check "Timezone-sensitive patterns (current_time/date)" "$(get_severity "timezone-sensitive" "LOW")" "passed" 0
   fi
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Timezone-sensitive patterns (current_time/date)" "LOW" "passed" 0
+  add_json_check "Timezone-sensitive patterns (current_time/date)" "$(get_severity "timezone-sensitive" "LOW")" "passed" 0
 fi
 text_echo ""
 
-run_check "WARNING" "HIGH" "Randomized ordering (ORDER BY RAND)" "order-by-rand" \
+run_check "WARNING" "$(get_severity "order-by-rand" "HIGH")" "Randomized ordering (ORDER BY RAND)" "order-by-rand" \
   "-e orderby[[:space:]]*=>[[:space:]]*['\"]rand['\"]" \
   "-E ORDER[[:space:]]+BY[[:space:]]+RAND\("
 
@@ -2229,15 +2272,18 @@ if [ "$LIKE_WARNINGS" -gt 0 ]; then
     fi
   fi
   ((WARNINGS++))
-  add_json_check "LIKE queries with leading wildcards" "MEDIUM" "failed" "$LIKE_FINDING_COUNT"
+  add_json_check "LIKE queries with leading wildcards" "$(get_severity "like-leading-wildcard" "MEDIUM")" "failed" "$LIKE_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "LIKE queries with leading wildcards" "MEDIUM" "passed" 0
+  add_json_check "LIKE queries with leading wildcards" "$(get_severity "like-leading-wildcard" "MEDIUM")" "passed" 0
 fi
 text_echo ""
 
 # N+1 pattern check (simplified) - includes post, term, and user meta
-text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${YELLOW}[MEDIUM]${NC}"
+N1_SEVERITY=$(get_severity "n-plus-one-pattern" "MEDIUM")
+N1_COLOR="${YELLOW}"
+if [ "$N1_SEVERITY" = "CRITICAL" ]; then N1_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEVERITY]${NC}"
 	N1_FILES=$(grep -rl $EXCLUDE_ARGS --include="*.php" -e "get_post_meta\|get_term_meta\|get_user_meta" $PATHS 2>/dev/null | \
 	           xargs -I{} grep -l "foreach\|while[[:space:]]*(" {} 2>/dev/null | head -5 || true)
 	N1_FINDING_COUNT=0
@@ -2248,25 +2294,30 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${YELLOW}[MEDIUM]${
 	    [ -z "$f" ] && continue
 	    if ! should_suppress_finding "n-plus-1-pattern" "$f"; then
 	      VISIBLE_N1_FILES="${VISIBLE_N1_FILES}${f}"$'\n'
-	      add_json_finding "n-plus-1-pattern" "warning" "MEDIUM" "$f" "0" "File may contain N+1 query pattern (meta in loops)" ""
+	      add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "0" "File may contain N+1 query pattern (meta in loops)" ""
 	      ((N1_FINDING_COUNT++)) || true
 	    fi
 	  done <<< "$N1_FILES"
 
 	  if [ "$N1_FINDING_COUNT" -gt 0 ]; then
-	    text_echo "${YELLOW}  ⚠ Files with potential N+1 patterns:${NC}"
+	    if [ "$N1_SEVERITY" = "CRITICAL" ] || [ "$N1_SEVERITY" = "HIGH" ]; then
+	      text_echo "${RED}  ✗ FAILED${NC}"
+	      ((ERRORS++))
+	    else
+	      text_echo "${YELLOW}  ⚠ Files with potential N+1 patterns:${NC}"
+	      ((WARNINGS++))
+	    fi
 	    if [ "$OUTPUT_FORMAT" = "text" ]; then
 	      echo "$VISIBLE_N1_FILES" | while read f; do [ -n "$f" ] && echo "    - $f"; done
 	    fi
-	    ((WARNINGS++))
-	    add_json_check "Potential N+1 patterns (meta in loops)" "MEDIUM" "failed" "$N1_FINDING_COUNT"
+	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "failed" "$N1_FINDING_COUNT"
 	  else
 	    text_echo "${GREEN}  ✓ No obvious N+1 patterns${NC}"
-	    add_json_check "Potential N+1 patterns (meta in loops)" "MEDIUM" "passed" 0
+	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "passed" 0
 	  fi
 	else
 	  text_echo "${GREEN}  ✓ No obvious N+1 patterns${NC}"
-	  add_json_check "Potential N+1 patterns (meta in loops)" "MEDIUM" "passed" 0
+	  add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "passed" 0
 	fi
 text_echo ""
 
@@ -2303,10 +2354,10 @@ if [ "$TRANSIENT_ABUSE" = true ]; then
     echo "$TRANSIENT_ISSUES" | head -5
   fi
   ((WARNINGS++))
-  add_json_check "Transients without expiration" "MEDIUM" "failed" "$TRANSIENT_FINDING_COUNT"
+  add_json_check "Transients without expiration" "$(get_severity "transient-no-expiration" "MEDIUM")" "failed" "$TRANSIENT_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Transients without expiration" "MEDIUM" "passed" 0
+  add_json_check "Transients without expiration" "$(get_severity "transient-no-expiration" "MEDIUM")" "passed" 0
 fi
 text_echo ""
 
@@ -2336,10 +2387,10 @@ fi
 if [ "$SCRIPT_TIME_ISSUES" = true ]; then
   text_echo "${YELLOW}  ⚠ WARNING - Scripts/styles using time() as version:${NC}"
   ((WARNINGS++))
-  add_json_check "Script/style versioning with time()" "MEDIUM" "failed" "$SCRIPT_TIME_FINDING_COUNT"
+  add_json_check "Script/style versioning with time()" "$(get_severity "script-versioning-time" "MEDIUM")" "failed" "$SCRIPT_TIME_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Script/style versioning with time()" "MEDIUM" "passed" 0
+  add_json_check "Script/style versioning with time()" "$(get_severity "script-versioning-time" "MEDIUM")" "passed" 0
 fi
 text_echo ""
 
@@ -2398,10 +2449,10 @@ if [ "$FILE_GET_CONTENTS_FINDING_COUNT" -gt 0 ]; then
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$FILE_GET_CONTENTS_ISSUES" ]; then
     echo "$FILE_GET_CONTENTS_ISSUES" | head -5
   fi
-  add_json_check "file_get_contents with external URLs" "HIGH" "failed" "$FILE_GET_CONTENTS_FINDING_COUNT"
+  add_json_check "file_get_contents with external URLs" "$(get_severity "file-get-contents-url" "HIGH")" "failed" "$FILE_GET_CONTENTS_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "file_get_contents with external URLs" "HIGH" "passed" 0
+  add_json_check "file_get_contents with external URLs" "$(get_severity "file-get-contents-url" "HIGH")" "passed" 0
 fi
 text_echo ""
 
@@ -2480,10 +2531,10 @@ if [ "$HTTP_NO_TIMEOUT_FINDING_COUNT" -gt 0 ]; then
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$HTTP_NO_TIMEOUT_ISSUES" ]; then
     echo "$HTTP_NO_TIMEOUT_ISSUES" | head -5
   fi
-  add_json_check "HTTP requests without timeout" "MEDIUM" "failed" "$HTTP_NO_TIMEOUT_FINDING_COUNT"
+  add_json_check "HTTP requests without timeout" "$(get_severity "http-no-timeout" "MEDIUM")" "failed" "$HTTP_NO_TIMEOUT_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "HTTP requests without timeout" "MEDIUM" "passed" 0
+  add_json_check "HTTP requests without timeout" "$(get_severity "http-no-timeout" "MEDIUM")" "passed" 0
 fi
 text_echo ""
 

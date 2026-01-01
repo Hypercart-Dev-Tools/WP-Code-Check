@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions/workflows/ci.yml/badge.svg)](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.60-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.61-green.svg)](CHANGELOG.md)
 
 ---
 

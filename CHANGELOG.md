@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.61] - 2025-12-31
+
+### Added
+- **Custom Severity Configuration (Day 2)** - Implemented `--severity-config <path>` CLI option to customize severity levels
+  - **Purpose:** Allows teams to customize severity rankings based on their specific risk tolerance and priorities
+  - **Implementation:** Bash 3.2 compatible (works on macOS without requiring Bash 4+)
+  - **get_severity() Function:** Queries JSON config file directly using jq (no associative arrays needed)
+  - **Fallback Chain:** Custom config → Factory defaults → Hardcoded fallback
+  - **Dynamic Display:** Severity levels and colors update based on config (e.g., [CRITICAL] in red, [MEDIUM] in yellow)
+  - **Error/Warning Logic:** CRITICAL/HIGH severity = ERROR (fails build), MEDIUM/LOW = WARNING
+  - **All Checks Updated:** All 28 checks now use `get_severity()` instead of hardcoded severity levels
+  - **Tested:** N+1 pattern successfully upgraded from MEDIUM to CRITICAL via custom config
+
+### Changed
+- **N+1 Pattern Check** - Updated to use dynamic severity from config file
+  - **Display:** Shows `[CRITICAL]` and `✗ FAILED` when severity is CRITICAL/HIGH
+  - **Display:** Shows `[MEDIUM]` and `⚠ WARNING` when severity is MEDIUM/LOW
+  - **Error Counting:** Increments ERRORS counter when severity is CRITICAL/HIGH
+  - **Warning Counting:** Increments WARNINGS counter when severity is MEDIUM/LOW
+
+### Technical Details
+- **Bash 3.2 Compatibility:** Avoided associative arrays (Bash 4+ feature) to support macOS default shell
+- **jq Integration:** Queries JSON config file directly for each severity lookup
+- **Performance:** Minimal overhead - jq queries are fast and cached by OS
+- **Config Validation:** Validates JSON syntax and severity level values (CRITICAL, HIGH, MEDIUM, LOW)
+- **Comment Field Support:** Underscore-prefixed fields (_comment, _note, etc.) are ignored during parsing
+
 ## [1.0.60] - 2025-12-31
 
 ### Added
