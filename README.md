@@ -2,7 +2,7 @@
 
 **Fast, zero-dependency WordPress performance analyzer that catches critical issues before they crash your site.**
 
-[![CI](https://github.com/YOUR_ORG/wp-code-check/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/wp-code-check/actions)
+[![CI](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions/workflows/ci.yml/badge.svg)](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.59-green.svg)](CHANGELOG.md)
 
@@ -40,8 +40,8 @@ WordPress sites fail in production because of **performance antipatterns** that 
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_ORG/wp-code-check.git
-cd wp-code-check
+git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+cd WP-Code-Check
 
 # Run against your WordPress plugin/theme
 ./dist/bin/check-performance.sh --paths /path/to/your/plugin
@@ -71,11 +71,11 @@ cd wp-code-check
 
 ## Features
 
-### 🔍 **24 Performance Checks**
+### 🔍 **28 Performance & Security Checks**
 
-- **Critical**: Unbounded queries, insecure deserialization, missing capability checks
-- **High**: Direct superglobal manipulation, AJAX without nonce validation, unbounded SQL
-- **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout
+- **Critical**: Unbounded queries, insecure deserialization, localStorage sensitive data, client-side serialization
+- **High**: Direct superglobal manipulation, AJAX without nonce validation, unbounded SQL, expensive WP functions in polling
+- **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout, unsafe RegExp construction
 - **Low**: Timezone-sensitive patterns
 
 See [full check list](dist/README.md#what-it-detects).
@@ -137,8 +137,8 @@ jobs:
       
       - name: Run WP Code Check
         run: |
-          git clone https://github.com/YOUR_ORG/wp-code-check.git
-          ./wp-code-check/dist/bin/check-performance.sh --paths . --format json
+          git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+          ./WP-Code-Check/dist/bin/check-performance.sh --paths . --format json
 ```
 
 ### GitLab CI
@@ -146,8 +146,8 @@ jobs:
 ```yaml
 wp-code-check:
   script:
-    - git clone https://github.com/YOUR_ORG/wp-code-check.git
-    - ./wp-code-check/dist/bin/check-performance.sh --paths . --format json
+    - git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+    - ./WP-Code-Check/dist/bin/check-performance.sh --paths . --format json
 ```
 
 ---
@@ -219,7 +219,7 @@ For organizations that need **priority support, advanced features, or SLA guaran
 
 See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) for details and pricing.
 
-**Contact:** sales@hypercart.com
+**Contact:** noel@hypercart.io
 
 ---
 
@@ -228,8 +228,8 @@ See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) for details and pricing.
 **WP Code Check** is developed by [Hypercart](https://hypercart.com), a DBA of Neochrome, Inc.
 
 - 🌐 Website: [WPCodeCheck.com](https://wpcodecheck.com)
-- 📧 Support: support@hypercart.com
-- 🐛 Issues: [GitHub Issues](https://github.com/YOUR_ORG/wp-code-check/issues)
+- 📧 Support: noel@hypercart.io
+- 🐛 Issues: [GitHub Issues](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues)
 
 ---
 
