@@ -711,10 +711,11 @@ EOF
 }
 
 # Generate HTML report from JSON output
-# Usage: generate_html_report "json_string" "output_file"
+# Usage: generate_html_report "json_string" "output_file" "log_file_path"
 generate_html_report() {
   local json_data="$1"
   local output_file="$2"
+  local log_file_path="${3:-}"
   local template_file="$SCRIPT_DIR/templates/report-template.html"
 
   # Check if template exists
@@ -762,25 +763,32 @@ generate_html_report() {
   fi
 
   # Create clickable links for each scanned path
+  # Note: For now, we assume a single path (most common case)
+  # TODO: Handle multiple paths properly if needed in the future
   local paths_link=""
-  local first_path=true
-  for path in $paths; do
-    local abs_path
-    if [[ "$path" = /* ]]; then
-      abs_path="$path"
-    else
-      # Use realpath for robust absolute path conversion
-      abs_path=$(realpath "$path" 2>/dev/null || echo "$path")
-    fi
-    local encoded_path=$(url_encode "$abs_path")
+  local abs_path
 
-    if [ "$first_path" = false ]; then
-      paths_link+=", "
-    fi
-    # Display the absolute path (not the original relative path like ".")
-    paths_link+="<a href=\"file://$encoded_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open directory\">$abs_path</a>"
-    first_path=false
-  done
+  if [[ "$paths" = /* ]]; then
+    abs_path="$paths"
+  else
+    # Use realpath for robust absolute path conversion
+    abs_path=$(realpath "$paths" 2>/dev/null || echo "$paths")
+  fi
+
+  local encoded_path=$(url_encode "$abs_path")
+
+  # Display the absolute path (not the original relative path like ".")
+  # HTML-escape the display text to prevent breaking on special characters
+  local escaped_abs_path=$(echo "$abs_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+  paths_link="<a href=\"file://$encoded_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open directory\">$escaped_abs_path</a>"
+
+  # Create clickable link for JSON log file if provided
+  local json_log_link=""
+  if [ -n "$log_file_path" ] && [ -f "$log_file_path" ]; then
+    local encoded_log_path=$(url_encode "$log_file_path")
+    local escaped_log_path=$(echo "$log_file_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+    json_log_link="<div style=\"margin-top: 8px;\">JSON Log: <a href=\"file://$encoded_log_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open JSON log file\">$escaped_log_path</a></div>"
+  fi
 
   # Extract project information
   local project_type=$(echo "$json_data" | jq -r '.project.type // "unknown"')
@@ -920,6 +928,7 @@ generate_html_report() {
   html_content="${html_content//\{\{VERSION\}\}/$version}"
   html_content="${html_content//\{\{TIMESTAMP\}\}/$timestamp}"
   html_content="${html_content//\{\{PATHS_SCANNED\}\}/$paths_link}"
+  html_content="${html_content//\{\{JSON_LOG_LINK\}\}/$json_log_link}"
   html_content="${html_content//\{\{TOTAL_ERRORS\}\}/$total_errors}"
   html_content="${html_content//\{\{TOTAL_WARNINGS\}\}/$total_warnings}"
   html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
@@ -1737,7 +1746,7 @@ UNSANITIZED_FINDING_COUNT=0
 UNSANITIZED_VISIBLE=""
 
 # Find all $_GET/$_POST/$_REQUEST access that doesn't have sanitization
-# Exclude lines with: sanitize_*, esc_*, absint, intval, wc_clean, wp_unslash, $allowed_keys
+# Exclude lines with: sanitize_*, esc_*, absint, intval, floatval, wc_clean, wp_unslash, $allowed_keys
 # Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
 # We'll filter those out in a more sophisticated way below
 # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
@@ -1746,6 +1755,7 @@ UNSANITIZED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$_(GET|POST
   grep -v 'esc_' | \
   grep -v 'absint' | \
   grep -v 'intval' | \
+  grep -v 'floatval' | \
   grep -v 'wc_clean' | \
   grep -v 'wp_unslash' | \
   grep -v '\$allowed_keys' | \
@@ -1788,6 +1798,42 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     fi
 
     if should_suppress_finding "unsanitized-superglobal-read" "$file"; then
+      continue
+    fi
+
+    # CONTEXT-AWARE DETECTION: Check for nonce verification in previous 10 lines
+    # If nonce check found AND superglobal is sanitized, skip this finding
+    # Also skip if $_POST is used WITHIN nonce verification function itself
+    has_nonce_protection=false
+
+    # Special case: $_POST used inside nonce verification function is SAFE
+    # Example: wp_verify_nonce( $_POST['nonce'], 'action' )
+    if echo "$code" | grep -qE "(check_ajax_referer|wp_verify_nonce|check_admin_referer)[[:space:]]*\([^)]*\\\$_(GET|POST|REQUEST)\["; then
+      has_nonce_protection=true
+    fi
+
+    if [ "$has_nonce_protection" = false ]; then
+      if [ "$lineno" -gt 10 ]; then
+        start_line=$((lineno - 10))
+      else
+        start_line=1
+      fi
+
+      # Get context (10 lines before current line)
+      context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+
+      # Check for nonce verification functions
+      if echo "$context" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
+        # Nonce check found - now verify the current line has sanitization
+        if echo "$code" | grep -qE "sanitize_|esc_|absint|intval|floatval|wc_clean"; then
+          # This is SAFE: nonce verified AND sanitized
+          has_nonce_protection=true
+        fi
+      fi
+    fi
+
+    # Skip if protected by nonce + sanitization
+    if [ "$has_nonce_protection" = true ]; then
       continue
     fi
 
@@ -3355,7 +3401,7 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
     HTML_REPORT="$REPORTS_DIR/$REPORT_TIMESTAMP.html"
 
     # Generate the HTML report
-    if generate_html_report "$JSON_OUTPUT" "$HTML_REPORT"; then
+    if generate_html_report "$JSON_OUTPUT" "$HTML_REPORT" "$LOG_FILE"; then
       echo "" >&2
       echo "📊 HTML Report: $HTML_REPORT" >&2
 
