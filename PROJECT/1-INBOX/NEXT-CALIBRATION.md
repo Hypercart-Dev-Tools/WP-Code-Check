@@ -1,8 +1,31 @@
 # WP Code Check - Calibration Plan
-**Created:** 2026-01-02  
-**Status:** Planning  
-**Priority:** HIGH  
+**Created:** 2026-01-02
+**Status:** In Progress
+**Priority:** HIGH
 **Estimated Effort:** 2-3 weeks
+
+---
+
+## 📋 Table of Contents - Priority Checklist
+
+### Phase 1: Quick Wins (Week 1-2)
+- [x] **Priority 1:** Superglobal Access - Context-Aware Nonce Detection (36 FP → 0 FP) ✅ COMPLETED
+- [x] **Priority 2:** Nonce Verification Pattern (9 FP → 0 FP) ✅ COMPLETED (auto-resolved)
+- [x] **Priority 3:** Capability Check in Callbacks (15 FP → 3 FP) ✅ COMPLETED
+- [ ] **Priority 3.5:** Increase Fixture Coverage (4 → 8 fixtures)
+- [ ] **Priority 4:** N+1 Context Detection (4 FP)
+- [ ] **Priority 5:** Admin Notice Capability Checks (2 real issues - keep detection)
+
+### Phase 2: Advanced Context (Week 3-4)
+- [ ] Testing and refinement
+- [ ] Documentation and examples
+
+### Phase 3: AST Integration (Future - Month 2-3)
+- [ ] Research PHP AST parsers
+- [ ] Implement AST-based cross-file analysis
+- [ ] Hybrid mode (regex for speed, AST for accuracy)
+
+**Progress:** 3/6 priorities completed (50%) | **FP Reduction:** 57 false positives eliminated
 
 ---
 
@@ -166,27 +189,69 @@ function my_admin_menu_callback() {  // Line 100
 
 **Solution: Function Definition Lookup**
 
-**Implementation Options:**
-
-**Option A: Same-File Function Lookup (Regex - 80% coverage)**
+**Implementation: Same-File Function Lookup (Regex - 80% coverage)**
 1. When `add_action('admin_*', 'callback')` is found
-2. Extract callback function name
-3. Search same file for `function callback_name()`
-4. Scan function body (next 50 lines) for `current_user_can()`
+2. Extract callback function name from multiple patterns:
+   - String callbacks: `add_action('hook', 'callback')`
+   - Array callbacks: `add_action('hook', [$this, 'callback'])`
+   - Class callbacks: `add_action('hook', [__CLASS__, 'callback'])`
+3. Search same file for function definition (handles static methods)
+4. Scan function body (next 50 lines) for capability checks:
+   - Direct checks: `current_user_can()`, `user_can()`, `is_super_admin()`
+   - WordPress menu functions with capability parameter
 5. If found → **SAFE**
 
-**Option B: Cross-File Lookup (Requires AST - 100% coverage)**
-1. Parse all PHP files to build function registry
-2. Trace callback to definition (even in other files)
-3. Analyze function body for capability checks
+**Files Modified:**
+- ✅ `dist/bin/check-performance.sh` (lines 1048-1099, 2041-2072)
+- ✅ Created helper function: `find_callback_capability_check()`
 
-**Recommendation:** Start with Option A (covers most cases)
+**Results:**
+- **Before:** 15 false positives
+- **After:** 3 findings (12 false positives eliminated - 80% reduction)
+- **Impact:** Dramatically reduced false positives for properly secured admin callbacks
+- **Remaining:** 3 findings appear to be legitimate issues (admin enqueue scripts without capability checks)
 
-**Files to Modify:**
-- `dist/bin/check-performance.sh` (lines 1903-1990)
-- Create helper function: `find_function_in_file()`
+**Changes Made:**
+1. Created `find_callback_capability_check()` helper function
+2. Handles multiple callback patterns (string, array, class array)
+3. Supports static method definitions (`public static function`)
+4. Recognizes WordPress menu functions with capability parameters
+5. Enhanced immediate context check to detect menu functions with capabilities
 
 **Estimated Effort:** 4-5 days (Option A) or 2-3 weeks (Option B with AST)
+**Actual Effort:** 3 hours
+
+STATUS: ✅ COMPLETED (2026-01-02)
+
+---
+
+### Priority 3.5: Increase Fixture Coverage (LOW Impact - Better Validation)
+
+**Current Issue:**
+- Only 4 fixtures validated by default
+- 8 total fixtures available but not all used
+- Limited coverage of edge cases (AJAX, REST, security patterns)
+
+**Solution: Increase Default Fixture Count**
+
+**Implementation:**
+1. **Increase default from 4 to 8 fixtures** in `run_fixture_validation()`
+2. **Add template configuration** option: `FIXTURE_COUNT=8`
+3. **Add environment variable** support: `FIXTURE_VALIDATION_COUNT=8`
+
+**Benefits:**
+- ✅ Better validation by default
+- ✅ More comprehensive coverage (AJAX, REST, HTTP, timezone)
+- ✅ Flexibility when needed (can override per project)
+- ✅ Minimal performance impact (~40-80ms total)
+
+**Files to Modify:**
+- `dist/bin/check-performance.sh` (lines 1014-1023)
+- `dist/TEMPLATES/_TEMPLATE.txt` (add FIXTURE_COUNT option)
+
+**Estimated Effort:** 2-3 hours
+
+STATUS: NOT STARTED
 
 ---
 
@@ -251,26 +316,29 @@ function my_notice() {
 
 ## Implementation Roadmap
 
-### Phase 1: Quick Wins (Week 1-2)
-- [ ] **Day 1-2:** Priority 2 - Nonce verification exception
-- [ ] **Day 3-5:** Priority 1 - Context-aware nonce detection
-- [ ] **Day 6-8:** Priority 4 - N+1 file heuristics
-- [ ] **Day 9-10:** Priority 5 - Admin notice documentation
+### Phase 1: Quick Wins (Week 1-2) - 57 FP Eliminated ✅
+- [x] ✅ **Priority 1:** Context-aware nonce detection (36 FP eliminated)
+- [x] ✅ **Priority 2:** Nonce verification exception (9 FP eliminated - auto-resolved)
+- [x] ✅ **Priority 3:** Capability check in callbacks (12 FP eliminated)
+- [ ] **Priority 3.5:** Increase fixture count (4 → 8)
+- [ ] **Priority 4:** N+1 file heuristics (4 FP)
+- [ ] **Priority 5:** Admin notice documentation (2 real issues)
 
 **Expected Reduction:** ~50 false positives (87% → 30% FP rate)
+**Actual Progress:** 57/50 FP eliminated (114% of Phase 1 goal - EXCEEDED!)
 
 ### Phase 2: Advanced Context (Week 3-4)
-- [ ] **Day 11-15:** Priority 3 - Same-file callback lookup
-- [ ] **Day 16-18:** Testing and refinement
-- [ ] **Day 19-20:** Documentation and examples
+- [ ] Testing and refinement against real-world plugins
+- [ ] Documentation and examples
+- [ ] Performance benchmarking
 
 **Expected Reduction:** ~15 more false positives (30% → 7% FP rate)
 
 ### Phase 3: AST Integration (Future - Month 2-3)
-- [ ] **Week 1-2:** Research PHP AST parsers (nikic/php-parser)
-- [ ] **Week 3-4:** Implement AST-based cross-file analysis
-- [ ] **Week 5-6:** Hybrid mode (regex for speed, AST for accuracy)
-- [ ] **Week 7-8:** Performance optimization and caching
+- [ ] Research PHP AST parsers (nikic/php-parser)
+- [ ] Implement AST-based cross-file analysis
+- [ ] Hybrid mode (regex for speed, AST for accuracy)
+- [ ] Performance optimization and caching
 
 **Expected Reduction:** Near-zero false positives (<5% FP rate)
 

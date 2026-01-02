@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.74
+# Version: 1.0.75
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -1045,6 +1045,59 @@ run_fixture_validation() {
   fi
 }
 
+# ============================================================
+# Context-Aware Detection Helpers
+# ============================================================
+
+# Find callback function in same file and check for capability checks
+# Usage: find_callback_capability_check "file.php" "callback_function_name"
+# Returns: 0 if capability check found, 1 if not found
+find_callback_capability_check() {
+  local file="$1"
+  local callback_name="$2"
+
+  # Sanitize callback name (remove quotes, whitespace)
+  callback_name=$(echo "$callback_name" | sed "s/['\"]//g" | tr -d '[:space:]')
+
+  # Skip if callback is empty or looks like a variable/array
+  if [ -z "$callback_name" ] || [[ "$callback_name" =~ ^\$ ]] || [[ "$callback_name" =~ \[ ]]; then
+    return 1
+  fi
+
+  # Find function definition line number
+  # Match: function callback_name( or function callback_name (
+  local func_line
+  func_line=$(grep -n "^[[:space:]]*function[[:space:]]\+${callback_name}[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+
+  # If not found, try method definition: public/private/protected [static] function callback_name(
+  if [ -z "$func_line" ]; then
+    func_line=$(grep -n "^[[:space:]]*\(public\|private\|protected\)[[:space:]]\+\(static[[:space:]]\+\)\?function[[:space:]]\+${callback_name}[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+  fi
+
+  # If still not found, callback is not in this file
+  if [ -z "$func_line" ]; then
+    return 1
+  fi
+
+  # Check next 50 lines of function body for capability check
+  local end_line=$((func_line + 50))
+  local func_body
+  func_body=$(sed -n "${func_line},${end_line}p" "$file" 2>/dev/null)
+
+  # Look for capability check patterns
+  if echo "$func_body" | grep -qE "current_user_can[[:space:]]*\\(|user_can[[:space:]]*\\(|is_super_admin[[:space:]]*\\("; then
+    return 0  # Capability check found
+  fi
+
+  # Also check for WordPress menu functions with capability parameter
+  if echo "$func_body" | grep -qE "add_(menu|submenu|options|management|theme|plugins|users|dashboard|posts|media|pages|comments|tools)_page[[:space:]]*\\(" && \
+     echo "$func_body" | grep -qE "'(manage_options|edit_posts|edit_pages|edit_published_posts|publish_posts|read|delete_posts|administrator|editor|author|contributor|subscriber)'"; then
+    return 0  # Capability enforced via menu function
+  fi
+
+  return 1  # No capability check found
+}
+
 # Conditional echo - only outputs in text mode
 text_echo() {
 	if [ "$OUTPUT_FORMAT" = "text" ]; then
@@ -1995,8 +2048,43 @@ if [ -n "$ADMIN_MATCHES" ]; then
     end_line=$((lineno + 10))
     context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
 
-    if echo "$context" | grep -qE "current_user_can[[:space:]]*\\(|user_can[[:space:]]*\\("; then
+    # First check: Look for capability check in immediate context (next 10 lines)
+    # This includes:
+    # - current_user_can() / user_can() / is_super_admin()
+    # - WordPress menu functions with capability parameter (add_menu_page, add_submenu_page, etc.)
+    if echo "$context" | grep -qE "current_user_can[[:space:]]*\\(|user_can[[:space:]]*\\(|is_super_admin[[:space:]]*\\("; then
       continue
+    fi
+
+    # Also check for WordPress menu functions with capability parameter
+    # Pattern: add_*_page(..., 'capability', ...)
+    if echo "$context" | grep -qE "add_(menu|submenu|options|management|theme|plugins|users|dashboard|posts|media|pages|comments|tools)_page[[:space:]]*\\(" && \
+       echo "$context" | grep -qE "'(manage_options|edit_posts|edit_pages|edit_published_posts|publish_posts|read|delete_posts|administrator|editor|author|contributor|subscriber)'"; then
+      continue
+    fi
+
+    # Second check: If this is an add_action/add_filter with a callback, look up the callback function
+    # Extract callback name from patterns like: add_action('hook', 'callback_name')
+    callback_name=""
+    if echo "$code" | grep -qE "add_action|add_filter|add_menu_page|add_submenu_page|add_options_page|add_management_page"; then
+      # Try to extract callback from common patterns:
+      # Pattern 1: add_action( 'hook', 'callback' )
+      callback_name=$(echo "$code" | sed -n "s/.*add_[a-z_]*[[:space:]]*([^,]*,[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+
+      # Pattern 2: add_action( 'hook', [ $this, 'callback' ] ) or [ __CLASS__, 'callback' ]
+      if [ -z "$callback_name" ]; then
+        callback_name=$(echo "$code" | sed -n "s/.*\\[[^,]*,[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+      fi
+
+      # Pattern 3: add_action( 'hook', array( $this, 'callback' ) )
+      if [ -z "$callback_name" ]; then
+        callback_name=$(echo "$code" | sed -n "s/.*array[[:space:]]*([^,]*,[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+      fi
+
+      # If we found a callback name, check if it has capability checks
+      if [ -n "$callback_name" ] && find_callback_capability_check "$file" "$callback_name"; then
+        continue
+      fi
     fi
 
     ADMIN_SEEN_KEYS="${ADMIN_SEEN_KEYS}${key}"

@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.75] - 2026-01-02
+
+### Added
+- **Context-Aware Admin Capability Detection** - Dramatically reduced false positives for admin callback functions
+  - Created `find_callback_capability_check()` helper function to search for callback definitions in same file
+  - Extracts callback names from multiple patterns: string callbacks, array callbacks, class array callbacks
+  - Checks callback function body (next 50 lines) for capability checks
+  - Recognizes direct capability checks: `current_user_can()`, `user_can()`, `is_super_admin()`
+  - Recognizes WordPress menu functions with capability parameters (`add_menu_page`, `add_submenu_page`, etc.)
+  - Handles static method definitions (`public static function`)
+  - **Impact:** Reduced admin capability check false positives from 15 to 3 (80% reduction)
+
+### Changed
+- **Enhanced Admin Functions Without Capability Checks** - Improved detection logic
+  - Updated immediate context check to recognize menu functions with capability parameters
+  - Added callback lookup for `add_action`, `add_filter`, and menu registration functions
+  - Supports multiple callback syntax patterns (string, array, class array)
+  - Checks both immediate context (next 10 lines) and callback function body (next 50 lines)
+
+### Technical Details
+- **Files Modified:** `dist/bin/check-performance.sh`
+  - Lines 1048-1099: New helper function `find_callback_capability_check()`
+  - Lines 2041-2072: Enhanced admin capability check with callback lookup
+- **Patterns Detected:**
+  - `add_action('hook', 'callback')` - String callback
+  - `add_action('hook', [$this, 'callback'])` - Array callback
+  - `add_action('hook', [__CLASS__, 'callback'])` - Class array callback
+  - `add_action('hook', array($this, 'callback'))` - Legacy array syntax
+- **Capability Enforcement Patterns:**
+  - Direct: `current_user_can('capability')`
+  - Menu functions: `add_submenu_page(..., 'manage_options', ...)`
+
+### Testing
+- **Test Case:** PTT-MKII plugin (30 files, 8,736 LOC)
+- **Before:** 15 findings (many false positives)
+- **After:** 3 findings (legitimate issues)
+- **False Positives Eliminated:** 12 (80% reduction)
+- **Remaining Findings:** Legitimate security issues (admin enqueue scripts without capability checks)
+
+### Performance
+- **Impact:** Minimal - callback lookup only performed when admin patterns detected
+- **Scope:** Same-file lookup only (no cross-file analysis)
+- **Efficiency:** Uses grep and sed for fast pattern matching
+
 ## [1.0.74] - 2026-01-02
 
 ### Changed
