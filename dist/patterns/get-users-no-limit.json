@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "added_in_scanner_version": "1.0.65",
   "enabled": true,
+  "detection_type": "direct",
   "category": "performance",
   "severity": "CRITICAL",
   "title": "get_users() without 'number' limit",
