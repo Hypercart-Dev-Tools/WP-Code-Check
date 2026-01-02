@@ -5,6 +5,152 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.72] - 2026-01-02
+
+### Fixed
+- **Critical: Path Quoting Bug** - Fixed unquoted `$PATHS` variable in grep command
+  - **Impact:** DRY violation detection was completely broken for paths with spaces
+  - **Symptom:** Grep returned 0 matches even when violations existed
+  - **Fix:** Added quotes around `"$PATHS"` in line 1333
+  - **Result:** ✅ DRY violation detection now works correctly
+
+- **Shell Syntax Error** - Removed `local` keyword from non-function context
+  - **Impact:** Script threw errors: "local: can only be used in a function"
+  - **Location:** Lines 3278, 3283, 3284 (violation counting logic)
+  - **Fix:** Changed to regular variable assignments
+  - **Result:** ✅ No more shell errors
+
+### Verified
+- ✅ Pattern extraction working (75-character regex patterns extracted correctly)
+- ✅ Grep finding matches (38 raw matches found in test plugin)
+- ✅ Aggregation logic working (2 violations detected correctly)
+- ✅ Debug logging working (`/tmp/wp-code-check-debug.log` shows full details)
+
+### Testing
+Tested against real WordPress plugin:
+- **Plugin:** woocommerce-all-products-for-subscriptions
+- **Path:** `/Users/noelsaw/Local Sites/1-bloomzhemp-production-sync-07-24/app/public/wp-content/plugins/woocommerce-all-products-for-subscriptions`
+- **Results:**
+  - Duplicate transient keys: ✓ No violations
+  - Duplicate capability strings: ✓ No violations (3 matches, below threshold)
+  - Duplicate option names: ⚠ Found 2 violations (38 matches)
+
+## [1.0.71] - 2026-01-01
+
+### Fixed
+- **Pattern Extraction Bug** - Fixed Python JSON extraction in `pattern-loader.sh`
+  - Changed from inline Python command to heredoc format for better reliability
+  - Prevents issues with special characters in file paths
+  - Adds proper error handling and stderr capture
+  - **Impact:** Aggregated patterns should now load correctly
+
+### Added
+- **Debug Logging** - Added comprehensive debug logging to `process_aggregated_pattern()`
+  - Logs to `/tmp/wp-code-check-debug.log` for troubleshooting
+  - Shows pattern metadata, search pattern length, grep results
+  - Helps diagnose pattern loading and matching issues
+  - **Usage:** Check `/tmp/wp-code-check-debug.log` after running the scanner
+
+- **Enhanced Output** - Improved DRY violation detection output
+  - Shows pattern search string in output (for debugging)
+  - Shows count of violations found per pattern
+  - Better visual feedback for debugging pattern issues
+
+### Changed
+- **Pattern Loader** - Rewrote Python JSON extraction logic
+  - Uses heredoc instead of inline command
+  - Better error handling with try/catch
+  - Falls back to grep/sed if Python fails
+  - More robust handling of complex regex patterns
+
+### Known Issues
+- Terminal output may be truncated on some systems (use `--format json` for full output)
+- Pattern extraction still needs testing with real-world WordPress plugins
+
+## [1.0.70] - 2026-01-01
+
+### Added
+- **DRY Violation Detection (Aggregated Patterns)** - New pattern type for detecting code duplication
+  - Added `detection_type` field to pattern schema (`direct` or `aggregated`)
+  - Created 3 aggregated patterns for detecting duplicate string literals:
+    - `dist/patterns/duplicate-option-names.json` - Duplicate WordPress option names across files
+    - `dist/patterns/duplicate-transient-keys.json` - Duplicate transient keys across files
+    - `dist/patterns/duplicate-capability-strings.json` - Duplicate capability strings across files
+  - Aggregated patterns group matches by captured string and report violations when:
+    - String appears in >= 3 distinct files (configurable via `min_distinct_files`)
+    - String appears >= 6 total times (configurable via `min_total_matches`)
+  - **Purpose:** Detect DRY violations where hardcoded strings should be constants
+  - **Example:** Option name `'my_plugin_settings'` used in 5 files (8 times) → suggests creating a constant
+
+- **JSON Output Enhancement** - Extended JSON schema to include DRY violations
+  - Added `dry_violations` array to JSON output with structure:
+    - `pattern`: Pattern title (e.g., "Duplicate option names across files")
+    - `severity`: Pattern severity (MEDIUM/HIGH/CRITICAL)
+    - `duplicated_string`: The duplicated string literal
+    - `file_count`: Number of distinct files containing the string
+    - `total_count`: Total occurrences across all files
+    - `locations`: Array of `{file, line}` objects showing all occurrences
+  - Added `dry_violations` count to summary section
+  - **Example Output:**
+    ```json
+    {
+      "summary": {
+        "dry_violations": 2
+      },
+      "dry_violations": [
+        {
+          "pattern": "Duplicate option names across files",
+          "severity": "MEDIUM",
+          "duplicated_string": "my_plugin_settings",
+          "file_count": 5,
+          "total_count": 8,
+          "locations": [
+            {"file": "includes/admin.php", "line": 42},
+            {"file": "includes/settings.php", "line": 15}
+          ]
+        }
+      ]
+    }
+    ```
+
+- **Pattern Loader Enhancement** - Improved JSON parsing for complex patterns
+  - Added Python-based JSON extraction for reliable parsing of patterns with special characters
+  - Falls back to grep/sed if Python is not available
+  - Properly handles escaped characters in search patterns (e.g., `\(`, `\"`, `['\"]`)
+  - Extracts `detection_type` field to distinguish direct vs aggregated patterns
+
+### Changed
+- **Pattern Schema** - Extended pattern definition schema
+  - Added `detection_type` field (required): `"direct"` or `"aggregated"`
+  - Added `aggregation` section for aggregated patterns:
+    - `enabled`: Boolean to enable/disable aggregation
+    - `group_by`: Field to group by (currently only `"capture_group"` supported)
+    - `min_total_matches`: Minimum total occurrences to report (default: 6)
+    - `min_distinct_files`: Minimum number of files to report (default: 3)
+    - `top_k_groups`: Maximum number of violations to report (default: 15)
+    - `report_format`: Template for violation messages
+    - `sort_by`: Sort order for violations (`"file_count_desc"` or `"total_count_desc"`)
+
+- **Text Output** - Added DRY Violation Detection section
+  - New section displayed after all direct pattern checks
+  - Shows pattern title and violation status for each aggregated pattern
+  - Displays "✓ No violations" or "⚠ Found violations" for each pattern
+
+### Technical Details
+- **Aggregation Algorithm:**
+  1. Run grep with pattern's search_pattern across all PHP files
+  2. Extract captured group (e.g., option name from `get_option('name')`)
+  3. Group matches by captured string
+  4. Count distinct files and total occurrences for each string
+  5. Report strings exceeding both thresholds
+- **Performance:** Aggregation runs after all direct checks to avoid duplicate grep operations
+- **Memory:** Uses temporary files for aggregation to handle large codebases
+
+### Known Issues
+- Pattern extraction may fail on systems without Python if patterns contain complex escaped characters
+- Aggregation currently only supports single capture group (group_by: "capture_group")
+- HTML report does not yet display DRY violations (JSON output only)
+
 ## [1.0.69] - 2026-01-01
 
 ### Added

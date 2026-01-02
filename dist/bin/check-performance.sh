@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.69
+# Version: 1.0.72
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.69"
+SCRIPT_VERSION="1.0.72"
 
 # Defaults
 PATHS="."
@@ -86,6 +86,10 @@ NEW_BASELINE_COUNTS=()
 # JSON findings collection (initialized as empty)
 declare -a JSON_FINDINGS=()
 declare -a JSON_CHECKS=()
+
+# DRY violations collection (aggregated patterns)
+declare -a DRY_VIOLATIONS=()
+DRY_VIOLATIONS_COUNT=0
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -602,6 +606,24 @@ EOF
   JSON_CHECKS+=("$check")
 }
 
+# Add a DRY violation to the collection
+# Usage: add_dry_violation "pattern_title" "severity" "duplicated_string" "file_count" "total_count" "locations_json"
+add_dry_violation() {
+  local pattern_title="$1"
+  local severity="$2"
+  local duplicated_string="$3"
+  local file_count="$4"
+  local total_count="$5"
+  local locations_json="$6"
+
+  local violation=$(cat <<EOF
+{"pattern":"$(json_escape "$pattern_title")","severity":"$severity","duplicated_string":"$(json_escape "$duplicated_string")","file_count":$file_count,"total_count":$total_count,"locations":$locations_json}
+EOF
+)
+  DRY_VIOLATIONS+=("$violation")
+  ((DRY_VIOLATIONS_COUNT++)) || true
+}
+
 # Output final JSON
 output_json() {
   local exit_code="$1"
@@ -644,6 +666,18 @@ output_json() {
     fi
    done
 
+  # Build DRY violations array
+  local dry_violations_json=""
+  first=true
+  for violation in "${DRY_VIOLATIONS[@]}"; do
+    if [ "$first" = true ]; then
+      dry_violations_json="$violation"
+      first=false
+    else
+      dry_violations_json="$dry_violations_json,$violation"
+    fi
+  done
+
     cat <<EOF
 {
   "version": "$SCRIPT_VERSION",
@@ -654,6 +688,7 @@ output_json() {
   "summary": {
     "total_errors": $ERRORS,
     "total_warnings": $WARNINGS,
+    "dry_violations": $DRY_VIOLATIONS_COUNT,
     "files_analyzed": $files_analyzed,
     "lines_of_code": $lines_of_code,
     "baselined": $BASELINED,
@@ -667,7 +702,8 @@ output_json() {
     "message": "Detection patterns verified against ${FIXTURE_VALIDATION_PASSED} test fixtures"
   },
   "findings": [$findings_json],
-  "checks": [$checks_json]
+  "checks": [$checks_json],
+  "dry_violations": [$dry_violations_json]
 }
 EOF
 }
@@ -1236,6 +1272,129 @@ generate_baseline_file() {
 	rm -f "$tmp" 2>/dev/null || true
 
 	text_echo "${GREEN}Baseline file written to ${BASELINE_FILE} (${total} total findings).${NC}"
+}
+
+# Process aggregated pattern (DRY violations)
+# Usage: process_aggregated_pattern "pattern_file"
+process_aggregated_pattern() {
+  local pattern_file="$1"
+  local debug_log="/tmp/wp-code-check-debug.log"
+
+  # Load pattern metadata
+  if ! load_pattern "$pattern_file"; then
+    echo "[DEBUG] Failed to load pattern: $pattern_file" >> "$debug_log"
+    return 1
+  fi
+
+  # Debug: Log loaded pattern info
+  echo "[DEBUG] ===========================================" >> "$debug_log"
+  echo "[DEBUG] Processing pattern: $pattern_file" >> "$debug_log"
+  echo "[DEBUG] Pattern ID: $pattern_id" >> "$debug_log"
+  echo "[DEBUG] Pattern Title: $pattern_title" >> "$debug_log"
+  echo "[DEBUG] Pattern Enabled: $pattern_enabled" >> "$debug_log"
+  echo "[DEBUG] Pattern Search (length=${#pattern_search}): [$pattern_search]" >> "$debug_log"
+  echo "[DEBUG] ===========================================" >> "$debug_log"
+
+  # Skip if pattern is disabled
+  if [ "$pattern_enabled" != "true" ]; then
+    echo "[DEBUG] Pattern disabled, skipping" >> "$debug_log"
+    return 0
+  fi
+
+  # Check if pattern_search is empty
+  if [ -z "$pattern_search" ]; then
+    echo "[DEBUG] ERROR: pattern_search is EMPTY!" >> "$debug_log"
+    text_echo "  ${RED}→ Pattern: ${NC}"
+    text_echo "  ${RED}→ Found 0${NC}"
+    text_echo "${RED}0 raw matches${NC}"
+    return 1
+  fi
+
+  # Extract aggregation settings from JSON
+  local min_files=$(grep '"min_distinct_files"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local min_matches=$(grep '"min_total_matches"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local capture_group=$(grep '"capture_group"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+
+  # Defaults
+  [ -z "$min_files" ] && min_files=3
+  [ -z "$min_matches" ] && min_matches=6
+  [ -z "$capture_group" ] && capture_group=2
+
+  echo "[DEBUG] Aggregation settings: min_files=$min_files, min_matches=$min_matches, capture_group=$capture_group" >> "$debug_log"
+
+  # Create temp files for aggregation
+  local temp_matches=$(mktemp)
+
+  # Run grep to find all matches using the pattern's search pattern
+  # Note: pattern_search is set by load_pattern
+  # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
+  echo "[DEBUG] Running grep with pattern: $pattern_search" >> "$debug_log"
+  echo "[DEBUG] Paths: $PATHS" >> "$debug_log"
+  local matches=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+  local match_count=$(echo "$matches" | grep -c . || echo "0")
+  echo "[DEBUG] Found $match_count raw matches" >> "$debug_log"
+
+  # Extract captured groups and aggregate
+  if [ -n "$matches" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+
+      local file=$(echo "$match" | cut -d: -f1)
+      local line=$(echo "$match" | cut -d: -f2)
+      local code=$(echo "$match" | cut -d: -f3-)
+
+      # Extract the captured string using grep and sed
+      # We use a simplified sed pattern that extracts the content between quotes
+      # This works for most DRY patterns which capture string literals
+      local captured=$(echo "$code" | grep -oE "$pattern_search" | sed -E "s/.*['\"]([a-z0-9_]+)['\"].*/\1/" | head -1)
+
+      if [ -n "$captured" ]; then
+        # Escape pipe characters in the captured string for safe storage
+        local escaped_captured=$(echo "$captured" | sed 's/|/\\|/g')
+        echo "$escaped_captured|$file|$line" >> "$temp_matches"
+      fi
+    done <<< "$matches"
+
+    # Aggregate by captured string
+    if [ -f "$temp_matches" ] && [ -s "$temp_matches" ]; then
+      local unique_strings=$(cut -d'|' -f1 "$temp_matches" | sort -u)
+
+      while IFS= read -r string; do
+        [ -z "$string" ] && continue
+
+        # Unescape the string for comparison
+        local unescaped_string=$(echo "$string" | sed 's/\\|/|/g')
+
+        # Count files and total occurrences (need to escape for grep)
+        local grep_pattern="^$(echo "$string" | sed 's/\[/\\[/g; s/\]/\\]/g; s/\./\\./g')|"
+        local file_count=$(grep "$grep_pattern" "$temp_matches" | cut -d'|' -f2 | sort -u | wc -l | tr -d ' ')
+        local total_count=$(grep "$grep_pattern" "$temp_matches" | wc -l | tr -d ' ')
+
+        # Apply thresholds
+        if [ "$file_count" -ge "$min_files" ] && [ "$total_count" -ge "$min_matches" ]; then
+          # Build locations JSON array
+          local locations_json="["
+          local first_loc=true
+          while IFS='|' read -r str file line; do
+            if [ "$str" = "$string" ]; then
+              if [ "$first_loc" = false ]; then
+                locations_json+=","
+              fi
+              locations_json+="{\"file\":\"$(json_escape "$file")\",\"line\":$line}"
+              first_loc=false
+            fi
+          done < "$temp_matches"
+          locations_json+="]"
+
+          # Add to DRY violations
+          add_dry_violation "$pattern_title" "$pattern_severity" "$unescaped_string" "$file_count" "$total_count" "$locations_json"
+        fi
+      done <<< "$unique_strings"
+    fi
+  fi
+
+  # Cleanup
+  rm -f "$temp_matches"
 }
 
 # ============================================================================
@@ -3078,6 +3237,61 @@ else
   add_json_check "Disallowed PHP short tags" "$PHP_SHORT_TAGS_SEVERITY" "passed" 0
 fi
 text_echo ""
+
+# ============================================================================
+# DRY Violation Detection (Aggregated Patterns)
+# ============================================================================
+
+text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+text_echo "${BLUE}  DRY VIOLATION DETECTION${NC}"
+text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+text_echo ""
+
+# Find all aggregated patterns
+AGGREGATED_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f | while read -r pattern_file; do
+  detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ "$detection_type" = "aggregated" ]; then
+    echo "$pattern_file"
+  fi
+done)
+
+if [ -z "$AGGREGATED_PATTERNS" ]; then
+  text_echo "${BLUE}No aggregated patterns found. Skipping DRY checks.${NC}"
+  text_echo ""
+else
+  # Debug: Log aggregated patterns found
+  echo "[DEBUG] Aggregated patterns found:" >> /tmp/wp-code-check-debug.log
+  echo "$AGGREGATED_PATTERNS" >> /tmp/wp-code-check-debug.log
+
+  # Process each aggregated pattern
+  while IFS= read -r pattern_file; do
+    [ -z "$pattern_file" ] && continue
+
+    # Load pattern to get title
+    if load_pattern "$pattern_file"; then
+      text_echo "${BLUE}▸ $pattern_title${NC}"
+
+      # Debug: Show pattern info in output
+      text_echo "  ${BLUE}→ Pattern: $pattern_search${NC}"
+
+      # Store current violation count
+      violations_before=$DRY_VIOLATIONS_COUNT
+
+      process_aggregated_pattern "$pattern_file"
+
+      # Check if new violations were added
+      violations_after=$DRY_VIOLATIONS_COUNT
+      new_violations=$((violations_after - violations_before))
+
+      if [ "$new_violations" -gt 0 ]; then
+        text_echo "${YELLOW}  ⚠ Found $new_violations violation(s)${NC}"
+      else
+        text_echo "${GREEN}  ✓ No violations${NC}"
+      fi
+      text_echo ""
+    fi
+  done <<< "$AGGREGATED_PATTERNS"
+fi
 
 	# Evaluate baseline entries for staleness before computing exit code / JSON
 	check_stale_entries
