@@ -12,7 +12,7 @@
 - [x] **Priority 1:** Superglobal Access - Context-Aware Nonce Detection (36 FP → 0 FP) ✅ COMPLETED
 - [x] **Priority 2:** Nonce Verification Pattern (9 FP → 0 FP) ✅ COMPLETED (auto-resolved)
 - [x] **Priority 3:** Capability Check in Callbacks (15 FP → 3 FP) ✅ COMPLETED
-- [ ] **Priority 3.5:** Increase Fixture Coverage (4 → 8 fixtures)
+- [x] **Priority 3.5:** Increase Fixture Coverage (4 → 8 fixtures) ✅ COMPLETED
 - [ ] **Priority 4:** N+1 Context Detection (4 FP)
 - [ ] **Priority 5:** Admin Notice Capability Checks (2 real issues - keep detection)
 
@@ -25,7 +25,7 @@
 - [ ] Implement AST-based cross-file analysis
 - [ ] Hybrid mode (regex for speed, AST for accuracy)
 
-**Progress:** 3/6 priorities completed (50%) | **FP Reduction:** 57 false positives eliminated
+**Progress:** 4/6 priorities completed (67%) | **FP Reduction:** 57 false positives eliminated
 
 ---
 
@@ -245,13 +245,29 @@ STATUS: ✅ COMPLETED (2026-01-02)
 - ✅ Flexibility when needed (can override per project)
 - ✅ Minimal performance impact (~40-80ms total)
 
-**Files to Modify:**
-- `dist/bin/check-performance.sh` (lines 1014-1023)
-- `dist/TEMPLATES/_TEMPLATE.txt` (add FIXTURE_COUNT option)
+**Files Modified:**
+- ✅ `dist/bin/check-performance.sh` (lines 64, 1016-1060)
+- ✅ `dist/TEMPLATES/_TEMPLATE.txt` (lines 76-78)
+- ✅ `CHANGELOG.md` (version 1.0.76)
+
+**Results:**
+- **Before:** 4 fixtures validated by default
+- **After:** 8 fixtures validated by default
+- **Coverage Increase:** 100% (4 → 8 fixtures)
+- **New Coverage:** AJAX, REST, admin capabilities, direct database access
+- **Performance Impact:** ~40-80ms (negligible)
+- **Configuration:** Template option + environment variable support
+
+**Fixtures Added:**
+5. `ajax-antipatterns.php` - REST routes without pagination
+6. `ajax-antipatterns.php` - AJAX handlers without nonce
+7. `admin-no-capability.php` - Admin menus without capability checks
+8. `wpdb-no-prepare.php` - Direct database queries without prepare()
 
 **Estimated Effort:** 2-3 hours
+**Actual Effort:** ~2 hours
 
-STATUS: NOT STARTED
+STATUS: ✅ COMPLETED (2026-01-02)
 
 ---
 
@@ -320,12 +336,13 @@ function my_notice() {
 - [x] ✅ **Priority 1:** Context-aware nonce detection (36 FP eliminated)
 - [x] ✅ **Priority 2:** Nonce verification exception (9 FP eliminated - auto-resolved)
 - [x] ✅ **Priority 3:** Capability check in callbacks (12 FP eliminated)
-- [ ] **Priority 3.5:** Increase fixture count (4 → 8)
+- [x] ✅ **Priority 3.5:** Increase fixture count (4 → 8 fixtures - better validation)
 - [ ] **Priority 4:** N+1 file heuristics (4 FP)
 - [ ] **Priority 5:** Admin notice documentation (2 real issues)
 
 **Expected Reduction:** ~50 false positives (87% → 30% FP rate)
 **Actual Progress:** 57/50 FP eliminated (114% of Phase 1 goal - EXCEEDED!)
+**Fixture Coverage:** 8 fixtures (100% increase from 4)
 
 ### Phase 2: Advanced Context (Week 3-4)
 - [ ] Testing and refinement against real-world plugins
