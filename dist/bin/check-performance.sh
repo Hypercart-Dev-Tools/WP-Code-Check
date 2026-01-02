@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.75
+# Version: 1.0.76
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.73"
+SCRIPT_VERSION="1.0.76"
 
 # Defaults
 PATHS="."
@@ -61,6 +61,7 @@ OUTPUT_FORMAT="text"  # text or json
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"
+DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
 
 # Severity configuration
 SEVERITY_CONFIG_FILE=""  # Path to custom severity config (empty = use factory defaults)
@@ -998,6 +999,7 @@ validate_single_fixture() {
 # Returns: Sets FIXTURE_VALIDATION_PASSED, FIXTURE_VALIDATION_FAILED, FIXTURE_VALIDATION_STATUS
 run_fixture_validation() {
   local fixtures_dir="$SCRIPT_DIR/../tests/fixtures"
+  local default_fixture_count="${DEFAULT_FIXTURE_VALIDATION_COUNT:-8}"
 
   # Check if fixtures directory exists
   if [ ! -d "$fixtures_dir" ]; then
@@ -1020,9 +1022,46 @@ run_fixture_validation() {
     "file-get-contents-url.php:file_get_contents:1"
     # clean-code.php should have bounded queries (posts_per_page set)
     "clean-code.php:posts_per_page:1"
+    # ajax-antipatterns.php should register REST routes without pagination
+    "ajax-antipatterns.php:register_rest_route:1"
+    # ajax-antipatterns.php should include AJAX handlers without nonce validation
+    "ajax-antipatterns.php:wp_ajax_nopriv_npt_load_feed:1"
+    # admin-no-capability.php should register admin menus without capability checks
+    "admin-no-capability.php:add_menu_page:1"
+    # wpdb-no-prepare.php should include direct wpdb queries without prepare()
+    "wpdb-no-prepare.php:wpdb->get_var:1"
   )
 
-  for check_spec in "${checks[@]}"; do
+  local fixture_count="$default_fixture_count"
+
+  # Template override
+  if [ -n "${FIXTURE_COUNT:-}" ]; then
+    fixture_count="$FIXTURE_COUNT"
+  fi
+
+  # Environment variable override
+  if [ -n "${FIXTURE_VALIDATION_COUNT:-}" ]; then
+    fixture_count="$FIXTURE_VALIDATION_COUNT"
+  fi
+
+  # Validate fixture_count (must be non-negative integer)
+  if ! [[ "$fixture_count" =~ ^[0-9]+$ ]]; then
+    fixture_count="$default_fixture_count"
+  fi
+
+  if [ "$fixture_count" -le 0 ]; then
+    FIXTURE_VALIDATION_STATUS="skipped"
+    return 0
+  fi
+
+  local max_checks=${#checks[@]}
+  if [ "$fixture_count" -gt "$max_checks" ]; then
+    fixture_count="$max_checks"
+  fi
+
+  local checks_to_run=("${checks[@]:0:${fixture_count}}")
+
+  for check_spec in "${checks_to_run[@]}"; do
     local fixture_file pattern expected_count
     IFS=':' read -r fixture_file pattern expected_count <<< "$check_spec"
 
