@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# WP Code Check by Hypercart - DRY Violation Detector
+# WP Code Check by Hypercart - Magic String Detector ("DRY")
 # Version: 1.0.0
 #
-# Detects Don't Repeat Yourself (DRY) violations in WordPress codebases
-# by finding hard-coded strings (option names, transient keys, etc.) that
-# appear in multiple files.
+# Detects magic strings (hardcoded string literals) in WordPress codebases
+# by finding strings (option names, transient keys, etc.) that appear in
+# multiple files, violating the DRY (Don't Repeat Yourself) principle.
 #
 # Usage:
 #   ./dist/bin/find-dry.sh --paths /path/to/plugin
@@ -109,7 +109,7 @@ VIOLATIONS_FILE=$(mktemp)
 trap "rm -f '$VIOLATIONS_FILE'" EXIT
 TOTAL_VIOLATIONS=0
 
-text_echo "${BOLD}WP Code Check - DRY Violation Detector${NC}"
+text_echo "${BOLD}WP Code Check - Magic String Detector (\"DRY\")${NC}"
 text_echo "Scanning: $PATHS"
 text_echo ""
 
@@ -292,13 +292,13 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
 else
   # Text output
   if [ "$TOTAL_VIOLATIONS" -eq 0 ]; then
-    text_echo "${GREEN}${BOLD}━━━ NO DRY VIOLATIONS FOUND ━━━${NC}"
+    text_echo "${GREEN}${BOLD}━━━ NO MAGIC STRINGS FOUND ━━━${NC}"
     text_echo ""
-    text_echo "All scanned code follows DRY principles. Great work! 🎉"
+    text_echo "All scanned code follows DRY principles - no magic strings detected. Great work! 🎉"
     exit 0
   fi
 
-  text_echo "${RED}${BOLD}━━━ DRY VIOLATIONS FOUND ━━━${NC}"
+  text_echo "${RED}${BOLD}━━━ MAGIC STRINGS FOUND ━━━${NC}"
   text_echo ""
 
   # Sort violations by file count (descending)
@@ -353,9 +353,9 @@ else
   fi
 
   text_echo "${BOLD}━━━ SUMMARY ━━━${NC}"
-  text_echo "Total violations: ${RED}$TOTAL_VIOLATIONS${NC}"
+  text_echo "Total magic strings: ${RED}$TOTAL_VIOLATIONS${NC}"
   text_echo ""
-  text_echo "${YELLOW}Recommendation:${NC} Extract duplicated strings to constants or helper methods."
+  text_echo "${YELLOW}Recommendation:${NC} Extract magic strings to constants or helper methods."
   text_echo "See: dist/patterns/dry/README.md for refactoring guidance."
 fi
 

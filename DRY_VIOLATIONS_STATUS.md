@@ -1,4 +1,4 @@
-# DRY Violation Detection - Implementation Status
+# Magic String Detector ("DRY") - Implementation Status
 
 **Version:** 1.0.73
 **Date:** 2026-01-02
@@ -8,10 +8,10 @@
 
 ## 🎉 Executive Summary
 
-**DRY violation detection is now fully operational and production-ready!**
+**Magic String Detector ("DRY") is now fully operational and production-ready!**
 
 ### Key Achievements
-- ✅ **3 aggregated patterns** detecting duplicate WordPress option names, transient keys, and capabilities
+- ✅ **3 aggregated patterns** detecting duplicate WordPress option names, transient keys, and capabilities (magic strings)
 - ✅ **Pattern extraction working** - Complex 75-character regex patterns extracted successfully
 - ✅ **Aggregation logic working** - Groups duplicates across files with configurable thresholds
 - ✅ **HTML report integration** - DRY violations displayed in interactive HTML reports
@@ -19,7 +19,7 @@
 - ✅ **Real-world validation** - Tested on 2 WordPress plugins, detected 8 legitimate violations
 
 ### Output Formats
-1. **Terminal** - Color-coded violations with counts
+1. **Terminal** - Color-coded magic string violations with counts
 2. **JSON** - Structured data with file/line locations
 3. **HTML** - Interactive report with clickable file paths
 
@@ -27,7 +27,7 @@
 | Metric | Result |
 |--------|--------|
 | Plugins Tested | 2 |
-| Violations Found | 8 |
+| Magic Strings Found | 8 |
 | False Positives | 0 |
 | Legitimacy Rate | 100% |
 | HTML Integration | ✅ Complete |
@@ -39,7 +39,7 @@
 ## ✅ What's Been Completed
 
 ### 1. Pattern Definition Files (3 patterns)
-Created JSON pattern files for detecting duplicate string literals:
+Created JSON pattern files for detecting magic strings (duplicate string literals):
 
 - **`dist/patterns/duplicate-option-names.json`**
   - Detects: `get_option()`, `update_option()`, `delete_option()`, `add_option()`
@@ -54,7 +54,7 @@ Created JSON pattern files for detecting duplicate string literals:
   - Example: `'manage_options'` hardcoded in 6 files → should be a constant
 
 ### 2. Pattern Schema Extension
-Added new fields to pattern definition schema:
+Added new fields to pattern definition schema for Magic String Detector:
 
 ```json
 {
@@ -72,14 +72,14 @@ Added new fields to pattern definition schema:
 ```
 
 ### 3. JSON Output Schema
-Extended JSON output to include DRY violations:
+Extended JSON output to include magic string violations:
 
 ```json
 {
   "summary": {
-    "dry_violations": 2
+    "magic_string_violations": 2
   },
-  "dry_violations": [
+  "magic_string_violations": [
     {
       "pattern": "Duplicate option names across files",
       "severity": "MEDIUM",
@@ -108,11 +108,11 @@ Implemented in `dist/bin/check-performance.sh`:
   5. Report strings exceeding both thresholds
 
 ### 5. Text Output
-Added "DRY VIOLATION DETECTION" section to terminal output:
+Added "MAGIC STRING DETECTION" section to terminal output:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DRY VIOLATION DETECTION
+  MAGIC STRING DETECTION ("DRY")
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ▸ Duplicate option names across files
@@ -127,7 +127,7 @@ Added "DRY VIOLATION DETECTION" section to terminal output:
 ## ✅ Resolved Issues
 
 ### Issue #1: Pattern Extraction Failing ✅ FIXED (v1.0.71)
-**Symptom:** Aggregated patterns show "Found 0" matches even when violations exist
+**Symptom:** Aggregated patterns show "Found 0" matches even when magic strings exist
 
 **Root Cause:** Python JSON extraction was using inline command which failed with complex regex patterns
 
@@ -142,7 +142,7 @@ Added "DRY VIOLATION DETECTION" section to terminal output:
 ---
 
 ### Issue #2: Path Quoting Bug ✅ FIXED (v1.0.72)
-**Symptom:** Grep returned 0 matches even though manual grep found violations
+**Symptom:** Grep returned 0 matches even though manual grep found magic strings
 
 **Root Cause:** `$PATHS` variable was not quoted in grep command (line 1333)
 - Paths with spaces were being split into multiple arguments
@@ -181,16 +181,16 @@ Found 38 matches
 ---
 
 ### Issue #4: HTML Report Integration ✅ COMPLETED (v1.0.73)
-**Goal:** Display DRY violations in HTML reports (previously only in JSON/text)
+**Goal:** Display magic string violations in HTML reports (previously only in JSON/text)
 
 **Implementation:**
 1. ✅ Updated `dist/bin/templates/report-template.html`:
-   - Added `{{DRY_VIOLATIONS_COUNT}}` stat card to summary section
-   - Added `{{DRY_VIOLATIONS_HTML}}` section after Findings
+   - Added `{{MAGIC_STRING_VIOLATIONS_COUNT}}` stat card to summary section
+   - Added `{{MAGIC_STRING_VIOLATIONS_HTML}}` section after Findings
    - Styled violations with medium severity (yellow border)
 
 2. ✅ Enhanced `generate_html_report()` function:
-   - Extracts `dry_violations` array from JSON output
+   - Extracts `magic_string_violations` array from JSON output
    - Generates formatted HTML for each violation showing:
      - Pattern name and severity badge
      - Duplicated string in code block
@@ -198,10 +198,10 @@ Found 38 matches
      - Complete list of all locations with line numbers
    - Shows "No violations" message when none detected
 
-3. ✅ Added DRY violations count to summary stats card
+3. ✅ Added magic string violations count to summary stats card
 
 **Verification:** ✅ Tested with debug-log-manager plugin
-- Detected 6 DRY violations (all legitimate)
+- Detected 6 magic string violations (all legitimate)
 - HTML report displays all violations with proper formatting
 - Clickable file paths work correctly
 
@@ -214,7 +214,7 @@ Found 38 matches
 
 **Results:**
 ```
-DRY VIOLATION DETECTION
+MAGIC STRING DETECTION ("DRY")
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ▸ Duplicate transient keys across files
@@ -232,7 +232,7 @@ DRY VIOLATION DETECTION
 
 **Results:**
 ```
-DRY VIOLATION DETECTION
+MAGIC STRING DETECTION ("DRY")
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ▸ Duplicate option names across files
@@ -247,7 +247,7 @@ DRY VIOLATION DETECTION
 ```
 
 **Legitimacy Analysis:** ✅ All 6 violations are legitimate
-- All are WordPress option names hardcoded across multiple files
+- All are WordPress option names hardcoded across multiple files (magic strings)
 - Should be extracted to constants (e.g., `const OPTION_NAME = 'debug_log_manager';`)
 - Cross-file duplication detected correctly (activation, deactivation, main class, bootstrap)
 - Zero false positives
@@ -255,12 +255,12 @@ DRY VIOLATION DETECTION
 ### Verification Checklist
 - ✅ Pattern extraction working (75-character regex)
 - ✅ Grep finding matches (38+ raw matches)
-- ✅ Aggregation logic working (2-6 violations detected per plugin)
+- ✅ Aggregation logic working (2-6 magic strings detected per plugin)
 - ✅ Debug logging working
 - ✅ No shell errors
 - ✅ Paths with spaces handled correctly
-- ✅ HTML reports showing DRY violations
-- ✅ JSON output includes dry_violations array
+- ✅ HTML reports showing magic string violations
+- ✅ JSON output includes magic_string_violations array
 - ✅ Text output displays violations clearly
 
 ---
@@ -275,6 +275,8 @@ DRY VIOLATION DETECTION
    - **Impact:** Can only see most recent run
    - **Workaround:** Copy log file before running again
 
+3. **Terminology Note** - "Magic String" refers to hardcoded string literals that should be constants
+
 ---
 
 ## 📋 Testing Checklist
@@ -286,7 +288,7 @@ DRY VIOLATION DETECTION
 - [x] **Pattern extraction working** ✅ COMPLETE
 - [x] Test with real WordPress plugin (2 plugins tested)
 - [x] Verify thresholds (min_files=3, min_matches=6)
-- [x] Test with edge cases (0 violations, 6 violations)
+- [x] Test with edge cases (0 magic strings, 6 magic strings)
 - [x] HTML report integration ✅ COMPLETE
 
 ---
@@ -307,7 +309,7 @@ DRY VIOLATION DETECTION
    - Duplicate nonce action strings (`wp_create_nonce()`, `wp_verify_nonce()`)
 
 2. **Documentation** (LOW PRIORITY)
-   - Update README with DRY violation examples
+   - Update README with Magic String Detector examples
    - Add pattern authoring guide for aggregated patterns
    - Create troubleshooting guide for common issues
 
@@ -322,47 +324,47 @@ DRY VIOLATION DETECTION
 
 ### Real-World Testing Summary
 
-| Plugin | Violations Found | False Positives | Legitimacy |
-|--------|------------------|-----------------|------------|
+| Plugin | Magic Strings Found | False Positives | Legitimacy |
+|--------|---------------------|-----------------|------------|
 | woocommerce-all-products-for-subscriptions | 2 | 0 | ✅ 100% |
 | debug-log-manager | 6 | 0 | ✅ 100% |
 
 **Signal-to-Noise Ratio:** ⭐⭐⭐⭐⭐ (Perfect - zero false positives)
 
-### Example Legitimate Violations Detected
+### Example Legitimate Magic Strings Detected
 
-**Pattern:** Duplicate option names across files
+**Pattern:** Duplicate option names across files (magic strings)
 
 1. `debug_log_manager` - 9 occurrences across 4 files
-   - **Issue:** Option name hardcoded in activation, deactivation, main class, bootstrap
+   - **Issue:** Option name hardcoded in activation, deactivation, main class, bootstrap (magic string)
    - **Fix:** Extract to constant: `const OPTION_NAME = 'debug_log_manager';`
    - **Impact:** Prevents typos, enables easy refactoring
 
 2. `debug_log_manager_autorefresh` - 11 occurrences across 4 files
-   - **Issue:** Feature flag name duplicated everywhere
+   - **Issue:** Feature flag name duplicated everywhere (magic string)
    - **Fix:** Extract to constant
    - **Impact:** Single source of truth for option key
 
-**Conclusion:** Pattern-based detection is highly effective for WordPress-specific DRY violations, even without AST parsing.
+**Conclusion:** Pattern-based detection is highly effective for WordPress-specific magic strings (DRY violations), even without AST parsing.
 
 ---
 
 ## 💡 Key Insights
 
 ### What Works Well
-1. ✅ **Cross-file detection** - Correctly identifies duplication across multiple files
+1. ✅ **Cross-file detection** - Correctly identifies magic strings across multiple files
 2. ✅ **WordPress-specific patterns** - Targets common WordPress anti-patterns
 3. ✅ **Threshold filtering** - Eliminates noise (min 3 files, min 6 occurrences)
-4. ✅ **Actionable results** - Clear fix: extract to constants
-5. ✅ **Zero false positives** - All detected violations are legitimate
+4. ✅ **Actionable results** - Clear fix: extract magic strings to constants
+5. ✅ **Zero false positives** - All detected magic strings are legitimate violations
 
 ### Limitations (Acceptable Trade-offs)
 1. ⚠️ **No AST parsing** - Cannot detect semantic duplication (e.g., similar logic)
-2. ⚠️ **Regex-based** - Limited to string literal patterns
+2. ⚠️ **Regex-based** - Limited to string literal patterns (magic strings)
 3. ⚠️ **WordPress-focused** - Patterns are WordPress-specific
 
 ### Recommendations
-1. ✅ **Production Ready** - Feature is stable and provides real value
+1. ✅ **Production Ready** - Magic String Detector is stable and provides real value
 2. 🔜 **Add more patterns** - Meta keys, hooks, REST routes (low priority)
-3. 🔜 **Documentation** - Add examples to README (low priority)
+3. 🔜 **Documentation** - Add Magic String Detector examples to README (low priority)
 

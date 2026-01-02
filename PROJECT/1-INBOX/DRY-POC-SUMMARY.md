@@ -1,4 +1,4 @@
-# DRY Detection - Proof of Concept Summary
+# Magic String Detector ("DRY") - Proof of Concept Summary
 
 **Created:** 2026-01-01
 **Status:** Planning Complete - Ready for Implementation
@@ -44,7 +44,7 @@
 **File:** `dist/patterns/dry/README.md`
 
 **Contents:**
-- Overview of DRY patterns vs standard patterns
+- Overview of Magic String Detector ("DRY") patterns vs standard patterns
 - How aggregation works
 - Pattern schema documentation
 - Best practices for when to centralize
@@ -107,7 +107,7 @@ function api_client_init() {
 
 **Example Output:**
 ```
-━━━ DRY VIOLATIONS ━━━
+━━━ MAGIC STRING VIOLATIONS ━━━
 
 Option 'my_plugin_api_key' appears in 5 files (12 times)
   - admin/settings.php:45
@@ -184,7 +184,7 @@ Total duplicated strings: 2
 - **Too noisy:** False positive rate > 25%
 - **Not useful:** Team doesn't find violations actionable
 - **Too slow:** Scan takes > 10 seconds on typical codebase
-- **Next step:** Revisit approach or abandon DRY detection
+- **Next step:** Revisit approach or abandon Magic String Detector ("DRY")
 
 ---
 

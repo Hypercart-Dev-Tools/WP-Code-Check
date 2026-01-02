@@ -1,18 +1,18 @@
-# DRY (Don't Repeat Yourself) Patterns
+# Magic String Detector ("DRY") Patterns
 
-**Status:** Phase 1 - Proof of Concept  
-**Version:** 1.0.0  
+**Status:** Phase 1 - Proof of Concept
+**Version:** 1.0.0
 **Last Updated:** 2026-01-01
 
 ---
 
 ## 📋 Overview
 
-This directory contains **DRY violation detection patterns** for WordPress codebases. Unlike the performance/security patterns in the parent directory, these patterns detect **code duplication** and **scattered string literals** that should be centralized.
+This directory contains **Magic String Detector ("DRY")** patterns for WordPress codebases. Unlike the performance/security patterns in the parent directory, these patterns detect **magic strings** (hardcoded string literals) and **scattered duplicated strings** that should be centralized.
 
-### What Are DRY Patterns?
+### What Are Magic Strings?
 
-DRY patterns use **aggregation** to detect when the same string literal (option name, transient key, capability, etc.) appears in **multiple files**. This indicates a violation of the DRY (Don't Repeat Yourself) principle.
+Magic strings are hardcoded string literals that appear in multiple places across a codebase. The Magic String Detector uses **aggregation** to detect when the same string literal (option name, transient key, capability, etc.) appears in **multiple files**. This indicates a violation of the DRY (Don't Repeat Yourself) principle.
 
 **Example:**
 ```php
@@ -39,35 +39,35 @@ $api_key = get_option( MY_PLUGIN_OPTION_API_KEY );
 ## 🎯 Phase 1 Patterns (Proof of Concept)
 
 ### 1. Duplicate Option Names
-**File:** `duplicate-option-names.json`  
-**Severity:** MEDIUM  
+**File:** `duplicate-option-names.json`
+**Severity:** MEDIUM
 **Threshold:** 3+ files, 6+ occurrences
 
-Detects `get_option()`, `update_option()`, `delete_option()` calls with hard-coded option names.
+Detects `get_option()`, `update_option()`, `delete_option()` calls with hard-coded option names (magic strings).
 
 **Why it matters:** Typos in option names lead to settings not saving. Refactoring option names is risky without constants.
 
 ### 2. Duplicate Transient Keys
-**File:** `duplicate-transient-keys.json`  
-**Severity:** MEDIUM  
+**File:** `duplicate-transient-keys.json`
+**Severity:** MEDIUM
 **Threshold:** 3+ files, 4+ occurrences
 
-Detects `get_transient()`, `set_transient()`, `delete_transient()` calls with hard-coded transient keys.
+Detects `get_transient()`, `set_transient()`, `delete_transient()` calls with hard-coded transient keys (magic strings).
 
 **Why it matters:** Typos in transient keys lead to cache invalidation bugs and stale data.
 
 ### 3. Duplicate Capability Strings
-**File:** `duplicate-capability-strings.json`  
-**Severity:** LOW  
+**File:** `duplicate-capability-strings.json`
+**Severity:** LOW
 **Threshold:** 5+ files, 10+ occurrences
 
-Detects `current_user_can()`, `user_can()` calls with hard-coded capability strings.
+Detects `current_user_can()`, `user_can()` calls with hard-coded capability strings (magic strings).
 
 **Why it matters:** Scattered capability checks make permission changes risky and inconsistent.
 
 ---
 
-## 🔧 How DRY Patterns Work
+## 🔧 How Magic String Detection Works
 
 ### Standard Pattern (Performance/Security)
 ```json
@@ -79,7 +79,7 @@ Detects `current_user_can()`, `user_can()` calls with hard-coded capability stri
 ```
 **Output:** "Found 5 violations in 3 files"
 
-### DRY Pattern (Aggregation)
+### Magic String Pattern (Aggregation)
 ```json
 {
   "detection": {
@@ -94,9 +94,9 @@ Detects `current_user_can()`, `user_can()` calls with hard-coded capability stri
   }
 }
 ```
-**Output:** 
+**Output:**
 ```
-Option 'my_plugin_api_key' appears in 5 files (12 times)
+Magic string 'my_plugin_api_key' appears in 5 files (12 times)
   - admin/settings.php:45
   - includes/api-client.php:23
   - cron/sync.php:67
@@ -106,7 +106,7 @@ Option 'my_plugin_api_key' appears in 5 files (12 times)
 
 ---
 
-## 📊 Pattern Schema (DRY-Specific Fields)
+## 📊 Pattern Schema (Magic String Detector Fields)
 
 ### Aggregation Object
 ```json
@@ -147,15 +147,15 @@ Option 'my_plugin_api_key' appears in 5 files (12 times)
 }
 ```
 
-**Purpose:** Exclude common WordPress core strings that appear everywhere and are not DRY violations.
+**Purpose:** Exclude common WordPress core strings that appear everywhere and are not magic string violations.
 
 ---
 
 ## 🚀 Usage
 
-### Run DRY Detection (Future)
+### Run Magic String Detector (Future)
 ```bash
-# Scan for DRY violations
+# Scan for magic strings
 ./dist/bin/find-dry.sh --paths /path/to/plugin
 
 # Output format
@@ -167,10 +167,10 @@ Option 'my_plugin_api_key' appears in 5 files (12 times)
 
 ### Integration with check-performance.sh (Future)
 ```bash
-# Run all checks including DRY
+# Run all checks including Magic String Detector
 ./dist/bin/check-performance.sh --paths . --include-dry
 
-# Skip DRY checks
+# Skip Magic String checks
 ./dist/bin/check-performance.sh --paths . --skip-dry
 ```
 
@@ -187,7 +187,7 @@ Option 'my_plugin_api_key' appears in 5 files (12 times)
 ### Phase 2: Expansion
 - ⏳ 5-8 more patterns (meta keys, nonce actions, AJAX actions, etc.)
 - ⏳ Integration with `check-performance.sh`
-- ⏳ HTML report section for DRY violations
+- ⏳ HTML report section for magic string violations
 - ⏳ CI/CD integration (warn-only mode)
 
 ### Phase 3: Advanced
@@ -199,7 +199,7 @@ Option 'my_plugin_api_key' appears in 5 files (12 times)
 
 ## 🎓 Best Practices
 
-### When to Centralize
+### When to Centralize Magic Strings
 ✅ **DO centralize:**
 - Custom option names (plugin-specific settings)
 - Custom transient keys (plugin-specific caches)
@@ -229,5 +229,5 @@ Option 'my_plugin_api_key' appears in 5 files (12 times)
 
 ---
 
-**Questions?** See `PROJECT/1-INBOX/NEXT-FIND-DRY.md` for the full implementation plan.
+**Questions?** See `PROJECT/1-INBOX/NEXT-FIND-DRY.md` for the full Magic String Detector ("DRY") implementation plan.
 
