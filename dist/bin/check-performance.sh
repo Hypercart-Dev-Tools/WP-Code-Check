@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.78"
+SCRIPT_VERSION="1.0.79"
 
 # Defaults
 PATHS="."
@@ -856,7 +856,7 @@ generate_html_report() {
       fi
 
       # URL-encode the path for robust file links
-      local encoded_file_path=$(url_encode "$abs_file_path")
+      local encoded_file_path=$(url_encode_path "$abs_file_path")
 
       # Generate HTML for this finding, ensuring '&' is escaped first
       local finding_html=$(echo "$finding_json" | jq -r --arg abs_path "$encoded_file_path" '

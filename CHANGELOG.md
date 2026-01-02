@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.79] - 2026-01-02
+
+### Fixed
+- **HTML Report Generation** - Fixed `url_encode: command not found` error
+  - Changed `url_encode()` to `url_encode_path()` on line 859
+  - Function was removed in v1.0.77 but one call site was missed
+  - Now uses correct function from `common-helpers.sh`
+  - **Impact:** HTML reports now generate without errors
+
 ## [1.0.78] - 2026-01-02
 
 ### Added
