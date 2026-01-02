@@ -217,4 +217,434 @@ Before completing any task, verify:
 
 ---
 
-_This document consolidates all WordPress development guidelines for AI agents. Follow these principles to ensure safe, maintainable, and WordPress-compliant code._
+## 📁 PROJECT Folder Workflow Management
+
+### Overview
+
+The `/PROJECT/` folder uses a three-stage workflow to track tasks, implementations, research, and analysis. AI agents must follow these rules to properly manage document lifecycle and maintain project organization.
+
+### Folder Structure
+
+```
+/PROJECT/
+├── 1-INBOX/          # New tasks, unprocessed requests, backlog items
+├── 2-WORKING/        # Active tasks, in-progress implementations
+├── 3-COMPLETED/      # Finished tasks, archived documentation
+└── [root files]      # Reference documents, ADRs, summaries
+```
+
+---
+
+### 📥 1-INBOX: New & Unprocessed Tasks
+
+**Purpose:** Capture new ideas, bug reports, feature requests, and tasks that haven't started yet.
+
+**When to create documents here:**
+- [ ] User reports a bug that needs investigation
+- [ ] New feature request that requires planning
+- [ ] Research task that hasn't been started
+- [ ] Backlog items waiting for prioritization
+- [ ] Ideas or suggestions for future work
+
+**File naming conventions:**
+- `BUG-[issue-description].md` - Bug reports
+- `FEATURE-[feature-name].md` - Feature requests
+- `RESEARCH-[topic].md` - Investigation tasks
+- `NEXT-[task-name].md` - Planned upcoming tasks
+- `IDEA-[concept].md` - Future considerations
+
+**Example scenarios:**
+```markdown
+# User says: "I found a bug with file path detection on Windows"
+→ Create: 1-INBOX/BUG-WINDOWS-FILE-PATHS.md
+
+# User says: "Can we add support for scanning TypeScript files?"
+→ Create: 1-INBOX/FEATURE-TYPESCRIPT-SUPPORT.md
+
+# User says: "We should research static analysis tools"
+→ Create: 1-INBOX/RESEARCH-STATIC-ANALYSIS-TOOLS.md
+```
+
+**Document template for INBOX:**
+```markdown
+# [Task Title]
+
+**Created:** [Date]
+**Status:** Not Started
+**Priority:** [Low/Medium/High/Critical]
+
+## Problem/Request
+[Brief description of the issue, feature, or research need]
+
+## Context
+- [Related files/patterns/code]
+- [Impact on users or system]
+
+## Acceptance Criteria
+- [ ] [What defines "done" for this task]
+- [ ] [Measurable outcomes]
+
+## Notes
+[Any additional context or considerations]
+```
+
+---
+
+### 🔨 2-WORKING: Active In-Progress Tasks
+
+**Purpose:** Track tasks currently being worked on with progress updates.
+
+**When to promote from INBOX to WORKING:**
+- [ ] User explicitly asks to start working on the task
+- [ ] You begin implementation or investigation
+- [ ] Task moves from planning to execution phase
+- [ ] Active development or testing is underway
+
+**When to create documents directly here:**
+- [ ] User asks you to implement something immediately
+- [ ] Urgent bug fix that bypasses planning phase
+- [ ] Quick tasks that don't need INBOX stage
+
+**File naming conventions:**
+- Same as INBOX, but with status in filename or frontmatter
+- `IMPLEMENTATION-[feature-name].md` - Active development
+- `FIX-[bug-description].md` - Active bug fix
+- `ANALYSIS-[topic].md` - Ongoing investigation
+
+**Document structure for WORKING:**
+```markdown
+# [Task Title]
+
+**Created:** [Date]
+**Started:** [Date]
+**Status:** In Progress
+**Assigned Version:** [Target version number]
+
+## Progress
+- [x] [Completed step]
+- [ ] [Current step]
+- [ ] [Remaining step]
+
+## Implementation Notes
+[Details about approach, decisions made, code changes]
+
+## Testing
+- [ ] [Test cases or verification steps]
+
+## Blockers
+[Any impediments to completion]
+
+## Next Steps
+[Immediate next actions]
+```
+
+**Promotion trigger words:**
+- "Let's start working on..."
+- "Begin implementation of..."
+- "Fix the bug in..."
+- "I'm ready to tackle..."
+
+---
+
+### ✅ 3-COMPLETED: Finished & Archived Tasks
+
+**Purpose:** Archive completed work for reference without cluttering active workspace.
+
+**When to move from WORKING to COMPLETED:**
+- [ ] Task is fully implemented and tested
+- [ ] Bug is fixed and verified
+- [ ] Research is complete with conclusions documented
+- [ ] Feature is shipped in a released version
+- [ ] User explicitly marks task as done
+
+**When to move from INBOX to COMPLETED (skipping WORKING):**
+- [ ] Task is cancelled or no longer relevant
+- [ ] Duplicate of another task
+- [ ] Research concludes "no action needed"
+
+**Final document requirements:**
+```markdown
+# [Task Title]
+
+**Created:** [Date]
+**Completed:** [Date]
+**Status:** ✅ Completed
+**Shipped In:** [Version number]
+
+## Summary
+[Brief overview of what was accomplished]
+
+## Implementation
+[What was changed, where, and how]
+
+## Results
+- [Metrics or outcomes]
+- [Performance improvements]
+- [User impact]
+
+## Lessons Learned
+[What worked well, what didn't, what to do differently next time]
+
+## Related
+- [Links to CHANGELOG entries]
+- [Related PRs or issues]
+- [Connected documentation]
+```
+
+**Completion trigger words:**
+- "This is done"
+- "Shipped in version X"
+- "Task completed"
+- "Bug fixed and verified"
+- "Mark as complete"
+
+---
+
+### 📄 Root-Level PROJECT Files
+
+**Purpose:** Reference documentation that doesn't fit the task lifecycle.
+
+**When to create files in PROJECT root (not in subfolders):**
+- [ ] **ADRs (Architecture Decision Records)** - `ADR-[topic].md`
+- [ ] **Summaries** - `[TOPIC]-SUMMARY.md`
+- [ ] **Process Documentation** - `PROJECT-[process-name].md`
+- [ ] **Guides** - `GUIDE-[topic].md`
+- [ ] **Quick References** - `QUICK-REFERENCE-[topic].md`
+- [ ] **Analysis Reports** - `SCAN-ANALYSIS-[plugin-name].md`
+
+**Examples:**
+```
+PROJECT/
+├── ADR-FALSE-POSITIVE-REDUCTION-SUMMARY.md   # ADR compilation
+├── PROJECT-PROCESS-IMPROVEMENT.md            # Process guide
+├── PATTERN-LIBRARY-SUMMARY.md                # Reference doc
+├── QUICK-REFERENCE-FILE-PATH-HELPERS.md      # Quick guide
+└── SCAN-ANALYSIS-WC-ALL-PRODUCTS.md          # Analysis report
+```
+
+**These files stay in root permanently** - they are living documents that may be updated over time but don't follow the lifecycle workflow.
+
+---
+
+### 🔄 Workflow Decision Tree
+
+```
+┌─────────────────────────────────────┐
+│ User provides task or information   │
+└─────────────┬───────────────────────┘
+              │
+              ▼
+      ┌───────────────┐
+      │ Is this a     │
+      │ new task?     │
+      └───────┬───────┘
+              │
+        ┌─────┴─────┐
+        │           │
+       YES         NO
+        │           │
+        │           └──────► Update existing document
+        │                    or create reference doc
+        ▼                    in PROJECT root
+  ┌──────────────┐
+  │ Is it urgent │
+  │ or starting  │
+  │ immediately? │
+  └───────┬──────┘
+          │
+    ┌─────┴─────┐
+    │           │
+   YES         NO
+    │           │
+    │           └──────► Create in 1-INBOX/
+    │                    (planning/backlog)
+    ▼
+Create in 2-WORKING/
+(active task)
+    │
+    │ [Work progresses...]
+    │
+    ▼
+  ┌──────────────┐
+  │ Task         │
+  │ complete?    │
+  └───────┬──────┘
+          │
+         YES
+          │
+          ▼
+Move to 3-COMPLETED/
+(archive & document results)
+```
+
+---
+
+### 📊 Status Metadata (Instead of Additional Folders)
+
+**Philosophy:** Use status metadata in document frontmatter rather than creating separate folders for edge cases like "blocked" or "deferred" tasks. This follows the KISS principle and avoids process over-engineering.
+
+**Status Field Values:**
+
+| Status | Location | Meaning | Use When |
+|--------|----------|---------|----------|
+| **Not Started** | `1-INBOX/` | Task planned but not begun | Initial creation, backlog item |
+| **In Progress** | `2-WORKING/` | Actively being worked on | Development underway |
+| **Blocked** | `2-WORKING/` | Waiting on external dependency | Can't proceed without something |
+| **Deferred** | `1-INBOX/` | Postponed to future version | Out of scope for current milestone |
+| **Completed** | `3-COMPLETED/` | Shipped and verified | Task done, feature released |
+| **Cancelled** | `3-COMPLETED/` | No longer needed | Duplicate, obsolete, or rejected |
+
+**Required Frontmatter for Special States:**
+
+```markdown
+# For BLOCKED tasks (keep in 2-WORKING/)
+**Status:** Blocked
+**Blocked By:** [Waiting on user decision / External API change / Dependency X]
+**Blocked Since:** [Date]
+**Unblock Condition:** [What needs to happen to proceed]
+
+# For DEFERRED tasks (keep in 1-INBOX/)
+**Status:** Deferred
+**Deferred Until:** [v2.0 / Q2 2026 / After baseline completion]
+**Deferred Reason:** [Out of scope / Low priority / Resource constraint]
+```
+
+**Filename Prefixes for Visibility:**
+
+For blocked tasks that need attention, optionally prefix the filename:
+- `[BLOCKED]-FEATURE-NAME.md` - Makes blocked status visible in file browser
+- `[DEFERRED]-FEATURE-NAME.md` - Shows deferred status at a glance
+
+**Searching for Tasks by Status:**
+
+```bash
+# Find all blocked tasks
+grep -r "Status: Blocked" PROJECT/2-WORKING/
+
+# Find all deferred tasks  
+grep -r "Status: Deferred" PROJECT/1-INBOX/
+
+# Find tasks awaiting specific condition
+grep -r "Blocked By:" PROJECT/
+```
+
+**Why Not Separate BLOCKED/DEFERRED Folders?**
+
+❌ **Don't create folders for edge cases because:**
+- Adds folder management overhead (moving files multiple times)
+- Hides blocked work from active view (out of sight = out of mind)
+- Creates ambiguity (is deferred in INBOX or separate folder?)
+- Your current workflow shows few blocked/deferred tasks
+- Metadata is more flexible and searchable
+
+✅ **Metadata approach benefits:**
+- Tasks stay in their logical location (INBOX or WORKING)
+- Status changes don't require file moves
+- Grep/search works across all statuses
+- Less process overhead = faster workflow
+- Follows your own "KISS" advice from process improvement doc
+
+**Example: Handling a Blocked Task**
+
+```markdown
+# User says: "I can't proceed with the TypeScript support until we upgrade Node.js"
+
+→ Keep in: 2-WORKING/FEATURE-TYPESCRIPT-SUPPORT.md
+→ Update frontmatter:
+
+**Status:** Blocked
+**Blocked By:** Node.js upgrade required (currently v14, need v18+)
+**Blocked Since:** 2026-01-02
+**Unblock Condition:** Upgrade Node.js to v18 or higher
+
+## Blockers
+- Current production environment runs Node.js v14
+- TypeScript 5.x requires Node.js v18+
+- Need DevOps approval for Node upgrade
+
+## Next Steps (When Unblocked)
+1. Update package.json engines requirement
+2. Install TypeScript 5.x
+3. Configure tsconfig.json
+```
+
+**Example: Handling a Deferred Task**
+
+```markdown
+# User says: "Let's defer the multi-site support until v2.0"
+
+→ Keep in: 1-INBOX/FEATURE-MULTI-SITE-SUPPORT.md
+→ Update frontmatter:
+
+**Status:** Deferred
+**Deferred Until:** v2.0 (Q3 2026)
+**Deferred Reason:** Focus on single-site stability first; complexity requires dedicated milestone
+
+## Notes
+- User requested feature but agreed to defer
+- Requires significant architectural changes
+- Will revisit after v1.0 baseline is stable
+```
+
+---
+
+### 🎯 Quick Reference for AI Agents
+
+**Creating a new document:**
+1. **Ask:** Is this a reference doc (ADR, summary, guide)? → `PROJECT/[NAME].md`
+2. **Ask:** Is work starting immediately? → `PROJECT/2-WORKING/[NAME].md`
+3. **Else:** → `PROJECT/1-INBOX/[NAME].md`
+
+**Moving a document:**
+1. **INBOX → WORKING:** User says "start", "implement", "begin", or you're actively working on it
+2. **WORKING → COMPLETED:** User confirms done, shipped in version, or fully verified
+3. **INBOX → COMPLETED:** Task cancelled, duplicate, or no action needed
+
+**Updating a document:**
+- Always update status, dates, and progress sections
+- Add timestamps for significant milestones
+- Link to related files, commits, or versions
+
+**Naming conventions:**
+- Use `UPPERCASE-WITH-DASHES.md` for all PROJECT files
+- Be descriptive but concise (≤5 words preferred)
+- Include prefixes: `BUG-`, `FEATURE-`, `IMPLEMENTATION-`, `FIX-`, `RESEARCH-`, `ADR-`, `GUIDE-`, etc.
+
+---
+
+### 🚫 Common Mistakes to Avoid
+
+- ❌ Creating implementation docs in INBOX when work already started
+- ❌ Leaving completed tasks in WORKING folder
+- ❌ Creating task files in PROJECT root that belong in lifecycle folders
+- ❌ Forgetting to update status fields when moving documents
+- ❌ Not linking related documents (ADRs, CHANGELOG, code files)
+- ❌ Skipping the completion summary when archiving
+- ❌ Creating files without clear purpose or category
+
+---
+
+### 📋 Checklist for AI Agents
+
+**Before creating any PROJECT document:**
+- [ ] Determined the correct folder (1-INBOX, 2-WORKING, 3-COMPLETED, or root)
+- [ ] Used appropriate naming convention with prefix
+- [ ] Included required frontmatter (date, status, priority)
+- [ ] Added clear acceptance criteria or success metrics
+
+**When moving a document between folders:**
+- [ ] Updated status field
+- [ ] Added completion date (for COMPLETED)
+- [ ] Added version number if applicable (for COMPLETED)
+- [ ] Documented lessons learned or results (for COMPLETED)
+- [ ] Linked to related documents or CHANGELOG entries
+
+**When updating an existing document:**
+- [ ] Maintained chronological order of updates
+- [ ] Kept original creation date intact
+- [ ] Added timestamps for significant changes
+- [ ] Preserved historical context (don't delete previous work)
+
+---
+
+## ✅ Pre-Commit Checklist
