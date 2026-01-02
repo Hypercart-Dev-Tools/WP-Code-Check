@@ -201,6 +201,35 @@
       color: #856404;
     }
 
+    .copy-btn {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 4px;
+      color: white;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      border-color: rgba(255, 255, 255, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+    }
+
+    .copy-btn.copied {
+      background: rgba(40, 167, 69, 0.8);
+      border-color: rgba(40, 167, 69, 1);
+    }
+
     .status-banner {
       padding: 20px;
       text-align: center;
@@ -261,7 +290,10 @@
           <div>Generated (UTC): {{TIMESTAMP}}</div>
           <div id="local-time">Local Time/Date: <span id="local-timestamp">Loading...</span></div>
           <div>Script Version: {{VERSION}}</div>
-          <div>Paths Scanned: {{PATHS_SCANNED}}</div>
+          <div>
+            Paths Scanned: {{PATHS_SCANNED}}
+            <button class="copy-btn" onclick="copyFolderPath()" title="Copy folder path to clipboard">📋 Copy Path</button>
+          </div>
           {{JSON_LOG_LINK}}
           <div>Strict Mode: {{STRICT_MODE}}</div>
         </div>
@@ -342,6 +374,45 @@
   </div>
 
   <script>
+    // Copy to clipboard functions (must be in global scope for onclick handlers)
+    const folderPath = '{{JS_FOLDER_PATH}}';
+    const logPath = '{{JS_LOG_PATH}}';
+
+    function copyFolderPath() {
+      copyToClipboard(folderPath, 'Folder path copied!', 'Open in Finder/Explorer: ' + folderPath);
+    }
+
+    function copyLogPath() {
+      copyToClipboard(logPath, 'JSON log path copied!', 'Open file: ' + logPath);
+    }
+
+    function copyToClipboard(text, successMessage, detailMessage) {
+      if (!text) {
+        alert('No path available to copy');
+        return;
+      }
+
+      navigator.clipboard.writeText(text).then(() => {
+        // Show success feedback
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('copied');
+
+        // Show alert with helpful message
+        alert(successMessage + '\n\n' + detailMessage);
+
+        // Reset button after 2 seconds
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(err => {
+        alert('Failed to copy to clipboard. Please copy manually:\n\n' + text);
+        console.error('Copy failed:', err);
+      });
+    }
+
     // Convert UTC timestamp to local time
     document.addEventListener('DOMContentLoaded', function() {
       // Get the UTC timestamp from the page

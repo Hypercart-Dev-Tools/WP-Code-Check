@@ -787,7 +787,7 @@ generate_html_report() {
   if [ -n "$log_file_path" ] && [ -f "$log_file_path" ]; then
     local encoded_log_path=$(url_encode "$log_file_path")
     local escaped_log_path=$(echo "$log_file_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-    json_log_link="<div style=\"margin-top: 8px;\">JSON Log: <a href=\"file://$encoded_log_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open JSON log file\">$escaped_log_path</a></div>"
+    json_log_link="<div style=\"margin-top: 8px;\">JSON Log: <a href=\"file://$encoded_log_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open JSON log file\">$escaped_log_path</a> <button class=\"copy-btn\" onclick=\"copyLogPath()\" title=\"Copy JSON log path to clipboard\">📋 Copy Path</button></div>"
   fi
 
   # Extract project information
@@ -923,12 +923,21 @@ generate_html_report() {
   local html_content
   html_content=$(cat "$template_file")
 
+  # Escape paths for JavaScript (escape backslashes, quotes, and newlines)
+  local js_abs_path=$(echo "$abs_path" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\'/g; s/\"/\\\\\"/g")
+  local js_log_path=""
+  if [ -n "$log_file_path" ] && [ -f "$log_file_path" ]; then
+    js_log_path=$(echo "$log_file_path" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\'/g; s/\"/\\\\\"/g")
+  fi
+
   # Replace all placeholders
   html_content="${html_content//\{\{PROJECT_INFO\}\}/$project_info_html}"
   html_content="${html_content//\{\{VERSION\}\}/$version}"
   html_content="${html_content//\{\{TIMESTAMP\}\}/$timestamp}"
   html_content="${html_content//\{\{PATHS_SCANNED\}\}/$paths_link}"
   html_content="${html_content//\{\{JSON_LOG_LINK\}\}/$json_log_link}"
+  html_content="${html_content//\{\{JS_FOLDER_PATH\}\}/$js_abs_path}"
+  html_content="${html_content//\{\{JS_LOG_PATH\}\}/$js_log_path}"
   html_content="${html_content//\{\{TOTAL_ERRORS\}\}/$total_errors}"
   html_content="${html_content//\{\{TOTAL_WARNINGS\}\}/$total_warnings}"
   html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
