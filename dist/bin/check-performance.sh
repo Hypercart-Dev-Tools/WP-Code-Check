@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.72
+# Version: 1.0.73
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.72"
+SCRIPT_VERSION="1.0.73"
 
 # Defaults
 PATHS="."
@@ -738,6 +738,7 @@ generate_html_report() {
   local exit_code=$(echo "$json_data" | jq -r '.summary.exit_code // 0')
   local strict_mode=$(echo "$json_data" | jq -r '.strict_mode // false')
   local findings_count=$(echo "$json_data" | jq '.findings | length')
+  local dry_violations_count=$(echo "$json_data" | jq '.dry_violations | length')
 
   # Extract fixture validation info
   local fixture_status=$(echo "$json_data" | jq -r '.fixture_validation.status // "not_run"')
@@ -881,6 +882,33 @@ generate_html_report() {
       <div class=\"finding-details\">Findings: \(.findings_count)</div>
     </div>"' | tr '\n' ' ')
 
+  # Generate DRY violations HTML
+  local dry_violations_html=""
+  if [ "$dry_violations_count" -gt 0 ]; then
+    dry_violations_html=$(echo "$json_data" | jq -r '.dry_violations[] |
+      "<div class=\"finding medium\">
+        <div class=\"finding-header\">
+          <div class=\"finding-title\">🔄 \(.duplicated_string)</div>
+          <span class=\"badge medium\">MEDIUM</span>
+        </div>
+        <div class=\"finding-details\">
+          <div style=\"margin-bottom: 10px;\">
+            <strong>Pattern:</strong> \(.pattern)<br>
+            <strong>Duplicated String:</strong> <code>\(.duplicated_string)</code><br>
+            <strong>Files:</strong> \(.file_count) files | <strong>Total Occurrences:</strong> \(.total_count)
+          </div>
+          <div style=\"margin-top: 10px;\">
+            <strong>Locations:</strong>
+            <ul style=\"margin: 5px 0 0 20px; padding: 0;\">
+              \(.locations | map("<li style=\"font-family: monospace; font-size: 0.9em;\">\(.file):\(.line)</li>") | join(""))
+            </ul>
+          </div>
+        </div>
+      </div>"' | tr '\n' ' ')
+  else
+    dry_violations_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>No DRY violations detected. Great job! 🎉</p>"
+  fi
+
   # Read template and replace placeholders
   local html_content
   html_content=$(cat "$template_file")
@@ -892,6 +920,7 @@ generate_html_report() {
   html_content="${html_content//\{\{PATHS_SCANNED\}\}/$paths_link}"
   html_content="${html_content//\{\{TOTAL_ERRORS\}\}/$total_errors}"
   html_content="${html_content//\{\{TOTAL_WARNINGS\}\}/$total_warnings}"
+  html_content="${html_content//\{\{DRY_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
   html_content="${html_content//\{\{BASELINED\}\}/$baselined}"
   html_content="${html_content//\{\{STALE_BASELINE\}\}/$stale_baseline}"
   html_content="${html_content//\{\{EXIT_CODE\}\}/$exit_code}"
@@ -900,6 +929,7 @@ generate_html_report() {
   html_content="${html_content//\{\{STATUS_MESSAGE\}\}/$status_message}"
   html_content="${html_content//\{\{FINDINGS_COUNT\}\}/$findings_count}"
   html_content="${html_content//\{\{FINDINGS_HTML\}\}/$findings_html}"
+  html_content="${html_content//\{\{DRY_VIOLATIONS_HTML\}\}/$dry_violations_html}"
   html_content="${html_content//\{\{CHECKS_HTML\}\}/$checks_html}"
   html_content="${html_content//\{\{FIXTURE_STATUS_CLASS\}\}/$fixture_status_class}"
   html_content="${html_content//\{\{FIXTURE_STATUS_TEXT\}\}/$fixture_status_text}"

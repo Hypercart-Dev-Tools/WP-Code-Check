@@ -296,6 +296,10 @@
         <div class="label">Warning Types</div>
         <div class="value">{{TOTAL_WARNINGS}}</div>
       </div>
+      <div class="stat-card">
+        <div class="label">DRY Violations</div>
+        <div class="value" style="color: #ffc107;">{{DRY_VIOLATIONS_COUNT}}</div>
+      </div>
       <div class="stat-card baselined">
         <div class="label">Baselined</div>
         <div class="value">{{BASELINED}}</div>
@@ -312,6 +316,12 @@
       <div class="section">
         <h2>📋 Findings ({{FINDINGS_COUNT}})</h2>
         {{FINDINGS_HTML}}
+      </div>
+
+      <!-- DRY Violations Section -->
+      <div class="section">
+        <h2>🔄 DRY Violations ({{DRY_VIOLATIONS_COUNT}})</h2>
+        {{DRY_VIOLATIONS_HTML}}
       </div>
 
       <!-- Checks Summary -->
@@ -363,18 +373,38 @@
       const searchBox = document.getElementById('search-box');
       const searchInfo = document.getElementById('search-results-info');
       const findings = document.querySelectorAll('.finding');
+      const sections = document.querySelectorAll('.section');
       const totalFindings = findings.length;
 
       function filterFindings() {
         const searchTerm = searchBox.value.toLowerCase().trim();
         let visibleCount = 0;
+        const sectionsWithHeaderMatch = new Set();
 
+        // First pass: identify sections with matching headers
+        sections.forEach(section => {
+          const sectionHeader = section.querySelector('h2');
+          const sectionHeaderText = sectionHeader ? sectionHeader.textContent.toLowerCase() : '';
+
+          if (searchTerm !== '' && sectionHeaderText.includes(searchTerm)) {
+            sectionsWithHeaderMatch.add(section);
+          }
+        });
+
+        // Second pass: filter findings
         findings.forEach(finding => {
+          const parentSection = finding.closest('.section');
+
           if (searchTerm === '') {
+            // No search term - show everything
+            finding.classList.remove('hidden');
+            visibleCount++;
+          } else if (sectionsWithHeaderMatch.has(parentSection)) {
+            // Parent section header matches - show all findings in that section
             finding.classList.remove('hidden');
             visibleCount++;
           } else {
-            // Search in all text content of the finding
+            // Check if finding content matches search term
             const findingText = finding.textContent.toLowerCase();
 
             if (findingText.includes(searchTerm)) {
@@ -386,15 +416,39 @@
           }
         });
 
+        // Third pass: show/hide sections based on visible content
+        sections.forEach(section => {
+          const visibleFindingsInSection = section.querySelectorAll('.finding:not(.hidden)').length;
+
+          if (searchTerm === '') {
+            // Show all sections when no search term
+            section.style.display = '';
+          } else if (sectionsWithHeaderMatch.has(section)) {
+            // Show section if header matches search term
+            section.style.display = '';
+          } else if (visibleFindingsInSection > 0) {
+            // Show section if it has visible findings
+            section.style.display = '';
+          } else {
+            // Hide section if no matches
+            section.style.display = 'none';
+          }
+        });
+
         // Update search info
         if (searchTerm === '') {
           searchInfo.textContent = '';
         } else {
-          searchInfo.textContent = `Showing ${visibleCount} of ${totalFindings} findings`;
-          if (visibleCount === 0) {
-            searchInfo.textContent = 'No findings match your search';
+          const visibleSections = Array.from(sections).filter(s => s.style.display !== 'none').length;
+
+          if (visibleCount === 0 && visibleSections === 0) {
+            searchInfo.textContent = 'No results match your search';
             searchInfo.style.color = '#dc3545';
+          } else if (visibleCount > 0) {
+            searchInfo.textContent = `Showing ${visibleCount} of ${totalFindings} items`;
+            searchInfo.style.color = '#28a745';
           } else {
+            searchInfo.textContent = `Showing matching sections`;
             searchInfo.style.color = '#28a745';
           }
         }

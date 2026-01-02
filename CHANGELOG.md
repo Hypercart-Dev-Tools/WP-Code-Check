@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.73] - 2026-01-02
+
+### Added
+- **DRY Violations in HTML Reports** - HTML reports now display DRY violations section
+  - Added dedicated "DRY Violations" section showing all detected violations
+  - Added DRY violations count to summary stats card
+  - Shows pattern name, duplicated string, file count, and total occurrences
+  - Lists all locations with clickable file paths
+  - **Impact:** DRY violations are now visible in HTML reports (previously only in JSON/text)
+
+### Changed
+- **HTML Template** - Updated `report-template.html` to include DRY violations section
+  - Added `{{DRY_VIOLATIONS_COUNT}}` placeholder for summary stats
+  - Added `{{DRY_VIOLATIONS_HTML}}` placeholder for violations content
+  - Styled violations with medium severity (yellow border)
+
+- **HTML Generation** - Enhanced `generate_html_report()` function
+  - Extracts DRY violations from JSON output
+  - Formats violations with pattern details and location lists
+  - Generates "No violations" message when none detected
+
+### Testing
+- Verified with debug-log-manager plugin (6 DRY violations detected)
+- HTML report displays all violations with proper formatting
+- Clickable file paths work correctly
+
 ## [1.0.72] - 2026-01-02
 
 ### Fixed
