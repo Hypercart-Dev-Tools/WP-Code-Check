@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.76] - 2026-01-02
+
+### Changed
+- Increased default fixture validation coverage to run eight proof-of-detection checks, covering AJAX, REST routes, admin capability callbacks, and direct database access patterns.
+
+### Added
+- Made fixture validation count configurable via `FIXTURE_COUNT` template option or the `FIXTURE_VALIDATION_COUNT` environment variable (default: 8).
+
 ## [1.0.75] - 2026-01-02
 
 ### Added
