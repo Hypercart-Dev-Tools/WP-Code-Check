@@ -5,29 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.74] - 2026-01-02
+
+### Changed
+- **Terminology Update: "DRY Violations" → "Magic String Detector"** - Renamed feature for clarity
+  - "DRY Violation Detection" is now "Magic String Detector ('DRY')"
+  - User-facing text updated in all scripts, templates, and documentation
+  - JSON output field renamed from `dry_violations` to `magic_string_violations`
+  - HTML template labels updated from "DRY Violations" to "Magic Strings"
+  - Internal variable names kept as `DRY_VIOLATIONS` for backward compatibility
+  - **Rationale:** "Magic String" is a more widely understood term for hardcoded string literals
+
+### Updated Files
+- `dist/bin/check-performance.sh` - Updated section headers and output messages
+- `dist/bin/find-dry.sh` - Updated script header and output messages
+- `dist/bin/templates/report-template.html` - Updated labels and placeholders
+- `dist/patterns/dry/README.md` - Updated documentation terminology
+- `CHANGELOG.md` - Updated all DRY-related entries
+- `DRY_VIOLATIONS_STATUS.md` - Updated document title and references
+- `PROJECT/1-INBOX/DRY-POC-SUMMARY.md` - Updated terminology
+- `PROJECT/1-INBOX/NEXT-FIND-DRY.md` - Updated terminology
+
 ## [1.0.73] - 2026-01-02
 
 ### Added
-- **DRY Violations in HTML Reports** - HTML reports now display DRY violations section
-  - Added dedicated "DRY Violations" section showing all detected violations
-  - Added DRY violations count to summary stats card
+- **Magic String Detector ("DRY") in HTML Reports** - HTML reports now display magic string violations section
+  - Added dedicated "Magic String Violations" section showing all detected violations
+  - Added magic string violations count to summary stats card
   - Shows pattern name, duplicated string, file count, and total occurrences
   - Lists all locations with clickable file paths
-  - **Impact:** DRY violations are now visible in HTML reports (previously only in JSON/text)
+  - **Impact:** Magic string violations are now visible in HTML reports (previously only in JSON/text)
 
 ### Changed
-- **HTML Template** - Updated `report-template.html` to include DRY violations section
-  - Added `{{DRY_VIOLATIONS_COUNT}}` placeholder for summary stats
-  - Added `{{DRY_VIOLATIONS_HTML}}` placeholder for violations content
+- **HTML Template** - Updated `report-template.html` to include magic string violations section
+  - Added `{{MAGIC_STRING_VIOLATIONS_COUNT}}` placeholder for summary stats
+  - Added `{{MAGIC_STRING_VIOLATIONS_HTML}}` placeholder for violations content
   - Styled violations with medium severity (yellow border)
 
 - **HTML Generation** - Enhanced `generate_html_report()` function
-  - Extracts DRY violations from JSON output
+  - Extracts magic string violations from JSON output
   - Formats violations with pattern details and location lists
   - Generates "No violations" message when none detected
 
 ### Testing
-- Verified with debug-log-manager plugin (6 DRY violations detected)
+- Verified with debug-log-manager plugin (6 magic string violations detected)
 - HTML report displays all violations with proper formatting
 - Clickable file paths work correctly
 
@@ -35,10 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Critical: Path Quoting Bug** - Fixed unquoted `$PATHS` variable in grep command
-  - **Impact:** DRY violation detection was completely broken for paths with spaces
-  - **Symptom:** Grep returned 0 matches even when violations existed
+  - **Impact:** Magic String Detector ("DRY") was completely broken for paths with spaces
+  - **Symptom:** Grep returned 0 matches even when magic strings existed
   - **Fix:** Added quotes around `"$PATHS"` in line 1333
-  - **Result:** ✅ DRY violation detection now works correctly
+  - **Result:** ✅ Magic String Detector now works correctly
 
 - **Shell Syntax Error** - Removed `local` keyword from non-function context
   - **Impact:** Script threw errors: "local: can only be used in a function"
@@ -49,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 - ✅ Pattern extraction working (75-character regex patterns extracted correctly)
 - ✅ Grep finding matches (38 raw matches found in test plugin)
-- ✅ Aggregation logic working (2 violations detected correctly)
+- ✅ Aggregation logic working (2 magic strings detected correctly)
 - ✅ Debug logging working (`/tmp/wp-code-check-debug.log` shows full details)
 
 ### Testing
@@ -59,7 +80,7 @@ Tested against real WordPress plugin:
 - **Results:**
   - Duplicate transient keys: ✓ No violations
   - Duplicate capability strings: ✓ No violations (3 matches, below threshold)
-  - Duplicate option names: ⚠ Found 2 violations (38 matches)
+  - Duplicate option names: ⚠ Found 2 magic strings (38 matches)
 
 ## [1.0.71] - 2026-01-01
 
@@ -77,9 +98,9 @@ Tested against real WordPress plugin:
   - Helps diagnose pattern loading and matching issues
   - **Usage:** Check `/tmp/wp-code-check-debug.log` after running the scanner
 
-- **Enhanced Output** - Improved DRY violation detection output
+- **Enhanced Output** - Improved Magic String Detector ("DRY") output
   - Shows pattern search string in output (for debugging)
-  - Shows count of violations found per pattern
+  - Shows count of magic strings found per pattern
   - Better visual feedback for debugging pattern issues
 
 ### Changed
@@ -96,34 +117,34 @@ Tested against real WordPress plugin:
 ## [1.0.70] - 2026-01-01
 
 ### Added
-- **DRY Violation Detection (Aggregated Patterns)** - New pattern type for detecting code duplication
+- **Magic String Detector ("DRY") (Aggregated Patterns)** - New pattern type for detecting magic strings (hardcoded string literals)
   - Added `detection_type` field to pattern schema (`direct` or `aggregated`)
-  - Created 3 aggregated patterns for detecting duplicate string literals:
+  - Created 3 aggregated patterns for detecting duplicate string literals (magic strings):
     - `dist/patterns/duplicate-option-names.json` - Duplicate WordPress option names across files
     - `dist/patterns/duplicate-transient-keys.json` - Duplicate transient keys across files
     - `dist/patterns/duplicate-capability-strings.json` - Duplicate capability strings across files
   - Aggregated patterns group matches by captured string and report violations when:
     - String appears in >= 3 distinct files (configurable via `min_distinct_files`)
     - String appears >= 6 total times (configurable via `min_total_matches`)
-  - **Purpose:** Detect DRY violations where hardcoded strings should be constants
+  - **Purpose:** Detect magic strings (DRY violations) where hardcoded strings should be constants
   - **Example:** Option name `'my_plugin_settings'` used in 5 files (8 times) → suggests creating a constant
 
-- **JSON Output Enhancement** - Extended JSON schema to include DRY violations
-  - Added `dry_violations` array to JSON output with structure:
+- **JSON Output Enhancement** - Extended JSON schema to include magic string violations
+  - Added `magic_string_violations` array to JSON output with structure:
     - `pattern`: Pattern title (e.g., "Duplicate option names across files")
     - `severity`: Pattern severity (MEDIUM/HIGH/CRITICAL)
-    - `duplicated_string`: The duplicated string literal
+    - `duplicated_string`: The duplicated string literal (magic string)
     - `file_count`: Number of distinct files containing the string
     - `total_count`: Total occurrences across all files
     - `locations`: Array of `{file, line}` objects showing all occurrences
-  - Added `dry_violations` count to summary section
+  - Added `magic_string_violations` count to summary section
   - **Example Output:**
     ```json
     {
       "summary": {
-        "dry_violations": 2
+        "magic_string_violations": 2
       },
-      "dry_violations": [
+      "magic_string_violations": [
         {
           "pattern": "Duplicate option names across files",
           "severity": "MEDIUM",
@@ -157,16 +178,16 @@ Tested against real WordPress plugin:
     - `report_format`: Template for violation messages
     - `sort_by`: Sort order for violations (`"file_count_desc"` or `"total_count_desc"`)
 
-- **Text Output** - Added DRY Violation Detection section
+- **Text Output** - Added Magic String Detection ("DRY") section
   - New section displayed after all direct pattern checks
   - Shows pattern title and violation status for each aggregated pattern
-  - Displays "✓ No violations" or "⚠ Found violations" for each pattern
+  - Displays "✓ No violations" or "⚠ Found magic strings" for each pattern
 
 ### Technical Details
 - **Aggregation Algorithm:**
   1. Run grep with pattern's search_pattern across all PHP files
   2. Extract captured group (e.g., option name from `get_option('name')`)
-  3. Group matches by captured string
+  3. Group matches by captured string (magic string)
   4. Count distinct files and total occurrences for each string
   5. Report strings exceeding both thresholds
 - **Performance:** Aggregation runs after all direct checks to avoid duplicate grep operations
@@ -175,7 +196,7 @@ Tested against real WordPress plugin:
 ### Known Issues
 - Pattern extraction may fail on systems without Python if patterns contain complex escaped characters
 - Aggregation currently only supports single capture group (group_by: "capture_group")
-- HTML report does not yet display DRY violations (JSON output only)
+- HTML report does not yet display magic string violations (JSON output only)
 
 ## [1.0.69] - 2026-01-01
 

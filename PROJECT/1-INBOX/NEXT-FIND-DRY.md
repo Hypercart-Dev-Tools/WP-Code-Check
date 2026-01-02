@@ -1,14 +1,14 @@
-# WP Code Check - DRY Opportunity Finder (Pragmatic 3-Phase Plan)
+# WP Code Check - Magic String Detector ("DRY") (Pragmatic 3-Phase Plan)
 
-**Created:** 2026-01-01  
-**Status:** Planning  
-**Goal:** Detect WordPress-specific DRY violations using grep-based pattern matching with JSON pattern files
+**Created:** 2026-01-01
+**Status:** Planning
+**Goal:** Detect WordPress-specific magic strings (DRY violations) using grep-based pattern matching with JSON pattern files
 
 ---
 
 ## 🎯 Executive Summary
 
-This plan adapts the grep-first DRY detection approach from `FIND-DRY.md` to the **WP Code Check** codebase. We'll leverage the existing pattern infrastructure (`dist/patterns/*.json`) and grep engine to find high-impact duplication in WordPress codebases.
+This plan adapts the grep-first Magic String Detector ("DRY") approach from `FIND-DRY.md` to the **WP Code Check** codebase. We'll leverage the existing pattern infrastructure (`dist/patterns/*.json`) and grep engine to find high-impact magic strings (duplicated literals) in WordPress codebases.
 
 **Key Decision:** Start with **2-3 patterns** in Phase 1 as proof-of-concept to validate the approach before expanding.
 
@@ -25,10 +25,10 @@ This plan adapts the grep-first DRY detection approach from `FIND-DRY.md` to the
 - ✅ **Baseline suppression** (for managing technical debt)
 
 ### What We Need
-- ❌ **DRY-specific patterns** (option names, transient keys, meta keys, capability strings)
+- ❌ **Magic String Detector patterns** (option names, transient keys, meta keys, capability strings)
 - ❌ **Aggregation logic** (count occurrences across files, group by match)
 - ❌ **Threshold-based reporting** (only report if seen in N+ files)
-- ❌ **DRY-specific test fixtures** (demonstrate duplication patterns)
+- ❌ **Magic String Detector test fixtures** (demonstrate duplication patterns)
 
 ---
 
@@ -122,7 +122,7 @@ This plan adapts the grep-first DRY detection approach from `FIND-DRY.md` to the
 
 ## 🔧 Phase 2: Expand Pattern Library (5-8 More Patterns)
 
-**Goal:** Add more WordPress-specific DRY patterns based on Phase 1 learnings.
+**Goal:** Add more WordPress-specific Magic String Detector patterns based on Phase 1 learnings.
 
 **Timeline:** 3-5 days  
 **Prerequisites:** Phase 1 complete and validated
@@ -142,12 +142,12 @@ This plan adapts the grep-first DRY detection approach from `FIND-DRY.md` to the
 - **Churn-aware prioritization:** Rank duplicates in frequently-changed files higher
 - **Cross-file clustering:** Group files sharing the same duplicated strings
 - **Baseline integration:** Allow suppressing known duplicates in legacy code
-- **HTML report section:** Add "DRY Violations" section to existing HTML reports
+- **HTML report section:** Add "Magic String Violations" section to existing HTML reports
 
 ### Phase 2 Exit Criteria
-- [ ] 8-10 total DRY patterns enabled
+- [ ] 8-10 total Magic String Detector patterns enabled
 - [ ] Patterns integrated into main `check-performance.sh` workflow
-- [ ] DRY violations appear in HTML reports
+- [ ] Magic String violations appear in HTML reports
 - [ ] CI/CD integration (warn-only mode)
 - [ ] Documentation complete with remediation examples
 
@@ -190,7 +190,7 @@ This plan adapts the grep-first DRY detection approach from `FIND-DRY.md` to the
 
 ## 📋 Implementation Details
 
-### JSON Pattern Schema (DRY-Specific Extensions)
+### JSON Pattern Schema (Magic String Detector Extensions)
 
 Based on existing `dist/patterns/*.json` format, add aggregation fields:
 
@@ -285,7 +285,7 @@ output_json_report() { ... }
 
 ### Test Fixtures (Phase 1)
 
-**File:** `dist/tests/fixtures/dry/duplicate-options.php`
+**File:** `dist/tests/fixtures/dry/duplicate-options.php` (Magic String Detector fixtures)
 
 ```php
 <?php
@@ -328,11 +328,11 @@ function ajax_get_settings() {
 ### Validation Tests
 
 ```bash
-# Run DRY detection on test fixture
+# Run Magic String Detector on test fixture
 ./dist/bin/find-dry.sh --paths dist/tests/fixtures/dry/
 
 # Expected output:
-# ━━━ DRY VIOLATIONS ━━━
+# ━━━ MAGIC STRING VIOLATIONS ━━━
 #
 # Option name 'my_plugin_api_key' appears in 3 files (3 times)
 #   - dist/tests/fixtures/dry/duplicate-options.php:7
@@ -372,14 +372,14 @@ function ajax_get_settings() {
 ### After Phase 1: Go/No-Go Decision
 
 **GO if:**
-- ✅ Patterns detect real duplication with < 10% false positives
+- ✅ Patterns detect real magic strings with < 10% false positives
 - ✅ Team finds output actionable and useful
 - ✅ Scan performance is acceptable (< 5 sec on typical codebase)
 - ✅ At least 1 team member says "I would use this"
 
 **NO-GO if:**
 - ❌ False positive rate > 25%
-- ❌ Patterns miss obvious duplications (high false negatives)
+- ❌ Patterns miss obvious magic strings (high false negatives)
 - ❌ Output is too noisy or not actionable
 - ❌ Team consensus: "This doesn't add value"
 
@@ -402,19 +402,19 @@ function ajax_get_settings() {
 ```
 dist/
 ├── bin/
-│   ├── find-dry.sh              # NEW: DRY detection script
-│   └── check-performance.sh     # UPDATED: Integrate DRY checks
+│   ├── find-dry.sh              # NEW: Magic String Detector script
+│   └── check-performance.sh     # UPDATED: Integrate Magic String checks
 ├── lib/
 │   └── dry-aggregator.sh        # NEW: Aggregation logic library
 ├── patterns/
-│   └── dry/                     # NEW: DRY-specific patterns
+│   └── dry/                     # NEW: Magic String Detector patterns
 │       ├── README.md
 │       ├── duplicate-option-names.json
 │       ├── duplicate-transient-keys.json
 │       └── duplicate-capability-strings.json
 ├── tests/
 │   └── fixtures/
-│       └── dry/                 # NEW: DRY test fixtures
+│       └── dry/                 # NEW: Magic String Detector test fixtures
 │           ├── duplicate-options.php
 │           ├── duplicate-transients.php
 │           └── duplicate-capabilities.php
@@ -439,7 +439,7 @@ dist/
 - **Q1:** What threshold values work best? (3 files? 5 files? 10 occurrences?)
 - **Q2:** Should we report ALL duplicates or only top-K?
 - **Q3:** How do we handle WordPress core functions (e.g., everyone uses `get_option('siteurl')`)?
-- **Q4:** Should DRY checks be separate or integrated into `check-performance.sh`?
+- **Q4:** Should Magic String checks be separate or integrated into `check-performance.sh`?
 - **Q5:** Do we need allowlists for common patterns (e.g., `current_user_can('manage_options')`)?
 
 ---
@@ -452,6 +452,7 @@ dist/
 ✅ **Aggregation thresholds** - Reduce noise
 ✅ **Phased rollout** - Validate before expanding
 ✅ **Deterministic evidence** - LLM is optional, not required
+✅ **"Magic String" terminology** - Clearer than "DRY violation"
 
 ### What We're Deferring
 ⏸️ **AST analysis** - Phase 3 or later

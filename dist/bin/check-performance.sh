@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.73
+# Version: 1.0.74
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -87,7 +87,8 @@ NEW_BASELINE_COUNTS=()
 declare -a JSON_FINDINGS=()
 declare -a JSON_CHECKS=()
 
-# DRY violations collection (aggregated patterns)
+# Magic string violations collection (aggregated patterns)
+# Note: Variable names kept as DRY_VIOLATIONS for backward compatibility
 declare -a DRY_VIOLATIONS=()
 DRY_VIOLATIONS_COUNT=0
 
@@ -606,8 +607,9 @@ EOF
   JSON_CHECKS+=("$check")
 }
 
-# Add a DRY violation to the collection
+# Add a magic string violation to the collection
 # Usage: add_dry_violation "pattern_title" "severity" "duplicated_string" "file_count" "total_count" "locations_json"
+# Note: Function name kept as add_dry_violation for backward compatibility
 add_dry_violation() {
   local pattern_title="$1"
   local severity="$2"
@@ -666,7 +668,7 @@ output_json() {
     fi
    done
 
-  # Build DRY violations array
+  # Build magic string violations array
   local dry_violations_json=""
   first=true
   for violation in "${DRY_VIOLATIONS[@]}"; do
@@ -688,7 +690,7 @@ output_json() {
   "summary": {
     "total_errors": $ERRORS,
     "total_warnings": $WARNINGS,
-    "dry_violations": $DRY_VIOLATIONS_COUNT,
+    "magic_string_violations": $DRY_VIOLATIONS_COUNT,
     "files_analyzed": $files_analyzed,
     "lines_of_code": $lines_of_code,
     "baselined": $BASELINED,
@@ -703,7 +705,7 @@ output_json() {
   },
   "findings": [$findings_json],
   "checks": [$checks_json],
-  "dry_violations": [$dry_violations_json]
+  "magic_string_violations": [$dry_violations_json]
 }
 EOF
 }
@@ -738,7 +740,7 @@ generate_html_report() {
   local exit_code=$(echo "$json_data" | jq -r '.summary.exit_code // 0')
   local strict_mode=$(echo "$json_data" | jq -r '.strict_mode // false')
   local findings_count=$(echo "$json_data" | jq '.findings | length')
-  local dry_violations_count=$(echo "$json_data" | jq '.dry_violations | length')
+  local dry_violations_count=$(echo "$json_data" | jq '.magic_string_violations | length')
 
   # Extract fixture validation info
   local fixture_status=$(echo "$json_data" | jq -r '.fixture_validation.status // "not_run"')
@@ -882,10 +884,10 @@ generate_html_report() {
       <div class=\"finding-details\">Findings: \(.findings_count)</div>
     </div>"' | tr '\n' ' ')
 
-  # Generate DRY violations HTML
+  # Generate Magic String violations HTML
   local dry_violations_html=""
   if [ "$dry_violations_count" -gt 0 ]; then
-    dry_violations_html=$(echo "$json_data" | jq -r '.dry_violations[] |
+    dry_violations_html=$(echo "$json_data" | jq -r '.magic_string_violations[] |
       "<div class=\"finding medium\">
         <div class=\"finding-header\">
           <div class=\"finding-title\">🔄 \(.duplicated_string)</div>
@@ -906,7 +908,7 @@ generate_html_report() {
         </div>
       </div>"' | tr '\n' ' ')
   else
-    dry_violations_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>No DRY violations detected. Great job! 🎉</p>"
+    dry_violations_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>No magic strings detected. Great job! 🎉</p>"
   fi
 
   # Read template and replace placeholders
@@ -920,7 +922,7 @@ generate_html_report() {
   html_content="${html_content//\{\{PATHS_SCANNED\}\}/$paths_link}"
   html_content="${html_content//\{\{TOTAL_ERRORS\}\}/$total_errors}"
   html_content="${html_content//\{\{TOTAL_WARNINGS\}\}/$total_warnings}"
-  html_content="${html_content//\{\{DRY_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
+  html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
   html_content="${html_content//\{\{BASELINED\}\}/$baselined}"
   html_content="${html_content//\{\{STALE_BASELINE\}\}/$stale_baseline}"
   html_content="${html_content//\{\{EXIT_CODE\}\}/$exit_code}"
@@ -929,7 +931,7 @@ generate_html_report() {
   html_content="${html_content//\{\{STATUS_MESSAGE\}\}/$status_message}"
   html_content="${html_content//\{\{FINDINGS_COUNT\}\}/$findings_count}"
   html_content="${html_content//\{\{FINDINGS_HTML\}\}/$findings_html}"
-  html_content="${html_content//\{\{DRY_VIOLATIONS_HTML\}\}/$dry_violations_html}"
+  html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_HTML\}\}/$dry_violations_html}"
   html_content="${html_content//\{\{CHECKS_HTML\}\}/$checks_html}"
   html_content="${html_content//\{\{FIXTURE_STATUS_CLASS\}\}/$fixture_status_class}"
   html_content="${html_content//\{\{FIXTURE_STATUS_TEXT\}\}/$fixture_status_text}"
@@ -1304,7 +1306,7 @@ generate_baseline_file() {
 	text_echo "${GREEN}Baseline file written to ${BASELINE_FILE} (${total} total findings).${NC}"
 }
 
-# Process aggregated pattern (DRY violations)
+# Process aggregated pattern (Magic String Detector)
 # Usage: process_aggregated_pattern "pattern_file"
 process_aggregated_pattern() {
   local pattern_file="$1"
@@ -1375,7 +1377,7 @@ process_aggregated_pattern() {
 
       # Extract the captured string using grep and sed
       # We use a simplified sed pattern that extracts the content between quotes
-      # This works for most DRY patterns which capture string literals
+      # This works for most magic string patterns which capture string literals
       local captured=$(echo "$code" | grep -oE "$pattern_search" | sed -E "s/.*['\"]([a-z0-9_]+)['\"].*/\1/" | head -1)
 
       if [ -n "$captured" ]; then
@@ -1416,7 +1418,7 @@ process_aggregated_pattern() {
           done < "$temp_matches"
           locations_json+="]"
 
-          # Add to DRY violations
+          # Add to magic string violations
           add_dry_violation "$pattern_title" "$pattern_severity" "$unescaped_string" "$file_count" "$total_count" "$locations_json"
         fi
       done <<< "$unique_strings"
@@ -3269,11 +3271,11 @@ fi
 text_echo ""
 
 # ============================================================================
-# DRY Violation Detection (Aggregated Patterns)
+# Magic String Detector ("DRY") - Aggregated Patterns
 # ============================================================================
 
 text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-text_echo "${BLUE}  DRY VIOLATION DETECTION${NC}"
+text_echo "${BLUE}  MAGIC STRING DETECTOR (\"DRY\")${NC}"
 text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 text_echo ""
 
@@ -3286,7 +3288,7 @@ AGGREGATED_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f | while 
 done)
 
 if [ -z "$AGGREGATED_PATTERNS" ]; then
-  text_echo "${BLUE}No aggregated patterns found. Skipping DRY checks.${NC}"
+  text_echo "${BLUE}No aggregated patterns found. Skipping magic string checks.${NC}"
   text_echo ""
 else
   # Debug: Log aggregated patterns found
