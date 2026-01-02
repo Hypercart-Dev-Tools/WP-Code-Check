@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.74
+# Version: 1.0.76
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.73"
+SCRIPT_VERSION="1.0.76"
 
 # Defaults
 PATHS="."
@@ -61,6 +61,7 @@ OUTPUT_FORMAT="text"  # text or json
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"
+DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
 
 # Severity configuration
 SEVERITY_CONFIG_FILE=""  # Path to custom severity config (empty = use factory defaults)
@@ -711,10 +712,11 @@ EOF
 }
 
 # Generate HTML report from JSON output
-# Usage: generate_html_report "json_string" "output_file"
+# Usage: generate_html_report "json_string" "output_file" "log_file_path"
 generate_html_report() {
   local json_data="$1"
   local output_file="$2"
+  local log_file_path="${3:-}"
   local template_file="$SCRIPT_DIR/templates/report-template.html"
 
   # Check if template exists
@@ -762,25 +764,32 @@ generate_html_report() {
   fi
 
   # Create clickable links for each scanned path
+  # Note: For now, we assume a single path (most common case)
+  # TODO: Handle multiple paths properly if needed in the future
   local paths_link=""
-  local first_path=true
-  for path in $paths; do
-    local abs_path
-    if [[ "$path" = /* ]]; then
-      abs_path="$path"
-    else
-      # Use realpath for robust absolute path conversion
-      abs_path=$(realpath "$path" 2>/dev/null || echo "$path")
-    fi
-    local encoded_path=$(url_encode "$abs_path")
+  local abs_path
 
-    if [ "$first_path" = false ]; then
-      paths_link+=", "
-    fi
-    # Display the absolute path (not the original relative path like ".")
-    paths_link+="<a href=\"file://$encoded_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open directory\">$abs_path</a>"
-    first_path=false
-  done
+  if [[ "$paths" = /* ]]; then
+    abs_path="$paths"
+  else
+    # Use realpath for robust absolute path conversion
+    abs_path=$(realpath "$paths" 2>/dev/null || echo "$paths")
+  fi
+
+  local encoded_path=$(url_encode "$abs_path")
+
+  # Display the absolute path (not the original relative path like ".")
+  # HTML-escape the display text to prevent breaking on special characters
+  local escaped_abs_path=$(echo "$abs_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+  paths_link="<a href=\"file://$encoded_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open directory\">$escaped_abs_path</a>"
+
+  # Create clickable link for JSON log file if provided
+  local json_log_link=""
+  if [ -n "$log_file_path" ] && [ -f "$log_file_path" ]; then
+    local encoded_log_path=$(url_encode "$log_file_path")
+    local escaped_log_path=$(echo "$log_file_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+    json_log_link="<div style=\"margin-top: 8px;\">JSON Log: <a href=\"file://$encoded_log_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open JSON log file\">$escaped_log_path</a> <button class=\"copy-btn\" onclick=\"copyLogPath()\" title=\"Copy JSON log path to clipboard\">📋 Copy Path</button></div>"
+  fi
 
   # Extract project information
   local project_type=$(echo "$json_data" | jq -r '.project.type // "unknown"')
@@ -915,11 +924,21 @@ generate_html_report() {
   local html_content
   html_content=$(cat "$template_file")
 
+  # Escape paths for JavaScript (escape backslashes, quotes, and newlines)
+  local js_abs_path=$(echo "$abs_path" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\'/g; s/\"/\\\\\"/g")
+  local js_log_path=""
+  if [ -n "$log_file_path" ] && [ -f "$log_file_path" ]; then
+    js_log_path=$(echo "$log_file_path" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\'/g; s/\"/\\\\\"/g")
+  fi
+
   # Replace all placeholders
   html_content="${html_content//\{\{PROJECT_INFO\}\}/$project_info_html}"
   html_content="${html_content//\{\{VERSION\}\}/$version}"
   html_content="${html_content//\{\{TIMESTAMP\}\}/$timestamp}"
   html_content="${html_content//\{\{PATHS_SCANNED\}\}/$paths_link}"
+  html_content="${html_content//\{\{JSON_LOG_LINK\}\}/$json_log_link}"
+  html_content="${html_content//\{\{JS_FOLDER_PATH\}\}/$js_abs_path}"
+  html_content="${html_content//\{\{JS_LOG_PATH\}\}/$js_log_path}"
   html_content="${html_content//\{\{TOTAL_ERRORS\}\}/$total_errors}"
   html_content="${html_content//\{\{TOTAL_WARNINGS\}\}/$total_warnings}"
   html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
@@ -980,6 +999,7 @@ validate_single_fixture() {
 # Returns: Sets FIXTURE_VALIDATION_PASSED, FIXTURE_VALIDATION_FAILED, FIXTURE_VALIDATION_STATUS
 run_fixture_validation() {
   local fixtures_dir="$SCRIPT_DIR/../tests/fixtures"
+  local default_fixture_count="${DEFAULT_FIXTURE_VALIDATION_COUNT:-8}"
 
   # Check if fixtures directory exists
   if [ ! -d "$fixtures_dir" ]; then
@@ -1002,9 +1022,46 @@ run_fixture_validation() {
     "file-get-contents-url.php:file_get_contents:1"
     # clean-code.php should have bounded queries (posts_per_page set)
     "clean-code.php:posts_per_page:1"
+    # ajax-antipatterns.php should register REST routes without pagination
+    "ajax-antipatterns.php:register_rest_route:1"
+    # ajax-antipatterns.php should include AJAX handlers without nonce validation
+    "ajax-antipatterns.php:wp_ajax_nopriv_npt_load_feed:1"
+    # admin-no-capability.php should register admin menus without capability checks
+    "admin-no-capability.php:add_menu_page:1"
+    # wpdb-no-prepare.php should include direct wpdb queries without prepare()
+    "wpdb-no-prepare.php:wpdb->get_var:1"
   )
 
-  for check_spec in "${checks[@]}"; do
+  local fixture_count="$default_fixture_count"
+
+  # Template override
+  if [ -n "${FIXTURE_COUNT:-}" ]; then
+    fixture_count="$FIXTURE_COUNT"
+  fi
+
+  # Environment variable override
+  if [ -n "${FIXTURE_VALIDATION_COUNT:-}" ]; then
+    fixture_count="$FIXTURE_VALIDATION_COUNT"
+  fi
+
+  # Validate fixture_count (must be non-negative integer)
+  if ! [[ "$fixture_count" =~ ^[0-9]+$ ]]; then
+    fixture_count="$default_fixture_count"
+  fi
+
+  if [ "$fixture_count" -le 0 ]; then
+    FIXTURE_VALIDATION_STATUS="skipped"
+    return 0
+  fi
+
+  local max_checks=${#checks[@]}
+  if [ "$fixture_count" -gt "$max_checks" ]; then
+    fixture_count="$max_checks"
+  fi
+
+  local checks_to_run=("${checks[@]:0:${fixture_count}}")
+
+  for check_spec in "${checks_to_run[@]}"; do
     local fixture_file pattern expected_count
     IFS=':' read -r fixture_file pattern expected_count <<< "$check_spec"
 
@@ -1025,6 +1082,59 @@ run_fixture_validation() {
   else
     FIXTURE_VALIDATION_STATUS="failed"
   fi
+}
+
+# ============================================================
+# Context-Aware Detection Helpers
+# ============================================================
+
+# Find callback function in same file and check for capability checks
+# Usage: find_callback_capability_check "file.php" "callback_function_name"
+# Returns: 0 if capability check found, 1 if not found
+find_callback_capability_check() {
+  local file="$1"
+  local callback_name="$2"
+
+  # Sanitize callback name (remove quotes, whitespace)
+  callback_name=$(echo "$callback_name" | sed "s/['\"]//g" | tr -d '[:space:]')
+
+  # Skip if callback is empty or looks like a variable/array
+  if [ -z "$callback_name" ] || [[ "$callback_name" =~ ^\$ ]] || [[ "$callback_name" =~ \[ ]]; then
+    return 1
+  fi
+
+  # Find function definition line number
+  # Match: function callback_name( or function callback_name (
+  local func_line
+  func_line=$(grep -n "^[[:space:]]*function[[:space:]]\+${callback_name}[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+
+  # If not found, try method definition: public/private/protected [static] function callback_name(
+  if [ -z "$func_line" ]; then
+    func_line=$(grep -n "^[[:space:]]*\(public\|private\|protected\)[[:space:]]\+\(static[[:space:]]\+\)\?function[[:space:]]\+${callback_name}[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+  fi
+
+  # If still not found, callback is not in this file
+  if [ -z "$func_line" ]; then
+    return 1
+  fi
+
+  # Check next 50 lines of function body for capability check
+  local end_line=$((func_line + 50))
+  local func_body
+  func_body=$(sed -n "${func_line},${end_line}p" "$file" 2>/dev/null)
+
+  # Look for capability check patterns
+  if echo "$func_body" | grep -qE "current_user_can[[:space:]]*\\(|user_can[[:space:]]*\\(|is_super_admin[[:space:]]*\\("; then
+    return 0  # Capability check found
+  fi
+
+  # Also check for WordPress menu functions with capability parameter
+  if echo "$func_body" | grep -qE "add_(menu|submenu|options|management|theme|plugins|users|dashboard|posts|media|pages|comments|tools)_page[[:space:]]*\\(" && \
+     echo "$func_body" | grep -qE "'(manage_options|edit_posts|edit_pages|edit_published_posts|publish_posts|read|delete_posts|administrator|editor|author|contributor|subscriber)'"; then
+    return 0  # Capability enforced via menu function
+  fi
+
+  return 1  # No capability check found
 }
 
 # Conditional echo - only outputs in text mode
@@ -1737,7 +1847,7 @@ UNSANITIZED_FINDING_COUNT=0
 UNSANITIZED_VISIBLE=""
 
 # Find all $_GET/$_POST/$_REQUEST access that doesn't have sanitization
-# Exclude lines with: sanitize_*, esc_*, absint, intval, wc_clean, wp_unslash, $allowed_keys
+# Exclude lines with: sanitize_*, esc_*, absint, intval, floatval, wc_clean, wp_unslash, $allowed_keys
 # Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
 # We'll filter those out in a more sophisticated way below
 # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
@@ -1746,6 +1856,7 @@ UNSANITIZED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$_(GET|POST
   grep -v 'esc_' | \
   grep -v 'absint' | \
   grep -v 'intval' | \
+  grep -v 'floatval' | \
   grep -v 'wc_clean' | \
   grep -v 'wp_unslash' | \
   grep -v '\$allowed_keys' | \
@@ -1788,6 +1899,42 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     fi
 
     if should_suppress_finding "unsanitized-superglobal-read" "$file"; then
+      continue
+    fi
+
+    # CONTEXT-AWARE DETECTION: Check for nonce verification in previous 10 lines
+    # If nonce check found AND superglobal is sanitized, skip this finding
+    # Also skip if $_POST is used WITHIN nonce verification function itself
+    has_nonce_protection=false
+
+    # Special case: $_POST used inside nonce verification function is SAFE
+    # Example: wp_verify_nonce( $_POST['nonce'], 'action' )
+    if echo "$code" | grep -qE "(check_ajax_referer|wp_verify_nonce|check_admin_referer)[[:space:]]*\([^)]*\\\$_(GET|POST|REQUEST)\["; then
+      has_nonce_protection=true
+    fi
+
+    if [ "$has_nonce_protection" = false ]; then
+      if [ "$lineno" -gt 10 ]; then
+        start_line=$((lineno - 10))
+      else
+        start_line=1
+      fi
+
+      # Get context (10 lines before current line)
+      context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+
+      # Check for nonce verification functions
+      if echo "$context" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
+        # Nonce check found - now verify the current line has sanitization
+        if echo "$code" | grep -qE "sanitize_|esc_|absint|intval|floatval|wc_clean"; then
+          # This is SAFE: nonce verified AND sanitized
+          has_nonce_protection=true
+        fi
+      fi
+    fi
+
+    # Skip if protected by nonce + sanitization
+    if [ "$has_nonce_protection" = true ]; then
       continue
     fi
 
@@ -1940,8 +2087,43 @@ if [ -n "$ADMIN_MATCHES" ]; then
     end_line=$((lineno + 10))
     context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
 
-    if echo "$context" | grep -qE "current_user_can[[:space:]]*\\(|user_can[[:space:]]*\\("; then
+    # First check: Look for capability check in immediate context (next 10 lines)
+    # This includes:
+    # - current_user_can() / user_can() / is_super_admin()
+    # - WordPress menu functions with capability parameter (add_menu_page, add_submenu_page, etc.)
+    if echo "$context" | grep -qE "current_user_can[[:space:]]*\\(|user_can[[:space:]]*\\(|is_super_admin[[:space:]]*\\("; then
       continue
+    fi
+
+    # Also check for WordPress menu functions with capability parameter
+    # Pattern: add_*_page(..., 'capability', ...)
+    if echo "$context" | grep -qE "add_(menu|submenu|options|management|theme|plugins|users|dashboard|posts|media|pages|comments|tools)_page[[:space:]]*\\(" && \
+       echo "$context" | grep -qE "'(manage_options|edit_posts|edit_pages|edit_published_posts|publish_posts|read|delete_posts|administrator|editor|author|contributor|subscriber)'"; then
+      continue
+    fi
+
+    # Second check: If this is an add_action/add_filter with a callback, look up the callback function
+    # Extract callback name from patterns like: add_action('hook', 'callback_name')
+    callback_name=""
+    if echo "$code" | grep -qE "add_action|add_filter|add_menu_page|add_submenu_page|add_options_page|add_management_page"; then
+      # Try to extract callback from common patterns:
+      # Pattern 1: add_action( 'hook', 'callback' )
+      callback_name=$(echo "$code" | sed -n "s/.*add_[a-z_]*[[:space:]]*([^,]*,[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+
+      # Pattern 2: add_action( 'hook', [ $this, 'callback' ] ) or [ __CLASS__, 'callback' ]
+      if [ -z "$callback_name" ]; then
+        callback_name=$(echo "$code" | sed -n "s/.*\\[[^,]*,[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+      fi
+
+      # Pattern 3: add_action( 'hook', array( $this, 'callback' ) )
+      if [ -z "$callback_name" ]; then
+        callback_name=$(echo "$code" | sed -n "s/.*array[[:space:]]*([^,]*,[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+      fi
+
+      # If we found a callback name, check if it has capability checks
+      if [ -n "$callback_name" ] && find_callback_capability_check "$file" "$callback_name"; then
+        continue
+      fi
     fi
 
     ADMIN_SEEN_KEYS="${ADMIN_SEEN_KEYS}${key}"
@@ -3355,7 +3537,7 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
     HTML_REPORT="$REPORTS_DIR/$REPORT_TIMESTAMP.html"
 
     # Generate the HTML report
-    if generate_html_report "$JSON_OUTPUT" "$HTML_REPORT"; then
+    if generate_html_report "$JSON_OUTPUT" "$HTML_REPORT" "$LOG_FILE"; then
       echo "" >&2
       echo "📊 HTML Report: $HTML_REPORT" >&2
 
