@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.77"
+SCRIPT_VERSION="1.0.78"
 
 # Defaults
 PATHS="."
@@ -1531,6 +1531,157 @@ process_aggregated_pattern() {
 
   # Cleanup
   rm -f "$temp_matches"
+}
+
+# Process clone detection pattern (Function Clone Detector)
+# Usage: process_clone_detection "pattern_file"
+process_clone_detection() {
+  local pattern_file="$1"
+  local debug_log="/tmp/wp-code-check-debug.log"
+
+  # Load pattern metadata
+  if ! load_pattern "$pattern_file"; then
+    echo "[DEBUG] Failed to load pattern: $pattern_file" >> "$debug_log"
+    return 1
+  fi
+
+  # Skip if pattern is disabled
+  if [ "$pattern_enabled" != "true" ]; then
+    echo "[DEBUG] Pattern disabled, skipping" >> "$debug_log"
+    return 0
+  fi
+
+  # Extract settings from JSON
+  local min_files=$(grep '"min_distinct_files"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local min_matches=$(grep '"min_total_matches"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local min_lines=$(grep '"min_lines"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local max_lines=$(grep '"max_lines"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+
+  # Defaults
+  [ -z "$min_files" ] && min_files=2
+  [ -z "$min_matches" ] && min_matches=2
+  [ -z "$min_lines" ] && min_lines=5
+  [ -z "$max_lines" ] && max_lines=500
+
+  echo "[DEBUG] Clone detection settings: min_files=$min_files, min_matches=$min_matches, min_lines=$min_lines, max_lines=$max_lines" >> "$debug_log"
+
+  # Create temp files
+  local temp_functions=$(mktemp)
+  local temp_hashes=$(mktemp)
+
+  # Find all PHP files
+  # SAFEGUARD: Handle both single files and directories
+  local php_files=""
+  if [ -f "$PATHS" ]; then
+    # Single file provided
+    php_files="$PATHS"
+  else
+    # Directory provided - find all PHP files
+    php_files=$(find "$PATHS" -name "*.php" -type f 2>/dev/null | grep -v '/vendor/' | grep -v '/node_modules/' || true)
+  fi
+
+  if [ -z "$php_files" ]; then
+    echo "[DEBUG] No PHP files found in: $PATHS" >> "$debug_log"
+    rm -f "$temp_functions" "$temp_hashes"
+    return 0
+  fi
+
+  echo "[DEBUG] PHP files to scan: $php_files" >> "$debug_log"
+
+  # Extract all functions and compute hashes
+  echo "[DEBUG] Extracting functions from PHP files..." >> "$debug_log"
+
+  safe_file_iterator "$php_files" | while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    # Extract functions using grep with Perl regex
+    # Pattern matches: function name(...) { ... }
+    grep -n 'function[[:space:]]\+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' "$file" 2>/dev/null | while IFS=: read -r start_line func_header; do
+      # Extract function name
+      local func_name=$(echo "$func_header" | sed -E 's/.*function[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*).*/\1/')
+
+      # Skip magic methods and test methods
+      if echo "$func_name" | grep -qE '^(__construct|__destruct|__get|__set|__call|__toString|test_|setUp|tearDown)'; then
+        continue
+      fi
+
+      # Extract function body (simplified: from function line to next function or end of file)
+      # This is a heuristic - we'll grab the next 100 lines and look for the closing brace
+      local func_body=$(tail -n +$start_line "$file" | head -n 100)
+
+      # Count lines in function body (rough estimate)
+      local line_count=$(echo "$func_body" | wc -l | tr -d ' ')
+
+      # Skip if too short or too long
+      if [ "$line_count" -lt "$min_lines" ] || [ "$line_count" -gt "$max_lines" ]; then
+        continue
+      fi
+
+      # Normalize function body:
+      # 1. Remove inline comments (// ...)
+      # 2. Remove block comments (/* ... */)
+      # 3. Normalize whitespace (multiple spaces -> single space)
+      # 4. Remove empty lines
+      local normalized=$(echo "$func_body" | \
+        sed 's|//.*$||g' | \
+        sed 's|/\*.*\*/||g' | \
+        sed 's/[[:space:]]\+/ /g' | \
+        sed '/^[[:space:]]*$/d')
+
+      # Compute hash
+      local hash=$(echo "$normalized" | md5sum | cut -d' ' -f1)
+
+      # Store: hash|file|function_name|line_number|line_count
+      echo "$hash|$file|$func_name|$start_line|$line_count" >> "$temp_functions"
+    done
+  done
+
+  # Check if we found any functions
+  if [ ! -s "$temp_functions" ]; then
+    echo "[DEBUG] No functions found" >> "$debug_log"
+    rm -f "$temp_functions" "$temp_hashes"
+    return 0
+  fi
+
+  # Aggregate by hash
+  echo "[DEBUG] Aggregating by hash..." >> "$debug_log"
+  local unique_hashes=$(cut -d'|' -f1 "$temp_functions" | sort -u)
+
+  while IFS= read -r hash; do
+    [ -z "$hash" ] && continue
+
+    # Count files and total occurrences for this hash
+    local file_count=$(grep "^$hash|" "$temp_functions" | cut -d'|' -f2 | sort -u | wc -l | tr -d ' ')
+    local total_count=$(grep "^$hash|" "$temp_functions" | wc -l | tr -d ' ')
+
+    # Apply thresholds
+    if [ "$file_count" -ge "$min_files" ] && [ "$total_count" -ge "$min_matches" ]; then
+      # Get function name and line count from first occurrence
+      local first_occurrence=$(grep "^$hash|" "$temp_functions" | head -1)
+      local func_name=$(echo "$first_occurrence" | cut -d'|' -f3)
+      local line_count=$(echo "$first_occurrence" | cut -d'|' -f5)
+
+      # Build locations JSON array
+      local locations_json="["
+      local first_loc=true
+      while IFS='|' read -r h file fname line lc; do
+        if [ "$h" = "$hash" ]; then
+          if [ "$first_loc" = false ]; then
+            locations_json+=","
+          fi
+          locations_json+="{\"file\":\"$(json_escape "$file")\",\"line\":$line,\"function\":\"$(json_escape "$fname")\"}"
+          first_loc=false
+        fi
+      done < "$temp_functions"
+      locations_json+="]"
+
+      # Add to violations with function name as the "duplicated_string"
+      add_dry_violation "$pattern_title" "$pattern_severity" "$func_name (${line_count} lines)" "$file_count" "$total_count" "$locations_json"
+    fi
+  done <<< "$unique_hashes"
+
+  # Cleanup
+  rm -f "$temp_functions" "$temp_hashes"
 }
 
 # ============================================================================
@@ -3507,6 +3658,55 @@ else
       text_echo ""
     fi
   done <<< "$AGGREGATED_PATTERNS"
+fi
+
+# ============================================================================
+# Function Clone Detector - Clone Detection Patterns
+# ============================================================================
+
+# Find all clone detection patterns
+CLONE_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f | while read -r pattern_file; do
+  detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ "$detection_type" = "clone_detection" ]; then
+    echo "$pattern_file"
+  fi
+done)
+
+if [ -n "$CLONE_PATTERNS" ]; then
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo "${BLUE}  FUNCTION CLONE DETECTOR${NC}"
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo ""
+
+  # Debug: Log clone patterns found
+  echo "[DEBUG] Clone detection patterns found:" >> /tmp/wp-code-check-debug.log
+  echo "$CLONE_PATTERNS" >> /tmp/wp-code-check-debug.log
+
+  # Process each clone detection pattern
+  while IFS= read -r pattern_file; do
+    [ -z "$pattern_file" ] && continue
+
+    # Load pattern to get title
+    if load_pattern "$pattern_file"; then
+      text_echo "${BLUE}▸ $pattern_title${NC}"
+
+      # Store current violation count
+      violations_before=$DRY_VIOLATIONS_COUNT
+
+      process_clone_detection "$pattern_file"
+
+      # Check if new violations were added
+      violations_after=$DRY_VIOLATIONS_COUNT
+      new_violations=$((violations_after - violations_before))
+
+      if [ "$new_violations" -gt 0 ]; then
+        text_echo "${YELLOW}  ⚠ Found $new_violations duplicate function(s)${NC}"
+      else
+        text_echo "${GREEN}  ✓ No duplicates found${NC}"
+      fi
+      text_echo ""
+    fi
+  done <<< "$CLONE_PATTERNS"
 fi
 
 	# Evaluate baseline entries for staleness before computing exit code / JSON
