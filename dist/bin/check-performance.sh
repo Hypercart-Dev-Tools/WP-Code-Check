@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.76"
+SCRIPT_VERSION="1.0.77"
 
 # Defaults
 PATHS="."
@@ -218,13 +218,9 @@ json_escape() {
   printf '%s' "$str"
 }
 
-# URL-encode a string for file:// links
-url_encode() {
-  local str="$1"
-  # Use jq's @uri filter for robust RFC 3986 encoding
-  str=$(printf '%s' "$str" | jq -sRr @uri)
-  printf '%s' "$str"
-}
+# SAFEGUARD: url_encode() function removed in v1.0.77
+# Use url_encode_path() from common-helpers.sh instead
+# This ensures consistent URL encoding across all file path handling
 
 # Count PHP files in scan path
 count_analyzed_files() {
@@ -776,19 +772,17 @@ generate_html_report() {
     abs_path=$(realpath "$paths" 2>/dev/null || echo "$paths")
   fi
 
-  local encoded_path=$(url_encode "$abs_path")
-
-  # Display the absolute path (not the original relative path like ".")
-  # HTML-escape the display text to prevent breaking on special characters
-  local escaped_abs_path=$(echo "$abs_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-  paths_link="<a href=\"file://$encoded_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open directory\">$escaped_abs_path</a>"
+  # SAFEGUARD: Use create_directory_link() instead of manual encoding/escaping
+  # This ensures consistent handling of file paths with spaces and special characters (see common-helpers.sh)
+  paths_link=$(create_directory_link "$abs_path")
 
   # Create clickable link for JSON log file if provided
   local json_log_link=""
   if [ -n "$log_file_path" ] && [ -f "$log_file_path" ]; then
-    local encoded_log_path=$(url_encode "$log_file_path")
-    local escaped_log_path=$(echo "$log_file_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-    json_log_link="<div style=\"margin-top: 8px;\">JSON Log: <a href=\"file://$encoded_log_path\" style=\"color: #fff; text-decoration: underline;\" title=\"Click to open JSON log file\">$escaped_log_path</a> <button class=\"copy-btn\" onclick=\"copyLogPath()\" title=\"Copy JSON log path to clipboard\">📋 Copy Path</button></div>"
+    # SAFEGUARD: Use create_file_link() instead of manual encoding/escaping
+    # This ensures consistent handling of file paths with spaces and special characters (see common-helpers.sh)
+    local log_link=$(create_file_link "$log_file_path")
+    json_log_link="<div style=\"margin-top: 8px;\">JSON Log: $log_link <button class=\"copy-btn\" onclick=\"copyLogPath()\" title=\"Copy JSON log path to clipboard\">📋 Copy Path</button></div>"
   fi
 
   # Extract project information
@@ -2371,7 +2365,9 @@ AJAX_NONCE_FINDING_COUNT=0
 # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
 AJAX_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "wp_ajax" "$PATHS" 2>/dev/null || true)
 if [ -n "$AJAX_FILES" ]; then
-  for file in $AJAX_FILES; do
+  # SAFEGUARD: Use safe_file_iterator() instead of "for file in $AJAX_FILES"
+  # File paths with spaces will break the loop without this helper (see common-helpers.sh)
+  safe_file_iterator "$AJAX_FILES" | while IFS= read -r file; do
     hook_count=$(grep -E "wp_ajax" "$file" 2>/dev/null | wc -l | tr -d '[:space:]')
     nonce_count=$(grep -E "check_ajax_referer[[:space:]]*\\(|wp_verify_nonce[[:space:]]*\\(" "$file" 2>/dev/null | wc -l | tr -d '[:space:]')
 
@@ -2574,7 +2570,9 @@ TERMS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "get_terms[[:space:]]
 TERMS_UNBOUNDED=false
 TERMS_FINDING_COUNT=0
 if [ -n "$TERMS_FILES" ]; then
-  for file in $TERMS_FILES; do
+  # SAFEGUARD: Use safe_file_iterator() instead of "for file in $TERMS_FILES"
+  # File paths with spaces will break the loop without this helper (see common-helpers.sh)
+  safe_file_iterator "$TERMS_FILES" | while IFS= read -r file; do
     # Check if file has get_terms without 'number' or "number" nearby (within 5 lines)
     # Support both single and double quotes
 	    if ! grep -A5 "get_terms[[:space:]]*(" "$file" 2>/dev/null | grep -q -e "'number'" -e '"number"'; then
@@ -2615,7 +2613,9 @@ PRE_GET_POSTS_FINDING_COUNT=0
 # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
 PRE_GET_POSTS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "add_action.*pre_get_posts\|add_filter.*pre_get_posts" "$PATHS" 2>/dev/null || true)
 if [ -n "$PRE_GET_POSTS_FILES" ]; then
-  for file in $PRE_GET_POSTS_FILES; do
+  # SAFEGUARD: Use safe_file_iterator() instead of "for file in $PRE_GET_POSTS_FILES"
+  # File paths with spaces will break the loop without this helper (see common-helpers.sh)
+  safe_file_iterator "$PRE_GET_POSTS_FILES" | while IFS= read -r file; do
     # Check if file sets posts_per_page to -1 or nopaging to true
 	    if grep -q "set[[:space:]]*([[:space:]]*['\"]posts_per_page['\"][[:space:]]*,[[:space:]]*-1" "$file" 2>/dev/null || \
 	       grep -q "set[[:space:]]*([[:space:]]*['\"]nopaging['\"][[:space:]]*,[[:space:]]*true" "$file" 2>/dev/null; then
@@ -2717,7 +2717,9 @@ CRON_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" \
   $PATHS 2>/dev/null || true)
 
 if [ -n "$CRON_FILES" ]; then
-  for file in $CRON_FILES; do
+  # SAFEGUARD: Use safe_file_iterator() instead of "for file in $CRON_FILES"
+  # File paths with spaces will break the loop without this helper (see common-helpers.sh)
+  safe_file_iterator "$CRON_FILES" | while IFS= read -r file; do
     # Look for 'interval' => $variable * 60 or $variable * MINUTE_IN_SECONDS patterns
     # Pattern: 'interval' => $var * (60|MINUTE_IN_SECONDS)
     # Use single quotes to avoid shell escaping issues with $ and *

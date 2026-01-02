@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.77] - 2026-01-02
+
+### Added
+- **Centralized File Path Helper Functions** - Added 6 new helper functions to `dist/bin/lib/common-helpers.sh` for robust file path handling
+  - `safe_file_iterator()` - Safely iterate over file paths with spaces (prevents loop breakage)
+  - `url_encode_path()` - RFC 3986 URL encoding for file:// links
+  - `html_escape_string()` - HTML entity escaping for safe display
+  - `create_file_link()` - Complete file:// link creation with encoding and escaping
+  - `create_directory_link()` - Complete directory link creation with encoding and escaping
+  - `validate_file_path()` - Centralized path validation logic
+  - **Impact:** Fixes file paths with spaces breaking loops, HTML link encoding issues, and eliminates code duplication
+
+### Fixed
+- **File Paths with Spaces Bug** - Fixed 4 file iteration loops that broke on paths containing spaces
+  - Line 2372: AJAX handlers without nonce validation
+  - Line 2577: get_terms() without number limit
+  - Line 2620: pre_get_posts forcing unbounded queries
+  - Line 2724: Unvalidated cron intervals
+  - Changed from `for file in $FILES` to `safe_file_iterator "$FILES" | while IFS= read -r file`
+  - **Impact:** Scanner now correctly handles paths like "/Users/noelsaw/Local Sites/..." without truncation
+
+### Changed
+- **HTML Report Generation** - Refactored to use centralized helper functions
+  - Replaced inline URL encoding with `url_encode_path()` (removed duplicate `url_encode()` function)
+  - Replaced inline HTML escaping with `html_escape_string()` (removed duplicate sed commands)
+  - Replaced manual link construction with `create_file_link()` and `create_directory_link()`
+  - **Impact:** Consistent handling of special characters (&, <, >, ", ') in file paths and display text
+
+### Improved
+- **Code Quality** - Added SAFEGUARD comments throughout codebase
+  - Guides developers and LLMs to use centralized helpers instead of inline logic
+  - Documents why helpers are necessary (prevents regression)
+  - Points to `common-helpers.sh` for implementation details
+  - **Impact:** Easier maintenance, better DRY compliance, reduced technical debt
+
 ## [1.0.76] - 2026-01-02
 
 ### Changed

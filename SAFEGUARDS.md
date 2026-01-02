@@ -1,8 +1,57 @@
 # WP Code Check - Critical Safeguards
 
-**Last Updated:** 2026-01-01 (v1.0.67)
+**Last Updated:** 2026-01-02 (v1.0.77)
 
 This document contains critical implementation details that MUST NOT be changed without careful consideration. These safeguards prevent catastrophic failures that can silently break the scanner.
+
+---
+
+## 🚨 CRITICAL: File Path Handling with Spaces
+
+### Rule
+**ALWAYS use `safe_file_iterator()` for file iteration loops instead of `for file in $FILES`**
+
+### Why This Matters
+When file paths contain spaces (e.g., `/Users/name/Local Sites/project/file.php`), the unquoted variable in `for file in $FILES` causes bash to split on spaces, breaking the loop and causing:
+- Truncated file paths (e.g., `/Users/name/Local` instead of full path)
+- Line numbers reported as 0 instead of actual line numbers
+- Incorrect findings or missed detections
+
+### Impact of Violation
+- **Severity:** CRITICAL
+- **Symptom:** Line numbers = 0, file paths truncated at first space
+- **Detection:** Visible in JSON output and HTML reports
+- **Affected:** All file iteration loops (4 patterns)
+
+### Example
+```bash
+# ❌ WRONG - breaks with spaces in file paths
+for file in $FILES; do
+  grep -n "pattern" "$file"
+done
+
+# ✅ CORRECT - handles spaces correctly
+safe_file_iterator "$FILES" | while IFS= read -r file; do
+  grep -n "pattern" "$file"
+done
+```
+
+### Affected Patterns (as of v1.0.77)
+All file iteration loops in `dist/bin/check-performance.sh`:
+- Line 2372: AJAX handlers without nonce validation
+- Line 2577: get_terms() without number limit
+- Line 2620: pre_get_posts forcing unbounded queries
+- Line 2724: Unvalidated cron intervals
+
+### Helper Functions (dist/bin/lib/common-helpers.sh)
+- `safe_file_iterator()` - Safely iterate over file paths with spaces
+- `url_encode_path()` - RFC 3986 URL encoding for file:// links
+- `html_escape_string()` - HTML entity escaping for safe display
+- `create_file_link()` - Complete file:// link with encoding and escaping
+- `create_directory_link()` - Complete directory link with encoding and escaping
+- `validate_file_path()` - Centralized path validation
+
+**ALWAYS use these helpers instead of inline logic to ensure DRY compliance and consistent behavior.**
 
 ---
 
