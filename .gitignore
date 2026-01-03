@@ -28,6 +28,15 @@ dist/TEMPLATES/*.txt
 *.hcc-baseline
 **/.hcc-baseline
 
+# IRL (In Real Life) examples - user-generated real-world code samples
+# Keep: folder structure and documentation
+# Ignore: actual code files (may contain proprietary code)
+dist/tests/irl/*
+!dist/tests/irl/
+!dist/tests/irl/README.md
+!dist/tests/irl/_AI_AUDIT_INSTRUCTIONS.md
+!dist/tests/irl/.gitkeep
+
 # ============================================
 # DEVELOPMENT & TESTING
 # ============================================

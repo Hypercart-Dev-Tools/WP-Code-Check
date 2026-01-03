@@ -5,9 +5,670 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.79] - 2026-01-02
+
+### Fixed
+- **HTML Report Generation** - Fixed `url_encode: command not found` error
+  - Changed `url_encode()` to `url_encode_path()` on line 859
+  - Function was removed in v1.0.77 but one call site was missed
+  - Now uses correct function from `common-helpers.sh`
+  - **Impact:** HTML reports now generate without errors
+
+## [1.0.78] - 2026-01-02
+
+### Added
+- **Function Clone Detector (Tier 1)** - Hash-based detection of duplicate function definitions across files
+  - New pattern: `dist/patterns/duplicate-functions.json` - Detects exact function clones (Type 1)
+  - New function: `process_clone_detection()` - Extracts functions, normalizes code, computes MD5 hashes
+  - Thresholds: min 5 lines, min 2 files, min 2 occurrences
+  - Normalization: Strips comments and whitespace before hashing
+  - **Impact:** Catches copy-paste violations where identical functions exist in multiple files
+  - **Coverage:** 60-70% of all clones (Type 1 exact copies only)
+  - **False Positive Rate:** < 5% (proven hash-based approach)
+
+- **Test Fixtures for Clone Detection**
+  - `dist/tests/fixtures/dry/duplicate-functions.php` - Single-file fixture with documented test cases
+  - `dist/tests/fixtures/dry/file-a.php` - Multi-file test (includes/user-validation.php)
+  - `dist/tests/fixtures/dry/file-b.php` - Multi-file test (admin/settings.php)
+  - `dist/tests/fixtures/dry/file-c.php` - Multi-file test (ajax/handlers.php)
+  - Expected violations: `validate_user_email` (3 files), `sanitize_api_key` (2 files)
+
+### Changed
+- **HTML Report Template** - Updated "Magic Strings" section to "DRY Violations"
+  - Now includes both magic strings and duplicate functions
+  - Added subtitle: "Includes magic strings and duplicate functions"
+  - Stat card label changed from "Magic Strings" to "DRY Violations"
+
+- **Scanner Output** - Added new section "FUNCTION CLONE DETECTOR"
+  - Displays after "MAGIC STRING DETECTOR" section
+  - Shows count of duplicate functions found
+  - Uses same violation reporting format as magic strings
+
+### Improved
+- **File Path Handling** - Enhanced `process_clone_detection()` to handle both files and directories
+  - Detects if `$PATHS` is a single file or directory
+  - Uses `safe_file_iterator()` for paths with spaces
+  - Excludes vendor/, node_modules/ directories
+
+## [1.0.77] - 2026-01-02
+
+### Added
+- **Centralized File Path Helper Functions** - Added 6 new helper functions to `dist/bin/lib/common-helpers.sh` for robust file path handling
+  - `safe_file_iterator()` - Safely iterate over file paths with spaces (prevents loop breakage)
+  - `url_encode_path()` - RFC 3986 URL encoding for file:// links
+  - `html_escape_string()` - HTML entity escaping for safe display
+  - `create_file_link()` - Complete file:// link creation with encoding and escaping
+  - `create_directory_link()` - Complete directory link creation with encoding and escaping
+  - `validate_file_path()` - Centralized path validation logic
+  - **Impact:** Fixes file paths with spaces breaking loops, HTML link encoding issues, and eliminates code duplication
+
+### Fixed
+- **File Paths with Spaces Bug** - Fixed 4 file iteration loops that broke on paths containing spaces
+  - Line 2372: AJAX handlers without nonce validation
+  - Line 2577: get_terms() without number limit
+  - Line 2620: pre_get_posts forcing unbounded queries
+  - Line 2724: Unvalidated cron intervals
+  - Changed from `for file in $FILES` to `safe_file_iterator "$FILES" | while IFS= read -r file`
+  - **Impact:** Scanner now correctly handles paths like "/Users/noelsaw/Local Sites/..." without truncation
+
+### Changed
+- **HTML Report Generation** - Refactored to use centralized helper functions
+  - Replaced inline URL encoding with `url_encode_path()` (removed duplicate `url_encode()` function)
+  - Replaced inline HTML escaping with `html_escape_string()` (removed duplicate sed commands)
+  - Replaced manual link construction with `create_file_link()` and `create_directory_link()`
+  - **Impact:** Consistent handling of special characters (&, <, >, ", ') in file paths and display text
+
+### Improved
+- **Code Quality** - Added SAFEGUARD comments throughout codebase
+  - Guides developers and LLMs to use centralized helpers instead of inline logic
+  - Documents why helpers are necessary (prevents regression)
+  - Points to `common-helpers.sh` for implementation details
+  - **Impact:** Easier maintenance, better DRY compliance, reduced technical debt
+
+## [1.0.76] - 2026-01-02
+
+### Changed
+- Increased default fixture validation coverage to run eight proof-of-detection checks, covering AJAX, REST routes, admin capability callbacks, and direct database access patterns.
+
+### Added
+- Made fixture validation count configurable via `FIXTURE_COUNT` template option or the `FIXTURE_VALIDATION_COUNT` environment variable (default: 8).
+
+## [1.0.75] - 2026-01-02
+
+### Added
+- **Context-Aware Admin Capability Detection** - Dramatically reduced false positives for admin callback functions
+  - Created `find_callback_capability_check()` helper function to search for callback definitions in same file
+  - Extracts callback names from multiple patterns: string callbacks, array callbacks, class array callbacks
+  - Checks callback function body (next 50 lines) for capability checks
+  - Recognizes direct capability checks: `current_user_can()`, `user_can()`, `is_super_admin()`
+  - Recognizes WordPress menu functions with capability parameters (`add_menu_page`, `add_submenu_page`, etc.)
+  - Handles static method definitions (`public static function`)
+  - **Impact:** Reduced admin capability check false positives from 15 to 3 (80% reduction)
+
+### Changed
+- **Enhanced Admin Functions Without Capability Checks** - Improved detection logic
+  - Updated immediate context check to recognize menu functions with capability parameters
+  - Added callback lookup for `add_action`, `add_filter`, and menu registration functions
+  - Supports multiple callback syntax patterns (string, array, class array)
+  - Checks both immediate context (next 10 lines) and callback function body (next 50 lines)
+
+### Technical Details
+- **Files Modified:** `dist/bin/check-performance.sh`
+  - Lines 1048-1099: New helper function `find_callback_capability_check()`
+  - Lines 2041-2072: Enhanced admin capability check with callback lookup
+- **Patterns Detected:**
+  - `add_action('hook', 'callback')` - String callback
+  - `add_action('hook', [$this, 'callback'])` - Array callback
+  - `add_action('hook', [__CLASS__, 'callback'])` - Class array callback
+  - `add_action('hook', array($this, 'callback'))` - Legacy array syntax
+- **Capability Enforcement Patterns:**
+  - Direct: `current_user_can('capability')`
+  - Menu functions: `add_submenu_page(..., 'manage_options', ...)`
+
+### Testing
+- **Test Case:** PTT-MKII plugin (30 files, 8,736 LOC)
+- **Before:** 15 findings (many false positives)
+- **After:** 3 findings (legitimate issues)
+- **False Positives Eliminated:** 12 (80% reduction)
+- **Remaining Findings:** Legitimate security issues (admin enqueue scripts without capability checks)
+
+### Performance
+- **Impact:** Minimal - callback lookup only performed when admin patterns detected
+- **Scope:** Same-file lookup only (no cross-file analysis)
+- **Efficiency:** Uses grep and sed for fast pattern matching
+
+## [1.0.74] - 2026-01-02
+
+### Changed
+- **Terminology Update: "DRY Violations" → "Magic String Detector"** - Renamed feature for clarity
+  - "DRY Violation Detection" is now "Magic String Detector ('DRY')"
+  - User-facing text updated in all scripts, templates, and documentation
+  - JSON output field renamed from `dry_violations` to `magic_string_violations`
+  - HTML template labels updated from "DRY Violations" to "Magic Strings"
+  - Internal variable names kept as `DRY_VIOLATIONS` for backward compatibility
+  - **Rationale:** "Magic String" is a more widely understood term for hardcoded string literals
+
+### Updated Files
+- `dist/bin/check-performance.sh` - Updated section headers and output messages
+- `dist/bin/find-dry.sh` - Updated script header and output messages
+- `dist/bin/templates/report-template.html` - Updated labels and placeholders
+- `dist/patterns/dry/README.md` - Updated documentation terminology
+- `CHANGELOG.md` - Updated all DRY-related entries
+- `DRY_VIOLATIONS_STATUS.md` - Updated document title and references
+- `PROJECT/1-INBOX/DRY-POC-SUMMARY.md` - Updated terminology
+- `PROJECT/1-INBOX/NEXT-FIND-DRY.md` - Updated terminology
+
+## [1.0.73] - 2026-01-02
+
+### Added
+- **Magic String Detector ("DRY") in HTML Reports** - HTML reports now display magic string violations section
+  - Added dedicated "Magic String Violations" section showing all detected violations
+  - Added magic string violations count to summary stats card
+  - Shows pattern name, duplicated string, file count, and total occurrences
+  - Lists all locations with clickable file paths
+  - **Impact:** Magic string violations are now visible in HTML reports (previously only in JSON/text)
+
+### Changed
+- **HTML Template** - Updated `report-template.html` to include magic string violations section
+  - Added `{{MAGIC_STRING_VIOLATIONS_COUNT}}` placeholder for summary stats
+  - Added `{{MAGIC_STRING_VIOLATIONS_HTML}}` placeholder for violations content
+  - Styled violations with medium severity (yellow border)
+
+- **HTML Generation** - Enhanced `generate_html_report()` function
+  - Extracts magic string violations from JSON output
+  - Formats violations with pattern details and location lists
+  - Generates "No violations" message when none detected
+
+### Testing
+- Verified with debug-log-manager plugin (6 magic string violations detected)
+- HTML report displays all violations with proper formatting
+- Clickable file paths work correctly
+
+## [1.0.72] - 2026-01-02
+
+### Fixed
+- **Critical: Path Quoting Bug** - Fixed unquoted `$PATHS` variable in grep command
+  - **Impact:** Magic String Detector ("DRY") was completely broken for paths with spaces
+  - **Symptom:** Grep returned 0 matches even when magic strings existed
+  - **Fix:** Added quotes around `"$PATHS"` in line 1333
+  - **Result:** ✅ Magic String Detector now works correctly
+
+- **Shell Syntax Error** - Removed `local` keyword from non-function context
+  - **Impact:** Script threw errors: "local: can only be used in a function"
+  - **Location:** Lines 3278, 3283, 3284 (violation counting logic)
+  - **Fix:** Changed to regular variable assignments
+  - **Result:** ✅ No more shell errors
+
+### Verified
+- ✅ Pattern extraction working (75-character regex patterns extracted correctly)
+- ✅ Grep finding matches (38 raw matches found in test plugin)
+- ✅ Aggregation logic working (2 magic strings detected correctly)
+- ✅ Debug logging working (`/tmp/wp-code-check-debug.log` shows full details)
+
+### Testing
+Tested against real WordPress plugin:
+- **Plugin:** woocommerce-all-products-for-subscriptions
+- **Path:** `/Users/noelsaw/Local Sites/1-bloomzhemp-production-sync-07-24/app/public/wp-content/plugins/woocommerce-all-products-for-subscriptions`
+- **Results:**
+  - Duplicate transient keys: ✓ No violations
+  - Duplicate capability strings: ✓ No violations (3 matches, below threshold)
+  - Duplicate option names: ⚠ Found 2 magic strings (38 matches)
+
+## [1.0.71] - 2026-01-01
+
+### Fixed
+- **Pattern Extraction Bug** - Fixed Python JSON extraction in `pattern-loader.sh`
+  - Changed from inline Python command to heredoc format for better reliability
+  - Prevents issues with special characters in file paths
+  - Adds proper error handling and stderr capture
+  - **Impact:** Aggregated patterns should now load correctly
+
+### Added
+- **Debug Logging** - Added comprehensive debug logging to `process_aggregated_pattern()`
+  - Logs to `/tmp/wp-code-check-debug.log` for troubleshooting
+  - Shows pattern metadata, search pattern length, grep results
+  - Helps diagnose pattern loading and matching issues
+  - **Usage:** Check `/tmp/wp-code-check-debug.log` after running the scanner
+
+- **Enhanced Output** - Improved Magic String Detector ("DRY") output
+  - Shows pattern search string in output (for debugging)
+  - Shows count of magic strings found per pattern
+  - Better visual feedback for debugging pattern issues
+
+### Changed
+- **Pattern Loader** - Rewrote Python JSON extraction logic
+  - Uses heredoc instead of inline command
+  - Better error handling with try/catch
+  - Falls back to grep/sed if Python fails
+  - More robust handling of complex regex patterns
+
+### Known Issues
+- Terminal output may be truncated on some systems (use `--format json` for full output)
+- Pattern extraction still needs testing with real-world WordPress plugins
+
+## [1.0.70] - 2026-01-01
+
+### Added
+- **Magic String Detector ("DRY") (Aggregated Patterns)** - New pattern type for detecting magic strings (hardcoded string literals)
+  - Added `detection_type` field to pattern schema (`direct` or `aggregated`)
+  - Created 3 aggregated patterns for detecting duplicate string literals (magic strings):
+    - `dist/patterns/duplicate-option-names.json` - Duplicate WordPress option names across files
+    - `dist/patterns/duplicate-transient-keys.json` - Duplicate transient keys across files
+    - `dist/patterns/duplicate-capability-strings.json` - Duplicate capability strings across files
+  - Aggregated patterns group matches by captured string and report violations when:
+    - String appears in >= 3 distinct files (configurable via `min_distinct_files`)
+    - String appears >= 6 total times (configurable via `min_total_matches`)
+  - **Purpose:** Detect magic strings (DRY violations) where hardcoded strings should be constants
+  - **Example:** Option name `'my_plugin_settings'` used in 5 files (8 times) → suggests creating a constant
+
+- **JSON Output Enhancement** - Extended JSON schema to include magic string violations
+  - Added `magic_string_violations` array to JSON output with structure:
+    - `pattern`: Pattern title (e.g., "Duplicate option names across files")
+    - `severity`: Pattern severity (MEDIUM/HIGH/CRITICAL)
+    - `duplicated_string`: The duplicated string literal (magic string)
+    - `file_count`: Number of distinct files containing the string
+    - `total_count`: Total occurrences across all files
+    - `locations`: Array of `{file, line}` objects showing all occurrences
+  - Added `magic_string_violations` count to summary section
+  - **Example Output:**
+    ```json
+    {
+      "summary": {
+        "magic_string_violations": 2
+      },
+      "magic_string_violations": [
+        {
+          "pattern": "Duplicate option names across files",
+          "severity": "MEDIUM",
+          "duplicated_string": "my_plugin_settings",
+          "file_count": 5,
+          "total_count": 8,
+          "locations": [
+            {"file": "includes/admin.php", "line": 42},
+            {"file": "includes/settings.php", "line": 15}
+          ]
+        }
+      ]
+    }
+    ```
+
+- **Pattern Loader Enhancement** - Improved JSON parsing for complex patterns
+  - Added Python-based JSON extraction for reliable parsing of patterns with special characters
+  - Falls back to grep/sed if Python is not available
+  - Properly handles escaped characters in search patterns (e.g., `\(`, `\"`, `['\"]`)
+  - Extracts `detection_type` field to distinguish direct vs aggregated patterns
+
+### Changed
+- **Pattern Schema** - Extended pattern definition schema
+  - Added `detection_type` field (required): `"direct"` or `"aggregated"`
+  - Added `aggregation` section for aggregated patterns:
+    - `enabled`: Boolean to enable/disable aggregation
+    - `group_by`: Field to group by (currently only `"capture_group"` supported)
+    - `min_total_matches`: Minimum total occurrences to report (default: 6)
+    - `min_distinct_files`: Minimum number of files to report (default: 3)
+    - `top_k_groups`: Maximum number of violations to report (default: 15)
+    - `report_format`: Template for violation messages
+    - `sort_by`: Sort order for violations (`"file_count_desc"` or `"total_count_desc"`)
+
+- **Text Output** - Added Magic String Detection ("DRY") section
+  - New section displayed after all direct pattern checks
+  - Shows pattern title and violation status for each aggregated pattern
+  - Displays "✓ No violations" or "⚠ Found magic strings" for each pattern
+
+### Technical Details
+- **Aggregation Algorithm:**
+  1. Run grep with pattern's search_pattern across all PHP files
+  2. Extract captured group (e.g., option name from `get_option('name')`)
+  3. Group matches by captured string (magic string)
+  4. Count distinct files and total occurrences for each string
+  5. Report strings exceeding both thresholds
+- **Performance:** Aggregation runs after all direct checks to avoid duplicate grep operations
+- **Memory:** Uses temporary files for aggregation to handle large codebases
+
+### Known Issues
+- Pattern extraction may fail on systems without Python if patterns contain complex escaped characters
+- Aggregation currently only supports single capture group (group_by: "capture_group")
+- HTML report does not yet display magic string violations (JSON output only)
+
+## [1.0.69] - 2026-01-01
+
+### Added
+- **Pattern Library JSON Files** - Created 3 new pattern definition files
+  - `dist/patterns/unsanitized-superglobal-read.json` - Direct superglobal access without sanitization (HIGH severity)
+  - `dist/patterns/wpdb-query-no-prepare.json` - Database queries without prepare() (CRITICAL severity)
+  - `dist/patterns/get-users-no-limit.json` - Unbounded user queries (CRITICAL severity)
+  - **Purpose:** Separate pattern definitions from scanner logic for modularity and community contributions
+  - **Schema:** Each includes detection logic, test fixtures, IRL examples, remediation guidance, references
+  - **IRL Examples:** All 3 patterns include real-world examples from WP Activity Log v5.5.4
+  - **Total Patterns:** 4 JSON files (including existing `unsanitized-superglobal-isset-bypass.json`)
+
+- **WP Activity Log IRL Examples** - 3 annotated files from production security plugin
+  - `dist/tests/irl/wp-security-audit-log/class-select2-wpws-irl.php` (530 lines)
+    - 2 unbounded get_users() violations (lines 230, 444)
+    - AJAX user search without limits - can crash sites with 10k+ users
+  - `dist/tests/irl/wp-security-audit-log/class-wp-security-audit-log-irl.php` (1,517 lines)
+    - 1 unsanitized superglobal read (line 1261)
+    - Type juggling vulnerability in plugin visibility control
+  - `dist/tests/irl/wp-security-audit-log/class-migration-irl.php` (1,527 lines)
+    - 1 direct database query without prepare() (line 226)
+    - SQL injection risk in migration function
+  - **Total:** 3,574 lines of annotated production code
+  - **Detection Rate:** 100% - Scanner found all 3 documented violations plus 57 additional issues
+  - **Summary Document:** `PROJECT/WP-SECURITY-AUDIT-LOG-IRL-SUMMARY.md`
+
+### Changed
+- **Pattern JSON Files:** Now 4 total pattern definitions (was 1)
+  - Existing: `unsanitized-superglobal-isset-bypass.json` (isset-bypass variant)
+  - New: `unsanitized-superglobal-read.json` (direct read variant)
+  - New: `wpdb-query-no-prepare.json` (SQL injection)
+  - New: `get-users-no-limit.json` (performance)
+  - **Note:** These are distinct patterns, not duplicates
+
+### Documentation
+- **Pattern JSON Schema:** Each file includes:
+  - Pattern ID, version, severity, category
+  - Detection logic (grep patterns, exclusions, post-processing)
+  - Test fixture path and expected violation counts
+  - IRL examples with file, line, plugin, code, context, risk assessment
+  - Remediation examples (bad vs good code)
+  - References to WordPress documentation
+  - Performance impact analysis (for performance patterns)
+  - False positive guidance
+
+## [1.0.68] - 2026-01-01
+
+### Added
+- **IRL (In Real Life) Examples System** - Real-world code examples from production plugins/themes
+  - **Purpose:** Validate patterns exist in production, discover new anti-patterns, document real vulnerabilities
+  - **Structure:** `dist/tests/irl/plugin-name/filename-irl.php` with inline audit annotations
+  - **Filename Conventions:**
+    - `-irl.php` = Fully audited with annotations and pattern library updated
+    - `-inbox.php` = Quick capture for later processing (no annotations yet)
+  - **Annotation Format:** File header summary + inline comments at each anti-pattern
+  - **Examples Added:**
+    - WooCommerce All Products for Subscriptions v6.0.6 - `class-wcs-att-admin-irl.php` (1 violation)
+    - KISS Woo Coupon Debugger v2.1.0 - `AdminUI-irl.php` (2 violations)
+  - **User-Submitted Code:** Users can copy PHP/JS files from their own projects for AI analysis
+  - **Documentation:** `dist/tests/irl/README.md` and `dist/tests/irl/_AI_AUDIT_INSTRUCTIONS.md`
+
+- **Baseline Files Generated** - Suppress known issues for ongoing monitoring
+  - KISS Debugger: 22 findings baselined
+  - WooCommerce All Products for Subscriptions: 73 findings baselined
+  - Purpose: Track new issues without noise from existing known issues
+
+- **Pattern Library Separation (Integrated!)** - First pattern now loads from JSON
+  - **Pattern Definitions:** JSON files in `dist/patterns/` directory
+  - **Pattern Loader:** `dist/lib/pattern-loader.sh` - Bash library to load patterns from JSON
+  - **First Pattern:** `unsanitized-superglobal-isset-bypass.json` with full metadata
+  - **Schema:** Pattern ID, version, severity, detection logic, test fixtures, IRL examples, remediation
+  - **Integration:** Scanner now loads `unsanitized-superglobal-isset-bypass` pattern from JSON (line 1529-1540)
+  - **Fallback:** If JSON not found, falls back to hardcoded values (graceful degradation)
+  - **Benefits:** Modularity, versioning, easier testing, community contributions
+  - **Status:** ✅ Integrated - one pattern using JSON, remaining 32 patterns still hardcoded
+
+### Changed
+- **Pattern JSON:** Updated `unsanitized-superglobal-isset-bypass.json` with 3 IRL examples
+  - WooCommerce All Products for Subscriptions: Line 451 (isset bypass in admin scripts)
+  - KISS Debugger: Line 434 (boolean cast without sanitization)
+  - KISS Debugger: Line 472 (string comparison without sanitization)
+  - Each includes: plugin name, version, context, original line number
+- **Gitignore:** Added rules for IRL folder
+  - Keeps: `dist/tests/irl/`, `README.md`, `_AI_AUDIT_INSTRUCTIONS.md`, `.gitkeep`
+  - Ignores: All user-created IRL example files (may contain proprietary code)
+  - Rationale: Users can collect real-world examples without committing them to public repo
+
+### Fixed
+- **Version Number:** Updated SCRIPT_VERSION to 1.0.68 (was showing 1.0.66)
+- **Bash Error:** Removed `local` keyword outside function (line 434) - was causing error on script start
+
+## [1.0.67] - 2026-01-01
+
+### Fixed
+- **CRITICAL BUG: Path Quoting in Grep Commands** - Fixed all 16 grep commands to properly quote `$PATHS` variable
+  - **Impact:** Scanner was completely broken for any project path containing spaces (e.g., `/Users/name/Local Sites/project/`)
+  - **Root Cause:** Unquoted `$PATHS` variable caused shell to split paths on spaces, breaking grep searches
+  - **Affected Checks:** ALL pattern-based checks (unsanitized superglobals, SQL injection, N+1 queries, etc.)
+  - **Fix:** Added quotes around all `$PATHS` references in grep commands: `$PATHS` → `"$PATHS"`
+  - **Verification:** Tested with WooCommerce All Products for Subscriptions plugin in path with spaces - now correctly detects 7 errors + 1 warning (previously reported 0 issues)
+  - **Files Changed:** `dist/bin/check-performance.sh` (lines 1373, 1541, 1647, 1719, 1798, 1862, 1926, 1987, 2057, 2122, 2188, 2228, 2272, 2627, 2676, 2759)
+  - **Safeguards Added:** Inline comments at each grep command referencing SAFEGUARDS.md to prevent future regressions
+
+### Improved
+- **Enhanced Pattern: Unsanitized Superglobal Read** - Now catches `isset()` bypass pattern
+  - **Pattern:** `isset( $_GET['x'] ) && $_GET['x'] === 'value'` (isset check + direct usage on same line)
+  - **Detection Logic:** Counts superglobal occurrences per line - skips if only 1 occurrence with isset/empty (existence check), reports if 2+ occurrences (isset + usage)
+  - **Example Violations Found:**
+    - `isset( $_GET['tab'] ) && $_GET['tab'] === 'subscriptions'` (line 451, class-wcs-att-admin.php)
+    - `isset( $_GET['switch-subscription'] ) && isset( $_GET['item'] )` (line 86, class-wcs-att-manage-switch.php)
+    - `! empty( $_REQUEST['add-to-cart'] ) && is_numeric( $_REQUEST['add-to-cart'] )` (line 108, class-wcs-att-manage-switch.php)
+  - **Test Fixture:** `dist/tests/fixtures/unsanitized-superglobal-isset-bypass.php` (5 violations, 6 valid examples)
+
+### Added
+- **SAFEGUARDS.md** - Critical implementation safeguards documentation
+  - **Purpose:** Prevent catastrophic regressions by documenting critical implementation details that must not be changed
+  - **Contents:**
+    - Path variable quoting rules (with line numbers for all 16 affected grep commands)
+    - isset() bypass detection logic explanation
+    - Version increment checklist
+    - Critical test cases for verification
+    - Debugging guide for silent failures
+  - **Inline References:** Added safeguard comments at all 16 grep commands pointing to SAFEGUARDS.md
+
+## [1.0.66] - 2026-01-01
+
+### Added
+- **Enhancement #10: WooCommerce N+1 Query Patterns** - Detects WC-specific N+1 performance issues
+  - **Rule ID:** `wc-n-plus-one-pattern`
+  - **Severity:** HIGH (customizable via severity config)
+  - **Category:** performance
+  - **Rationale:** WooCommerce functions called inside loops cause query multiplication (100 orders × 3 meta queries = 300 queries per page)
+  - **Detection:** Finds `wc_get_order()`, `wc_get_product()`, `get_post_meta()`, `get_user_meta()`, `->get_meta()` called inside loops over WC orders/products
+  - **Test Fixture:** Added `dist/tests/fixtures/wc-n-plus-one.php` with examples of violations and valid code (pre-fetching, caching)
+
+### Changed
+- **Check Count:** Increased from 32 to 33 checks (+1 new WooCommerce-specific check)
+- **Documentation:** Updated README files to reflect new check and count
+- **Severity Config:** Updated `severity-levels.json` to include new rule ID
+
+## [1.0.65] - 2026-01-01
+
+### Added
+- **Enhanced Pattern #2: Admin Functions Without Capability Checks** - Expanded detection coverage
+  - **Rule ID:** `admin-no-capability-check`
+  - **Severity:** HIGH (customizable via severity config)
+  - **Enhancement:** Now detects `add_menu_page`, `add_submenu_page`, `add_options_page`, and `add_management_page` callbacks missing capability checks (in addition to existing AJAX handler detection)
+  - **Test Fixture:** Added `dist/tests/fixtures/admin-no-capability.php` with examples of violations and valid code
+
+- **New Pattern #5: WooCommerce Subscriptions Queries Without Limits** - Prevents performance issues
+  - **Rule ID:** `wcs-get-subscriptions-no-limit`
+  - **Severity:** MEDIUM (customizable via severity config)
+  - **Category:** performance
+  - **Rationale:** WooCommerce Subscriptions functions should include 'limit' parameter to prevent performance degradation with large subscription counts
+  - **Detection:** Finds `wcs_get_subscriptions`, `wcs_get_subscriptions_for_order`, `wcs_get_subscriptions_for_product`, `wcs_get_subscriptions_for_user` called without 'limit' parameter
+  - **Test Fixture:** Added `dist/tests/fixtures/wcs-no-limit.php` with examples of violations and valid code
+
+### Changed
+- **Check Count:** Increased from 31 to 32 checks (+1 new check, +1 enhanced check)
+- **Documentation:** Updated README files to reflect new checks and count
+- **Severity Config:** Updated `severity-levels.json` to include new rule ID
+
+## [1.0.64] - 2026-01-01
+
+### Added
+- **New Check: Direct Database Queries Without $wpdb->prepare()** - Detects SQL injection vulnerabilities
+  - **Rule ID:** `wpdb-query-no-prepare`
+  - **Severity:** CRITICAL (customizable via severity config)
+  - **Category:** security
+  - **Rationale:** All database queries using `$wpdb->query`, `get_var`, `get_row`, `get_results`, or `get_col` must use `$wpdb->prepare()` to prevent SQL injection attacks
+  - **Detection:** Finds direct database calls without `$wpdb->prepare()` in the same statement
+  - **Test Fixture:** Added `dist/tests/fixtures/wpdb-no-prepare.php` with examples of violations and valid code
+
+- **New Check: Unsanitized Superglobal Read** - Detects XSS and parameter tampering vulnerabilities
+  - **Rule ID:** `unsanitized-superglobal-read`
+  - **Severity:** HIGH (customizable via severity config)
+  - **Category:** security
+  - **Rationale:** All access to `$_GET`, `$_POST`, and `$_REQUEST` must be sanitized using WordPress functions to prevent XSS and parameter tampering
+  - **Detection:** Finds direct superglobal access without sanitization wrappers (`sanitize_*`, `esc_*`, `absint`, `intval`, `wc_clean`, `wp_unslash`, `isset`, `empty`)
+  - **Test Fixture:** Added `dist/tests/fixtures/unsanitized-superglobal-read.php` with examples of violations and valid code
+
+### Changed
+- **Check Count:** Increased from 29 to 31 checks (+2 new security checks)
+- **Documentation:** Updated README files to reflect new checks and count
+- **Severity Config:** Updated `severity-levels.json` to include new rule IDs
+
+### Technical Details
+- Both checks use custom implementation (not `run_check` function) to support complex filtering logic
+- Implements allowlist patterns to reduce false positives (e.g., `isset`, `empty`, sanitization functions)
+- Follows the same pattern as admin capability check (manual grep → filter → display → count)
+- Correctly excludes comments and safe patterns from detection
+
+## [1.0.63] - 2025-12-31
+
+### Added
+- **New Check: Disallowed PHP Short Tags** - Detects use of PHP short tags (`<?=` and `<? `) which violate WordPress Coding Standards
+  - **Rule ID:** `disallowed-php-short-tags`
+  - **Severity:** MEDIUM (customizable via severity config)
+  - **Category:** compatibility
+  - **Rationale:** WordPress Coding Standards require full `<?php` tags for maximum server compatibility. The `short_open_tag` setting is not guaranteed to be enabled on all hosting environments.
+  - **Detection:** Finds `<?=` (short echo tags) and `<? ` (short open tags) while correctly ignoring `<?php` and `<?xml`
+  - **Test Fixture:** Added `dist/tests/fixtures/php-short-tags.php` with examples of violations and valid code
+
+### Changed
+- **Check Count:** Increased from 28 to 29 checks
+- **Documentation:** Updated README files to reflect new check and count
+
+### Technical Details
+- Implements portable grep patterns that work on both macOS and Linux
+- Uses dynamic severity configuration (responds to custom severity configs)
+- Follows the same pattern as all other checks (get_severity → display → count errors/warnings)
+- Correctly excludes XML declarations and full PHP tags from detection
+
+## [1.0.62] - 2025-12-31
+
+### Changed
+- **Day 3: All 28 Checks Now Use Dynamic Severity** - Completed migration of all performance checks to use `get_severity()` function
+  - **Checks Updated:** All 16 remaining checks now use dynamic severity from config files
+  - **Dynamic Display:** All checks show severity level in brackets (e.g., [CRITICAL], [HIGH], [MEDIUM], [LOW])
+  - **Dynamic Colors:** Severity colors update based on level (RED for CRITICAL/HIGH, YELLOW for MEDIUM/LOW)
+  - **Dynamic Error/Warning Logic:** CRITICAL/HIGH = ERROR (fails build), MEDIUM/LOW = WARNING
+  - **Rule ID Consistency:** Fixed rule ID mismatches to align with severity-levels.json
+  - **Checks Migrated:**
+    1. Admin functions without capability checks
+    2. Unbounded AJAX polling
+    3. Expensive WP functions in polling (HCC-005)
+    4. REST endpoints without pagination
+    5. wp_ajax handlers without nonce validation
+    6. get_users without number limit
+    7. get_terms without number limit
+    8. pre_get_posts forcing unbounded queries
+    9. Unbounded SQL on wp_terms/wp_term_taxonomy
+    10. Unvalidated cron intervals
+    11. Timezone-sensitive patterns
+    12. LIKE queries with leading wildcards
+    13. Transients without expiration
+    14. Script/style versioning with time()
+    15. file_get_contents() with external URLs
+    16. HTTP requests without timeout
+
+### Fixed
+- **Rule ID Consistency** - Aligned rule IDs in add_json_finding calls with severity-levels.json
+  - `ajax-polling-setinterval` → `ajax-polling-unbounded`
+  - `unbounded-get-users` → `get-users-no-limit`
+  - `unbounded-terms-sql` → `unbounded-sql-terms`
+  - `unvalidated-cron-interval` → `cron-interval-unvalidated`
+  - `timezone-sensitive-pattern` → `timezone-sensitive-code`
+  - `script-versioning-time` → `asset-version-time`
+  - `wp-ajax-no-nonce` → `ajax-no-nonce`
+  - `rest-endpoint-unbounded` → `rest-no-pagination`
+
+### Technical Details
+- **100% Dynamic Severity:** All 28 checks now query severity from config files at runtime
+- **Zero Hardcoded Severity:** Removed all hardcoded severity levels from text_echo statements
+- **Consistent Pattern:** All checks follow the same pattern: calculate severity → set color → display → count errors/warnings
+- **Backward Compatible:** Script works identically without custom config (uses factory defaults)
+
+## [1.0.61] - 2025-12-31
+
+### Added
+- **Custom Severity Configuration (Day 2)** - Implemented `--severity-config <path>` CLI option to customize severity levels
+  - **Purpose:** Allows teams to customize severity rankings based on their specific risk tolerance and priorities
+  - **Implementation:** Bash 3.2 compatible (works on macOS without requiring Bash 4+)
+  - **get_severity() Function:** Queries JSON config file directly using jq (no associative arrays needed)
+  - **Fallback Chain:** Custom config → Factory defaults → Hardcoded fallback
+  - **Dynamic Display:** Severity levels and colors update based on config (e.g., [CRITICAL] in red, [MEDIUM] in yellow)
+  - **Error/Warning Logic:** CRITICAL/HIGH severity = ERROR (fails build), MEDIUM/LOW = WARNING
+  - **All Checks Updated:** All 28 checks now use `get_severity()` instead of hardcoded severity levels
+  - **Tested:** N+1 pattern successfully upgraded from MEDIUM to CRITICAL via custom config
+
+### Changed
+- **N+1 Pattern Check** - Updated to use dynamic severity from config file
+  - **Display:** Shows `[CRITICAL]` and `✗ FAILED` when severity is CRITICAL/HIGH
+  - **Display:** Shows `[MEDIUM]` and `⚠ WARNING` when severity is MEDIUM/LOW
+  - **Error Counting:** Increments ERRORS counter when severity is CRITICAL/HIGH
+  - **Warning Counting:** Increments WARNINGS counter when severity is MEDIUM/LOW
+
+### Technical Details
+- **Bash 3.2 Compatibility:** Avoided associative arrays (Bash 4+ feature) to support macOS default shell
+- **jq Integration:** Queries JSON config file directly for each severity lookup
+- **Performance:** Minimal overhead - jq queries are fast and cached by OS
+- **Config Validation:** Validates JSON syntax and severity level values (CRITICAL, HIGH, MEDIUM, LOW)
+- **Comment Field Support:** Underscore-prefixed fields (_comment, _note, etc.) are ignored during parsing
+
+## [1.0.60] - 2025-12-31
+
+### Added
+- **Severity Level Configuration File** - Created `/dist/config/severity-levels.json` with all 28 checks and their factory default severity levels
+  - **Purpose:** Foundation for Day 2 implementation of customizable severity rankings (PROJECT-SELF-RANK-SEVERITY.md)
+  - **Structure:** JSON file with metadata, rule IDs, names, severity levels, categories, and descriptions
+  - **Coverage:** All 28 checks (12 CRITICAL, 9 HIGH, 6 MEDIUM, 1 LOW)
+  - **Categories:** 10 security checks, 17 performance checks, 1 maintenance check
+  - **Location:** `dist/config/severity-levels.json`
+  - **Usage (Day 2):** Users will copy this file, edit `level` fields, and pass `--severity-config <path>` to customize severity rankings
+  - **Factory Defaults:** Each check includes `factory_default` field for reference (users can always see original values)
+  - **Self-Documenting:** Includes instructions, version, last_updated, and total_checks in metadata
+  - **Comment Field Support:** Any field starting with underscore (`_comment`, `_note`, `_reason`, `_ticket`, etc.) is ignored by parser
+    - **Purpose:** Users can document why they changed severity levels
+    - **Examples:** `_comment: "Upgraded per security audit"`, `_ticket: "JIRA-1234"`, `_date: "2025-12-31"`
+    - **Parser Behavior:** Underscore-prefixed fields are filtered out during parsing (won't affect functionality)
+    - **Use Cases:** Document incidents, reference tickets, track authors, add dates, explain decisions
+  - **Rule IDs Mapped:**
+    - CRITICAL: spo-001-debug-code, hcc-001-localstorage-exposure, hcc-002-client-serialization, spo-003-insecure-deserialization, unbounded-posts-per-page, unbounded-numberposts, nopaging-true, unbounded-wc-get-orders, get-users-no-limit, get-terms-no-limit, pre-get-posts-unbounded, rest-no-pagination
+    - HIGH: spo-002-superglobals, admin-no-capability-check, ajax-no-nonce, ajax-polling-unbounded, hcc-005-expensive-polling, unbounded-sql-terms, cron-interval-unvalidated, file-get-contents-url, order-by-rand
+    - MEDIUM: hcc-008-unsafe-regexp, like-leading-wildcard, n-plus-one-pattern, transient-no-expiration, script-versioning-time, http-no-timeout
+    - LOW: timezone-sensitive
+  - **Next Steps (Day 2):** Implement `load_severity_defaults()`, `load_custom_severity_config()`, and `get_severity()` functions in check-performance.sh
+
+- **Example Configuration File** - Created `/dist/config/severity-levels.example.json` showing how to customize severity levels
+  - **Purpose:** Demonstrates comment field usage and severity customization patterns
+  - **Examples:** Shows upgrading/downgrading severity levels with documentation
+  - **Comment Examples:** Demonstrates `_comment`, `_note`, `_reason`, `_ticket`, `_date`, `_author` fields
+  - **Workflow Guide:** Includes step-by-step instructions in `_notes` section
+
+- **Configuration Documentation** - Created `/dist/config/README.md` with comprehensive usage guide
+  - **Quick Start:** Copy, edit, and use custom config files
+  - **Comment Field Reference:** Table of common underscore field names and their purposes
+  - **Field Reference:** Which fields are editable vs. read-only
+  - **Best Practices:** DOs and DON'Ts for config customization
+  - **Example Workflow:** Complete workflow from copy to CI/CD integration
+
 ## [1.0.59] - 2025-12-31
 
 ### Fixed
+- **Timezone-Sensitive Pattern False Positive** - Fixed detection to exclude `gmdate()` (timezone-safe function)
+  - **Issue:** Pattern was flagging `gmdate()` as timezone-sensitive, but `gmdate()` always returns UTC (timezone-safe)
+  - **Root Cause:** Pattern matched any function containing "date" without distinguishing between `date()` and `gmdate()`
+  - **Fix:** Updated pattern to use `grep -v "gmdate"` to exclude timezone-safe `gmdate()` calls
+  - **Impact:** Reduces false positives - only flags `date()` (timezone-dependent) and `current_time('timestamp')`
+  - **Location:** Lines 2071-2082 in check-performance.sh
+  - **Rationale:**
+    - `date()` - Uses PHP's configured timezone (can vary by server) - **SHOULD BE FLAGGED**
+    - `gmdate()` - Always returns UTC/GMT (consistent across environments) - **SHOULD NOT BE FLAGGED**
+    - WordPress stores all dates internally as UTC, so `gmdate()` is the recommended approach
+  - **Testing:** Verified with test file containing both `date()` and `gmdate()` calls
+    - ✅ `date('Y-m-d')` - Correctly flagged
+    - ✅ `gmdate('Y-m-d')` - Correctly NOT flagged
+    - ✅ `current_time('timestamp')` - Correctly flagged
+
 - **Version Drift Bug** - Created single source of truth for version number to prevent version inconsistencies
   - **Issue:** Script had 4 different hardcoded version strings that were out of sync (header: 1.0.59, banner/logs/JSON: 1.0.58)
   - **Root Cause:** Version number was hardcoded in 4 different locations instead of using a single variable

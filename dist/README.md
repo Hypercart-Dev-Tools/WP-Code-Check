@@ -1,6 +1,7 @@
 # WP Code Check by Hypercart - Performance & Security Analyzer
 
-**Version:** 1.0.58
+> **Versioning:** The canonical version is defined in `dist/bin/check-performance.sh` (see `SCRIPT_VERSION` in the script header). This README reflects that version but should not be treated as the primary source of truth.
+
 © Copyright 2025 Hypercart (a DBA of Neochrome, Inc.)
 
 ---
@@ -22,7 +23,7 @@ You're building a WordPress plugin or theme. Everything works great in developme
 
 ### The Solution
 
-This toolkit **automatically detects 15+ critical WordPress performance and security antipatterns** before they reach production.
+This toolkit **automatically detects 30+ critical WordPress performance and security antipatterns** before they reach production.
 
 **Think of it as:**
 - 🛡️ **ESLint/PHPStan for WordPress performance** - catches issues static analysis misses
@@ -57,7 +58,7 @@ This toolkit **automatically detects 15+ critical WordPress performance and secu
 
 ```bash
 # Clone to a central location (anywhere on your machine)
-git clone https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing.git ~/dev/wp-analyzer
+git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git ~/dev/wp-analyzer
 
 # Or download and extract to any directory
 cd ~/dev/wp-analyzer
@@ -122,6 +123,7 @@ These patterns **will crash your site** under production load:
 
 | Pattern | Why It's Dangerous | Real-World Impact |
 |---------|-------------------|-------------------|
+| **`$wpdb->query`** without `prepare()` | SQL injection vulnerability | Attacker can delete database, steal data, or execute arbitrary SQL |
 | **AJAX polling** via `setInterval` + fetch/ajax | Creates request storms that hammer backend | 1000 users = 60,000 requests/min → server meltdown |
 | **`register_rest_route`** without pagination | Unbounded REST data fetch | API returns 50,000 posts → 500MB response → timeout |
 | **`wp_ajax_*`** handlers missing nonce | Unlimited AJAX flood, no CSRF protection | Bots flood endpoint → database locks → site down |
@@ -134,7 +136,18 @@ These patterns **will crash your site** under production load:
 | **Unbounded SQL** on `wp_terms` | Full table scans without limits | Locks database on large sites |
 | **`file_get_contents()`** with URLs | No timeout, no SSL verification, blocks PHP | External API down → entire site hangs for 30+ seconds |
 
-### ⚠️ Warnings (Review Recommended)
+### ⚠️ High Priority Warnings
+
+These patterns **create security vulnerabilities or severe performance issues** and should be fixed immediately:
+
+| Pattern | Why It Matters | Impact |
+|---------|---------------|--------|
+| **Unsanitized `$_GET`/`$_POST`** read | XSS and parameter tampering | Attacker can inject malicious scripts or manipulate application logic |
+| **Direct superglobal manipulation** | Bypasses WordPress security | Modifying `$_GET`/`$_POST` directly breaks sanitization |
+| **Admin functions without capability checks** | Privilege escalation vulnerability | Subscribers can access admin functions, modify settings, or delete data |
+| **WooCommerce N+1 patterns** | Query multiplication in WC loops | 100 orders × 3 meta queries = 300 queries → 5-10 second page loads |
+
+### ⚠️ Medium Priority Warnings
 
 These patterns **degrade performance** and should be fixed:
 
@@ -145,6 +158,8 @@ These patterns **degrade performance** and should be fixed:
 | **N+1 patterns** (meta in loops) | Query multiplication | 100 posts × 3 meta queries = 300 queries per page |
 | **`current_time('timestamp')`** | Deprecated, timezone issues | Use `current_datetime()` instead |
 | **HTTP requests** without timeout | External API hangs → site hangs | 5-30 second page loads if API is slow |
+| **PHP short tags** (`<?=` or `<? `) | Not guaranteed to work on all servers | Code fails to parse if `short_open_tag` is disabled |
+| **WooCommerce Subscriptions queries without limits** | Performance degradation with large subscription counts | 10,000 subscriptions → memory exhaustion |
 
 ---
 
@@ -280,7 +295,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Clone analyzer
-        run: git clone https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing.git /tmp/analyzer
+        run: git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git /tmp/analyzer
 
       - name: Run audit
         run: /tmp/analyzer/dist/bin/check-performance.sh --paths . --strict --format json
@@ -311,7 +326,7 @@ jobs:
 performance-audit:
   stage: test
   script:
-    - git clone https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing.git /tmp/analyzer
+    - git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git /tmp/analyzer
     - /tmp/analyzer/dist/bin/check-performance.sh --paths . --strict
   only:
     - merge_requests
@@ -366,7 +381,7 @@ wp-analyze ~/Sites/my-plugin --format json > results.json
 JSON structure:
 ```json
 {
-  "version": "1.0.46",
+  "version": "<SCRIPT_VERSION>",
   "timestamp": "2025-12-29T10:30:00Z",
   "paths_scanned": ["~/Sites/my-plugin"],
   "strict_mode": false,
@@ -386,16 +401,6 @@ JSON structure:
       "line": 42,
       "code": "'posts_per_page' => -1,",
       "message": "Unbounded posts_per_page can cause memory exhaustion"
-    }
-  ],
-  "checks": [
-    {
-      "id": "unbounded-posts-per-page",
-      "name": "Unbounded posts_per_page",
-      "status": "failed",
-      "severity": "error",
-      "impact": "CRITICAL",
-      "finding_count": 2
     }
   ]
 }
@@ -431,20 +436,20 @@ $data = file_get_contents( 'https://api.example.com/data' );
 
 | File | Purpose |
 |------|---------|
-| `bin/check-performance.sh` | Main analyzer - detects 15+ antipatterns |
-| `tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
-| `tests/run-fixture-tests.sh` | Validation test suite (9 tests) |
+| `dist/bin/check-performance.sh` | Main analyzer - detects 30+ antipatterns |
+| `dist/tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
+| `dist/tests/run-fixture-tests.sh` | Validation test suite (number of tests may grow over time) |
 
 ### Integration Tools
 
 | File | Purpose |
 |------|---------|
-| `bin/post-to-slack.sh` | Post results to Slack webhook |
-| `bin/format-slack-message.sh` | Format JSON as Slack Block Kit |
-| `bin/test-slack-integration.sh` | Test Slack integration |
+| `dist/bin/post-to-slack.sh` | Post results to Slack webhook |
+| `dist/bin/format-slack-message.sh` | Format JSON as Slack Block Kit |
+| `dist/bin/test-slack-integration.sh` | Test Slack integration |
 | `setup-integration-security.sh` | Setup credential protection |
 
-See [PROJECT/DETAILS/INTEGRATIONS.md](../PROJECT/DETAILS/INTEGRATIONS.md) for integration guides.
+See the `PROJECT/` directory for detailed integration and architectural docs.
 
 ---
 
@@ -523,10 +528,10 @@ echo "dist/logs/" >> .gitignore
 
 ## 🔗 Links & Support
 
-- **Repository:** https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing
-- **Issues:** https://github.com/NeochromeTeam/neochrome-toolkit-automated-wp-code-testing/issues
+- **Repository:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check
+- **Issues:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues
 - **Documentation:** See `PROJECT/` directory for detailed guides
-- **Contact:** noel@neochro.me
+- **Contact:** noel@hypercart.io
 
 ---
 

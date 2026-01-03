@@ -98,3 +98,83 @@ actual_count=$(grep -c "$pattern" "$fixture_file")
 - JSON: Includes `fixture_validation` object with status, passed, failed counts
 - HTML: Shows green "✓ Detection Verified (4 fixtures)" badge in footer
 
+---
+
+## 🚀 High Priority: Migrate Inline Patterns to External JSON Rules
+
+**Status:** Not Started  
+**Priority:** HIGH  
+**Owner:** Core maintainer  
+**Created:** 2026-01-02
+
+### Problem
+Many legacy detection rules are still defined inline in `check-performance.sh` as hard-coded `run_check` calls with embedded `-E` grep patterns. Newer rules (especially DRY/aggregated checks) now live in external JSON files under `dist/patterns/` and are loaded via the pattern loader.
+
+This split makes it harder to:
+- See a single, authoritative list of rules
+- Reuse patterns across tools or future UIs
+- Maintain consistency in metadata (severity, categories, remediation)
+- Refactor or batch-update patterns safely
+
+### Goal
+Converge on **external JSON pattern definitions** as the single source of truth for all detection rules, with `check-performance.sh` acting primarily as an engine/runner.
+
+### Why Do This Sooner
+- **Maintainability:** New rules no longer require script edits; they are data-driven.
+- **Scalability:** Easier to add, disable, or tune rules without touching Bash.
+- **Consistency:** Same schema (id, severity, category, remediation) across all rules.
+- **Extensibility:** Future tools (web UI, IDE plugin, docs generator) can read the same JSON rule set.
+- **Testing:** Pattern behavior can be validated in isolation and reused in other contexts.
+
+### Scope
+1. **Identify all inline rules** in `dist/bin/check-performance.sh` that use `run_check` with embedded patterns.
+2. **Design/confirm JSON schema** (reuse existing DRY/aggregated schema where possible).
+3. **Create JSON files** in `dist/patterns/` for each rule family:
+   - Query performance (unbounded queries, N+1, raw SQL)
+   - Security (nonces, capabilities, unsafe serialization)
+   - HTTP/Network (timeouts, external URLs)
+   - Timezone
+   - Cron/scheduling
+   - SPO rules and KISS PQS findings
+4. **Wire the loader** so `check-performance.sh` runs all JSON-defined rules first, then any remaining inline rules.
+5. **Gradually migrate** inline rules to JSON, keeping behavior identical.
+6. **Deprecate inline definitions** once coverage is complete.
+
+### Phased Plan
+
+**Phase 0 – Inventory (2–3 hours)**
+- [ ] Grep for `run_check` in `check-performance.sh` and categorize all inline rules.
+- [ ] Create an inventory table (rule id, severity, category, status: inline/JSON).
+
+**Phase 1 – New Rules Only in JSON (Already in progress)**
+- [x] DRY / aggregated patterns defined in `dist/patterns/dry/*.json`.
+- [ ] Update CONTRIBUTING.md to prefer JSON pattern definitions for all new rules.
+
+**Phase 2 – Migrate High-Impact Rules (1–2 days)**
+- [ ] Move SPO rules and KISS PQS rules to JSON.
+- [ ] Move admin capability checks and nonce-related rules to JSON.
+- [ ] Move HTTP/timeout and external URL checks to JSON.
+- [ ] Ensure fixture tests still pass with identical findings.
+
+**Phase 3 – Migrate Remaining Legacy Rules (2–3 days)**
+- [ ] Move remaining query, timezone, cron, and misc rules to JSON.
+- [ ] Keep a thin compatibility layer in `check-performance.sh` that:
+  - Loads JSON rules
+  - Executes them via existing runners (simple and aggregated)
+
+**Phase 4 – Cleanup & Docs (1 day)**
+- [ ] Remove deprecated inline pattern definitions once JSON parity is confirmed.
+- [ ] Update CONTRIBUTING.md and dist/README.md with JSON-first guidance.
+- [ ] Add a short `PATTERN-LIBRARY-SUMMARY.md` entry describing the JSON rule library.
+
+### Definition of Done
+- [ ] All production rules live in `dist/patterns/*.json` (no hard-coded `-E` patterns in `check-performance.sh` except maybe for internal/debug checks).
+- [ ] Fixture and regression tests pass with **no change in counts or severities**.
+- [ ] CHANGELOG entry documents the migration and confirms behavior parity.
+- [ ] CONTRIBUTING.md updated to show JSON-based rule examples instead of inline `run_check` patterns.
+
+### Open Questions
+1. Do we want **one JSON per rule**, or **grouped JSON files** per category (e.g., `performance.json`, `security.json`, `dry.json`)?
+2. Should we store **remediation text** (examples, notes) exclusively in JSON, or keep some human-facing docs separate and link them?
+3. Do we eventually want a **generated rules catalog** (HTML/Markdown) from the JSON definitions?
+
