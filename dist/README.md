@@ -1,6 +1,7 @@
 # WP Code Check by Hypercart - Performance & Security Analyzer
 
-**Version:** 1.0.63
+> **Versioning:** The canonical version is defined in `dist/bin/check-performance.sh` (see `SCRIPT_VERSION` in the script header). This README reflects that version but should not be treated as the primary source of truth.
+
 © Copyright 2025 Hypercart (a DBA of Neochrome, Inc.)
 
 ---
@@ -22,7 +23,7 @@ You're building a WordPress plugin or theme. Everything works great in developme
 
 ### The Solution
 
-This toolkit **automatically detects 29 critical WordPress performance and security antipatterns** before they reach production.
+This toolkit **automatically detects 30+ critical WordPress performance and security antipatterns** before they reach production.
 
 **Think of it as:**
 - 🛡️ **ESLint/PHPStan for WordPress performance** - catches issues static analysis misses
@@ -380,7 +381,7 @@ wp-analyze ~/Sites/my-plugin --format json > results.json
 JSON structure:
 ```json
 {
-  "version": "1.0.46",
+  "version": "<SCRIPT_VERSION>",
   "timestamp": "2025-12-29T10:30:00Z",
   "paths_scanned": ["~/Sites/my-plugin"],
   "strict_mode": false,
@@ -400,16 +401,6 @@ JSON structure:
       "line": 42,
       "code": "'posts_per_page' => -1,",
       "message": "Unbounded posts_per_page can cause memory exhaustion"
-    }
-  ],
-  "checks": [
-    {
-      "id": "unbounded-posts-per-page",
-      "name": "Unbounded posts_per_page",
-      "status": "failed",
-      "severity": "error",
-      "impact": "CRITICAL",
-      "finding_count": 2
     }
   ]
 }
@@ -445,20 +436,20 @@ $data = file_get_contents( 'https://api.example.com/data' );
 
 | File | Purpose |
 |------|---------|
-| `bin/check-performance.sh` | Main analyzer - detects 28 antipatterns |
-| `tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
-| `tests/run-fixture-tests.sh` | Validation test suite (9 tests) |
+| `dist/bin/check-performance.sh` | Main analyzer - detects 30+ antipatterns |
+| `dist/tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
+| `dist/tests/run-fixture-tests.sh` | Validation test suite (number of tests may grow over time) |
 
 ### Integration Tools
 
 | File | Purpose |
 |------|---------|
-| `bin/post-to-slack.sh` | Post results to Slack webhook |
-| `bin/format-slack-message.sh` | Format JSON as Slack Block Kit |
-| `bin/test-slack-integration.sh` | Test Slack integration |
+| `dist/bin/post-to-slack.sh` | Post results to Slack webhook |
+| `dist/bin/format-slack-message.sh` | Format JSON as Slack Block Kit |
+| `dist/bin/test-slack-integration.sh` | Test Slack integration |
 | `setup-integration-security.sh` | Setup credential protection |
 
-See [PROJECT/DETAILS/INTEGRATIONS.md](../PROJECT/DETAILS/INTEGRATIONS.md) for integration guides.
+See the `PROJECT/` directory for detailed integration and architectural docs.
 
 ---
 

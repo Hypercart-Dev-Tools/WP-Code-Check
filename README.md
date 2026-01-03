@@ -4,7 +4,8 @@
 
 [![CI](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions/workflows/ci.yml/badge.svg)](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/actions)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.66-green.svg)](CHANGELOG.md)
+
+> **Versioning:** See `dist/README.md` for the current released version. The version in the dist README (and the main bash script header) is the canonical source of truth.
 
 ---
 
@@ -15,8 +16,8 @@ WordPress sites fail in production because of **performance antipatterns** that 
 - 🔥 **Unbounded queries** (`posts_per_page => -1`) that fetch 50,000 posts and crash the server
 - 🐌 **N+1 query patterns** that turn 1 request into 1,000 database calls
 - 💥 **Missing capability checks** that let subscribers delete your entire site
-- 🔓 **Insecure deserialization** that opens remote code execution vulnerabilities
-- 🪲 **Debug code in production** (`var_dump`, `console.log`) that exposes sensitive data
+- 🔐 **Insecure deserialization** that opens remote code execution vulnerabilities
+- 🧲 **Debug code in production** (`var_dump`, `console.log`) that exposes sensitive data
 
 **WP Code Check catches these issues in seconds** — before they reach production.
 
@@ -71,7 +72,7 @@ cd WP-Code-Check
 
 ## Features
 
-### 🔍 **33 Performance & Security Checks**
+### 🔍 **30+ Performance & Security Checks**
 
 - **Critical**: Unbounded queries, insecure deserialization, localStorage sensitive data, client-side serialization, **direct database queries without $wpdb->prepare()**
 - **High**: Direct superglobal manipulation, **unsanitized superglobal read**, **admin functions without capability checks**, **WooCommerce N+1 patterns**, AJAX without nonce validation, unbounded SQL, expensive WP functions in polling
@@ -154,7 +155,7 @@ wp-code-check:
 
 ## Documentation
 
-- **[User Guide](dist/README.md)** - Complete command reference and examples
+- **[User Guide](dist/README.md)** - Complete command reference and examples (includes canonical version number)
 - **[Template Guide](dist/HOWTO-TEMPLATES.md)** - Project template system
 - **[Changelog](CHANGELOG.md)** - Version history and development progress
 - **[AI Agent Guide](AGENTS.md)** - WordPress development guidelines for AI assistants
