@@ -349,7 +349,6 @@ detect_exact_function_clones() {
 **Method:** Replace identifiers with placeholders, hash
 **Threshold:** Minimum 10 lines, 70%+ similarity
 **Expected False Positive Rate:** 10-20%
-**Status**: Deferred as of Jan. 2, 2026 - wait for feedback
 
 ```bash
 detect_normalized_clones() {
