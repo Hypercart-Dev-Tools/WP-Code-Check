@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.80
+# Version: 1.0.81
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.80"
+SCRIPT_VERSION="1.0.81"
 
 # Defaults
 PATHS="."
@@ -1466,7 +1466,19 @@ process_aggregated_pattern() {
   # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
   echo "[DEBUG] Running grep with pattern: $pattern_search" >> "$debug_log"
   echo "[DEBUG] Paths: $PATHS" >> "$debug_log"
-  local matches=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+
+  # Extract file patterns from JSON (default to *.php)
+  local file_patterns=$(grep -o '"file_patterns"[[:space:]]*:[[:space:]]*\[[^]]*\]' "$pattern_file" | grep -oE '\*\.[a-z]+' | tr '\n' ' ')
+  [ -z "$file_patterns" ] && file_patterns="*.php"
+
+  # Build include args for grep
+  local include_args=""
+  for fp in $file_patterns; do
+    include_args="$include_args --include=$fp"
+  done
+  echo "[DEBUG] File patterns: $file_patterns" >> "$debug_log"
+
+  local matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
   local match_count=$(echo "$matches" | grep -c . || echo "0")
   echo "[DEBUG] Found $match_count raw matches" >> "$debug_log"
 
@@ -1569,71 +1581,111 @@ process_clone_detection() {
   local temp_functions=$(mktemp)
   local temp_hashes=$(mktemp)
 
-  # Find all PHP files
+  # Find all PHP and JS/TS files
   # SAFEGUARD: Handle both single files and directories
-  local php_files=""
+  local source_files=""
   if [ -f "$PATHS" ]; then
     # Single file provided
-    php_files="$PATHS"
+    source_files="$PATHS"
   else
-    # Directory provided - find all PHP files
-    php_files=$(find "$PATHS" -name "*.php" -type f 2>/dev/null | grep -v '/vendor/' | grep -v '/node_modules/' || true)
+    # Directory provided - find all PHP and JS/TS files
+    source_files=$(find "$PATHS" \( -name "*.php" -o -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) -type f 2>/dev/null | grep -v '/vendor/' | grep -v '/node_modules/' | grep -v '\.min\.js$' | grep -v 'bundle' || true)
   fi
 
-  if [ -z "$php_files" ]; then
-    echo "[DEBUG] No PHP files found in: $PATHS" >> "$debug_log"
+  if [ -z "$source_files" ]; then
+    echo "[DEBUG] No PHP/JS/TS files found in: $PATHS" >> "$debug_log"
     rm -f "$temp_functions" "$temp_hashes"
     return 0
   fi
 
-  echo "[DEBUG] PHP files to scan: $php_files" >> "$debug_log"
+  echo "[DEBUG] Source files to scan: $source_files" >> "$debug_log"
 
   # Extract all functions and compute hashes
-  echo "[DEBUG] Extracting functions from PHP files..." >> "$debug_log"
+  echo "[DEBUG] Extracting functions from PHP/JS/TS files..." >> "$debug_log"
 
-  safe_file_iterator "$php_files" | while IFS= read -r file; do
+  safe_file_iterator "$source_files" | while IFS= read -r file; do
     [ -z "$file" ] && continue
 
-    # Extract functions using grep with Perl regex
-    # Pattern matches: function name(...) { ... }
-    grep -n 'function[[:space:]]\+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' "$file" 2>/dev/null | while IFS=: read -r start_line func_header; do
-      # Extract function name
-      local func_name=$(echo "$func_header" | sed -E 's/.*function[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*).*/\1/')
+    # Determine file type and use appropriate pattern
+    local is_js=false
+    case "$file" in
+      *.js|*.jsx|*.ts|*.tsx) is_js=true ;;
+    esac
 
-      # Skip magic methods and test methods
-      if echo "$func_name" | grep -qE '^(__construct|__destruct|__get|__set|__call|__toString|test_|setUp|tearDown)'; then
-        continue
-      fi
+    # Extract functions using grep
+    # PHP: function name(...) { ... }
+    # JS: function name(...) { ... } and const/let/var name = (...) => { ... }
+    if [ "$is_js" = true ]; then
+      # JavaScript/TypeScript patterns - standard function declarations
+      grep -n -E 'function[[:space:]]+[a-zA-Z_$][a-zA-Z0-9_$]*[[:space:]]*\(' "$file" 2>/dev/null | while IFS=: read -r start_line func_header; do
+        # Extract function name
+        local func_name=$(echo "$func_header" | sed -E 's/.*function[[:space:]]+([a-zA-Z_$][a-zA-Z0-9_$]*).*/\1/')
 
-      # Extract function body (simplified: from function line to next function or end of file)
-      # This is a heuristic - we'll grab the next 100 lines and look for the closing brace
-      local func_body=$(tail -n +$start_line "$file" | head -n 100)
+        # Skip test functions
+        if echo "$func_name" | grep -qE '^(test_|describe|it|beforeEach|afterEach)'; then
+          continue
+        fi
 
-      # Count lines in function body (rough estimate)
-      local line_count=$(echo "$func_body" | wc -l | tr -d ' ')
+        # Extract function body
+        local func_body=$(tail -n +$start_line "$file" | head -n 100)
+        local line_count=$(echo "$func_body" | wc -l | tr -d ' ')
 
-      # Skip if too short or too long
-      if [ "$line_count" -lt "$min_lines" ] || [ "$line_count" -gt "$max_lines" ]; then
-        continue
-      fi
+        # Skip if too short or too long
+        if [ "$line_count" -lt "$min_lines" ] || [ "$line_count" -gt "$max_lines" ]; then
+          continue
+        fi
 
-      # Normalize function body:
-      # 1. Remove inline comments (// ...)
-      # 2. Remove block comments (/* ... */)
-      # 3. Normalize whitespace (multiple spaces -> single space)
-      # 4. Remove empty lines
-      local normalized=$(echo "$func_body" | \
-        sed 's|//.*$||g' | \
-        sed 's|/\*.*\*/||g' | \
-        sed 's/[[:space:]]\+/ /g' | \
-        sed '/^[[:space:]]*$/d')
+        # Normalize and hash
+        local normalized=$(echo "$func_body" | \
+          sed 's|//.*$||g' | \
+          sed 's|/\*.*\*/||g' | \
+          sed 's/[[:space:]]\+/ /g' | \
+          sed '/^[[:space:]]*$/d')
 
-      # Compute hash
-      local hash=$(echo "$normalized" | md5sum | cut -d' ' -f1)
+        local hash=$(echo "$normalized" | md5sum | cut -d' ' -f1)
+        echo "$hash|$file|$func_name|$start_line|$line_count" >> "$temp_functions"
+      done
+    else
+      # PHP pattern
+      grep -n 'function[[:space:]]\+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' "$file" 2>/dev/null | while IFS=: read -r start_line func_header; do
+        # Extract function name
+        local func_name=$(echo "$func_header" | sed -E 's/.*function[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*).*/\1/')
 
-      # Store: hash|file|function_name|line_number|line_count
-      echo "$hash|$file|$func_name|$start_line|$line_count" >> "$temp_functions"
-    done
+        # Skip magic methods and test methods
+        if echo "$func_name" | grep -qE '^(__construct|__destruct|__get|__set|__call|__toString|test_|setUp|tearDown)'; then
+          continue
+        fi
+
+        # Extract function body (simplified: from function line to next function or end of file)
+        # This is a heuristic - we'll grab the next 100 lines and look for the closing brace
+        local func_body=$(tail -n +$start_line "$file" | head -n 100)
+
+        # Count lines in function body (rough estimate)
+        local line_count=$(echo "$func_body" | wc -l | tr -d ' ')
+
+        # Skip if too short or too long
+        if [ "$line_count" -lt "$min_lines" ] || [ "$line_count" -gt "$max_lines" ]; then
+          continue
+        fi
+
+        # Normalize function body:
+        # 1. Remove inline comments (// ...)
+        # 2. Remove block comments (/* ... */)
+        # 3. Normalize whitespace (multiple spaces -> single space)
+        # 4. Remove empty lines
+        local normalized=$(echo "$func_body" | \
+          sed 's|//.*$||g' | \
+          sed 's|/\*.*\*/||g' | \
+          sed 's/[[:space:]]\+/ /g' | \
+          sed '/^[[:space:]]*$/d')
+
+        # Compute hash
+        local hash=$(echo "$normalized" | md5sum | cut -d' ' -f1)
+
+        # Store: hash|file|function_name|line_number|line_count
+        echo "$hash|$file|$func_name|$start_line|$line_count" >> "$temp_functions"
+      done
+    fi
   done
 
   # Check if we found any functions
@@ -2005,6 +2057,48 @@ unset OVERRIDE_GREP_INCLUDE
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
 run_check "WARNING" "$(get_severity "headless-nextjs-missing-revalidate" "MEDIUM")" "Next.js getStaticProps may need revalidate for WordPress data" "headless-nextjs-missing-revalidate" \
   "-E export[[:space:]]+(async[[:space:]]+)?function[[:space:]]+getStaticProps"
+unset OVERRIDE_GREP_INCLUDE
+text_echo ""
+
+# ============================================================================
+# NODE.JS SECURITY CHECKS
+# ============================================================================
+text_echo "${RED}━━━ NODE.JS SECURITY CHECKS ━━━${NC}"
+text_echo ""
+
+# NJS-001: Dangerous eval() and code execution
+# Detects eval(), Function constructor, and string-based setTimeout/setInterval
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "$(get_severity "njs-001-eval-injection" "CRITICAL")" "Dangerous eval() or code execution" "njs-001-eval-injection" \
+  "-E eval[[:space:]]*\\(" \
+  "-E new[[:space:]]+Function[[:space:]]*\\(" \
+  "-E Function[[:space:]]*\\([[:space:]]*['\"]"
+unset OVERRIDE_GREP_INCLUDE
+
+# NJS-002: Command injection via child_process
+# Detects exec/execSync with string arguments (command injection risk)
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "$(get_severity "njs-002-command-injection" "CRITICAL")" "Potential command injection (child_process)" "njs-002-command-injection" \
+  "-E exec[[:space:]]*\\([[:space:]]*[a-zA-Z_\$]" \
+  "-E execSync[[:space:]]*\\([[:space:]]*[a-zA-Z_\$]" \
+  "-E spawn[[:space:]]*\\([^)]*shell:[[:space:]]*true"
+unset OVERRIDE_GREP_INCLUDE
+
+# NJS-003: Path traversal in file operations
+# Detects fs operations with direct variable concatenation (path traversal risk)
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "WARNING" "$(get_severity "njs-003-path-traversal" "HIGH")" "Potential path traversal in fs operations" "njs-003-path-traversal" \
+  "-E fs\\.(readFile|readFileSync|writeFile|writeFileSync|unlink|unlinkSync)[[:space:]]*\\([^)]*\\+" \
+  "-E fs\\.(readFile|readFileSync|writeFile|writeFileSync)[[:space:]]*\\([[:space:]]*[a-zA-Z_\$][a-zA-Z0-9_\$]*[[:space:]]*[,)]"
+unset OVERRIDE_GREP_INCLUDE
+
+# NJS-004: Unhandled promise rejections
+# Detects promises without .catch() or async without try/catch
+# Pattern detects: .then(...)); at end of promise chain (missing .catch)
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "WARNING" "$(get_severity "njs-004-unhandled-promise" "HIGH")" "Promise without error handling (.catch or try/catch)" "njs-004-unhandled-promise" \
+  "-E \\.then\\([^)]*\\)\\)[[:space:]]*;" \
+  "-E Promise\\.all\\([^)]+\\)\\.then"
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 

@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.81] - 2026-01-05
+
+### Added
+- **Node.js Security Patterns (Phase 2)** - New security checks for Node.js/JavaScript applications
+  - **NJS-001: Dangerous eval()** [CRITICAL] - Detects `eval()`, `Function()`, `vm.runInContext()` code execution
+  - **NJS-002: Command Injection** [CRITICAL] - Detects `child_process.exec()` with user input
+  - **NJS-003: Path Traversal** [HIGH] - Detects `fs.readFile()` with unsanitized paths
+  - **NJS-004: Unhandled Promise** [HIGH] - Detects `.then()` chains without `.catch()`
+  - **New Pattern Files:**
+    - `dist/patterns/nodejs/eval-code-execution.json`
+    - `dist/patterns/nodejs/command-injection.json`
+    - `dist/patterns/nodejs/path-traversal.json`
+    - `dist/patterns/nodejs/unhandled-promise.json`
+  - **New Test Fixtures:**
+    - `dist/tests/fixtures/js/security-antipatterns.js` - 12 violations across 4 categories
+    - `dist/tests/fixtures/js/promise-antipatterns.js` - Promise handling test cases
+
+- **JavaScript Magic String Detection** - DRY violation detection for JavaScript
+  - **duplicate-storage-keys** [LOW] - Detects localStorage/sessionStorage keys across files
+  - **New Pattern File:** `dist/patterns/js/duplicate-storage-keys.json`
+
+- **Clone Detection for JavaScript/TypeScript** - Extended function clone detector
+  - Updated `duplicate-functions.json` to v1.1.0 with JS/TS support
+  - Detects duplicate `function` declarations in `.js`, `.jsx`, `.ts`, `.tsx` files
+  - Excludes minified files (`*.min.js`) and bundles
+
+### Changed
+- **Scanner Output** - Added "NODE.JS SECURITY CHECKS" section
+  - New section appears after headless WordPress checks
+  - Scans `.js`, `.jsx`, `.ts`, `.tsx` files for Node.js security patterns
+- **Aggregated Pattern Processor** - Now supports file_patterns from JSON
+  - Patterns can specify which file types to scan (not just `*.php`)
+  - Enables JavaScript-specific magic string detection
+
 ## [1.0.80] - 2026-01-05
 
 ### Added

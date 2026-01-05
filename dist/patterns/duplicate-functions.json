@@ -1,19 +1,26 @@
 {
   "id": "duplicate-functions",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "added_in_scanner_version": "1.0.78",
+  "updated_in_scanner_version": "1.0.81",
   "enabled": true,
   "detection_type": "clone_detection",
   "category": "duplication",
   "severity": "MEDIUM",
   "title": "Duplicate function definitions across files",
-  "description": "Detects exact function clones (Type 1) using hash-based comparison of normalized function bodies. Functions with identical logic (after removing comments and normalizing whitespace) appearing in multiple files indicate copy-paste violations.",
+  "description": "Detects exact function clones (Type 1) using hash-based comparison of normalized function bodies. Functions with identical logic (after removing comments and normalizing whitespace) appearing in multiple files indicate copy-paste violations. Supports PHP and JavaScript/TypeScript.",
   "rationale": "Copy-pasted functions across files violate DRY principle, create maintenance burden (bugs must be fixed in multiple places), and increase codebase complexity. Extracting duplicated functions to a shared helper file or class creates a single source of truth.",
 
   "detection": {
     "type": "function_clone",
     "method": "hash_normalized",
-    "file_patterns": ["*.php"],
+    "file_patterns": ["*.php", "*.js", "*.jsx", "*.ts", "*.tsx"],
+    "function_patterns": {
+      "php": "function\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\([^)]*\\)\\s*\\{",
+      "javascript": "function\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\([^)]*\\)\\s*\\{",
+      "arrow_function": "(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>\\s*\\{",
+      "method": "([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\([^)]*\\)\\s*\\{"
+    },
     "function_pattern": "function\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\([^)]*\\)\\s*\\{",
     "normalization": {
       "remove_comments": true,

@@ -1,9 +1,9 @@
 # HOWTO: JavaScript & TypeScript Pattern Detection
 
-> **Version:** 1.0.80
+> **Version:** 1.0.81
 > **Last Updated:** 2026-01-05
 
-This guide covers JavaScript and TypeScript pattern detection in WP Code Check, with a focus on headless WordPress architectures (Next.js, Nuxt, Gatsby, etc.).
+This guide covers JavaScript and TypeScript pattern detection in WP Code Check, including headless WordPress architectures (Next.js, Nuxt, Gatsby) and Node.js security patterns.
 
 ---
 
@@ -11,10 +11,11 @@ This guide covers JavaScript and TypeScript pattern detection in WP Code Check, 
 
 1. [Quick Start](#quick-start)
 2. [Headless WordPress Patterns](#headless-wordpress-patterns)
-3. [Pattern Reference](#pattern-reference)
-4. [Framework-Specific Guidance](#framework-specific-guidance)
-5. [Baseline Configuration](#baseline-configuration)
-6. [Troubleshooting](#troubleshooting)
+3. [Node.js Security Patterns](#nodejs-security-patterns)
+4. [Pattern Reference](#pattern-reference)
+5. [Framework-Specific Guidance](#framework-specific-guidance)
+6. [Baseline Configuration](#baseline-configuration)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -136,6 +137,67 @@ export async function getStaticProps() {
 
 ---
 
+## Node.js Security Patterns
+
+These patterns detect security vulnerabilities in Node.js/JavaScript applications.
+
+### NJS-001: Dangerous eval() [CRITICAL]
+
+**What it detects:** Code execution via `eval()`, `Function()`, or `vm.runInContext()`.
+
+```javascript
+// ❌ BAD: eval with user input
+eval(userInput);
+
+// ❌ BAD: Function constructor
+new Function('return ' + userCode)();
+
+// ✅ GOOD: Use JSON.parse for data
+const data = JSON.parse(jsonString);
+```
+
+### NJS-002: Command Injection [CRITICAL]
+
+**What it detects:** Shell command execution with unsanitized input.
+
+```javascript
+// ❌ BAD: User input in exec
+exec(`ls ${userPath}`, callback);
+
+// ✅ GOOD: Use execFile with arguments array
+execFile('ls', [userPath], callback);
+```
+
+### NJS-003: Path Traversal [HIGH]
+
+**What it detects:** File system operations with unsanitized paths.
+
+```javascript
+// ❌ BAD: User input in file path
+fs.readFile(req.query.file, callback);
+
+// ✅ GOOD: Validate and sanitize path
+const safePath = path.join(baseDir, path.basename(userInput));
+fs.readFile(safePath, callback);
+```
+
+### NJS-004: Unhandled Promise [HIGH]
+
+**What it detects:** Promise chains without `.catch()` error handling.
+
+```javascript
+// ❌ BAD: No error handling
+fetch('/api').then(r => r.json()).then(process);
+
+// ✅ GOOD: Add .catch()
+fetch('/api')
+  .then(r => r.json())
+  .then(process)
+  .catch(handleError);
+```
+
+---
+
 ## Pattern Reference
 
 | Pattern ID | Severity | Description |
@@ -144,6 +206,10 @@ export async function getStaticProps() {
 | `headless-hardcoded-wordpress-url` | MEDIUM | Hardcoded WordPress API URLs |
 | `headless-graphql-no-error-handling` | HIGH | useQuery/useMutation without error handling |
 | `headless-nextjs-missing-revalidate` | MEDIUM | getStaticProps without ISR |
+| `njs-001-eval-code-execution` | CRITICAL | Dangerous eval() or code execution |
+| `njs-002-command-injection` | CRITICAL | Command injection via child_process |
+| `njs-003-path-traversal` | HIGH | Path traversal in fs operations |
+| `njs-004-unhandled-promise` | HIGH | Promise without error handling |
 
 ---
 
@@ -281,6 +347,16 @@ For projects with 50k+ lines of JavaScript:
 ---
 
 ## Changelog
+
+### v1.0.81 (2026-01-05)
+- Added Node.js security patterns (NJS-001 through NJS-004)
+  - Dangerous eval() and code execution detection
+  - Command injection via child_process
+  - Path traversal in fs operations
+  - Unhandled promise rejections
+- Added JavaScript magic string detection (duplicate-storage-keys)
+- Extended clone detection to support JavaScript/TypeScript files
+- Created test fixtures in `dist/tests/fixtures/js/`
 
 ### v1.0.80 (2026-01-05)
 - Initial release of headless WordPress patterns
