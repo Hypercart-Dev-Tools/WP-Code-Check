@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.80] - 2026-01-05
+
+### Fixed
+- **CI Fixture Test Failure** - Fixed `file-get-contents-url.php` expected error count
+  - Changed expected errors from 4 to 1 in `run-fixture-tests.sh`
+  - **Root Cause:** Scanner groups findings by check type (1 error with 4 findings, not 4 separate errors)
+  - **Impact:** GitHub Actions CI now passes fixture validation tests
+  - Test was expecting 4 errors but scanner correctly reports 1 error with 4 findings (lines 13, 16, 20, 24)
+
 ## [1.0.79] - 2026-01-02
 
 ### Fixed
