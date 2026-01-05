@@ -1,13 +1,24 @@
 # PROJECT: Node.js / JavaScript Pattern Support
 
 **Created:** 2026-01-05  
-**Status:** Not Started  
+**Status:** Starting      
 **Priority:** Medium  
 **Target Version:** v1.1.0+
 
 ---
 
 ## 📋 Table of Contents (Checklist)
+
+### 🔄 CONTINUOUS: Documentation & Testing (Runs Parallel to All Phases)
+> **Rationale:** Docs/testing are enablers, not afterthoughts. Each phase ships with fixtures, docs, and CI examples.
+
+- [ ] Create `dist/tests/fixtures/js/` directory structure
+- [ ] Update dist/README.md incrementally as patterns are added
+- [ ] Create HOWTO-JAVASCRIPT-PATTERNS.md guide (start Phase 1, expand each phase)
+- [ ] Add CI/CD examples for JavaScript-heavy WordPress projects
+- [ ] Benchmark performance on large JS codebases (50k+ LOC) — after Phase 2
+
+---
 
 ### Phase 1: Headless WordPress Patterns ⭐ PRIORITY
 - [ ] Add REST API client patterns (fetch/axios error handling, missing auth headers)
@@ -16,12 +27,22 @@
 - [ ] Add WPGraphQL/Apollo client patterns (missing error boundaries, cache issues)
 - [ ] Add CORS and authentication patterns (credentials mode, token handling)
 - [ ] Create headless test fixtures in `dist/tests/fixtures/headless/`
+- [ ] Document headless patterns in HOWTO guide
 
-### Phase 2: Expand Existing JS/TS Scanning
+### Phase 2: JS/TS Scanning + DRY/Clone Detection (Concurrent Tracks)
+> **Rationale:** DRY/clone detection early = reuse patterns across phases, catch duplicates in fixtures, reduce noise.
+
+**Track A: Expand Existing JS/TS Scanning**
 - [ ] Audit current JS/TS patterns (HCC-001, HCC-002, HCC-008, SPO-001)
 - [ ] Add Node.js-specific security patterns (eval, child_process, fs operations)
 - [ ] Add common JavaScript anti-patterns (callback hell, promise rejection handling)
 - [ ] Create JS/TS test fixtures in `dist/tests/fixtures/js/`
+
+**Track B: DRY & Clone Detection for JS/TS**
+- [ ] Extend duplicate-functions.json to support JS/TS syntax
+- [ ] Add JavaScript-specific magic string detection
+- [ ] Add cross-language duplicate detection (PHP ↔ JS)
+- [ ] Use clone detection to validate no duplicate fixtures across phases
 
 ### Phase 3: WordPress JavaScript Patterns (Classic)
 - [ ] Add wp-scripts / @wordpress/scripts detection patterns
@@ -34,17 +55,6 @@
 - [ ] Add npm/yarn audit integration (optional external tool)
 - [ ] Add common Node.js performance patterns (sync fs, blocking event loop)
 - [ ] Add Express/Koa security patterns (if applicable to WP tooling)
-
-### Phase 5: DRY & Clone Detection for JS/TS
-- [ ] Extend duplicate-functions.json to support JS/TS syntax
-- [ ] Add JavaScript-specific magic string detection
-- [ ] Add cross-language duplicate detection (PHP ↔ JS)
-
-### Phase 6: Documentation & Testing
-- [ ] Update dist/README.md with JS/TS scanning capabilities
-- [ ] Create HOWTO-JAVASCRIPT-PATTERNS.md guide
-- [ ] Add CI/CD examples for JavaScript-heavy WordPress projects
-- [ ] Benchmark performance on large JS codebases (50k+ LOC)
 
 ---
 
