@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.81] - 2026-01-05
+
+### Fixed
+- **Template Path Resolution** - Fixed `run` script looking for templates in wrong directory
+  - Changed `REPO_ROOT` from `../..` to `..` in `dist/bin/run` (line 22)
+  - Now correctly points to `dist/TEMPLATES/` instead of `/TEMPLATES/`
+  - **Impact:** Template-based scans now work correctly
+
+- **Template Variable Quoting** - Fixed bash sourcing error with paths containing spaces
+  - Changed single quotes to double quotes in template files
+  - Fixed `universal-child-theme-oct-2024.txt` PROJECT_PATH and NAME variables
+  - **Impact:** Templates with spaces in paths/names now work correctly
+
+- **DEBUG_TRACE JSON Corruption** - Fixed debug output polluting JSON logs
+  - Created `debug_echo()` helper that only outputs in text mode
+  - Prevents stderr from merging into JSON output via `exec 2>&1`
+  - **Impact:** JSON output is now clean when DEBUG_TRACE=1 is enabled
+
+- **Unconditional Debug Logging** - Removed privacy-leaking debug logs
+  - Replaced all `/tmp/wp-code-check-debug.log` writes with `debug_echo()`
+  - Removed unconditional logging in aggregated patterns and clone detection
+  - **Impact:** No more path leaks to /tmp, no unbounded log growth
+
+### Changed
+- **Reduced Output Verbosity** - Pattern regex only shown in verbose mode
+  - `text_echo "→ Pattern: $pattern_search"` now requires `--verbose` flag
+  - **Impact:** Cleaner terminal output, easier to read scan results
+
+- **Directory Rename** - Renamed `dist/bin/templates/` to `dist/bin/report-templates/`
+  - Avoids confusion with `dist/TEMPLATES/` (project configuration templates)
+  - Updated reference in `check-performance.sh` (line 735)
+  - **Impact:** Clearer directory structure, less ambiguity
+
 ## [1.0.80] - 2026-01-05
 
 ### Fixed

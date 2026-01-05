@@ -37,25 +37,19 @@ LIB_DIR="$SCRIPT_DIR/lib"
 # Changed from ../.. to .. on 2025-12-31 to fix template loading
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# DEBUG: Enable tracing
+# DEBUG: Enable tracing (only in text mode to avoid corrupting JSON output)
 DEBUG_TRACE="${DEBUG_TRACE:-0}"
-if [ "$DEBUG_TRACE" = "1" ]; then
-  echo "[DEBUG] SCRIPT_DIR=$SCRIPT_DIR" >&2
-  echo "[DEBUG] LIB_DIR=$LIB_DIR" >&2
-  echo "[DEBUG] REPO_ROOT=$REPO_ROOT" >&2
-fi
+# Note: Debug output is deferred until after OUTPUT_FORMAT is determined
+# to prevent stderr pollution of JSON output (see Issue #1 from 2026-01-05)
 
 # shellcheck source=dist/bin/lib/colors.sh
 source "$LIB_DIR/colors.sh"
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded colors.sh" >&2; fi
 
 # shellcheck source=dist/bin/lib/common-helpers.sh
 source "$LIB_DIR/common-helpers.sh"
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded common-helpers.sh" >&2; fi
 
 # shellcheck source=dist/lib/pattern-loader.sh
 source "$REPO_ROOT/lib/pattern-loader.sh"
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded pattern-loader.sh" >&2; fi
 
 # ============================================================
 # VERSION - SINGLE SOURCE OF TRUTH
@@ -63,7 +57,7 @@ if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded pattern-loader.sh" >&2; f
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.80"
+SCRIPT_VERSION="1.0.81"
 
 # Defaults
 PATHS="."
@@ -204,11 +198,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [ "$DEBUG_TRACE" = "1" ]; then
-  echo "[DEBUG] Arguments parsed. PATHS=$PATHS" >&2
-  echo "[DEBUG] OUTPUT_FORMAT=$OUTPUT_FORMAT" >&2
-  echo "[DEBUG] ENABLE_LOGGING=$ENABLE_LOGGING" >&2
-fi
+# Safe debug output helper - only outputs in text mode to avoid JSON corruption
+# Usage: debug_echo "message"
+debug_echo() {
+  if [ "$DEBUG_TRACE" = "1" ] && [ "$OUTPUT_FORMAT" = "text" ]; then
+    echo "[DEBUG] $*" >&2
+  fi
+}
+
+debug_echo "Arguments parsed. PATHS=$PATHS"
+debug_echo "OUTPUT_FORMAT=$OUTPUT_FORMAT"
+debug_echo "ENABLE_LOGGING=$ENABLE_LOGGING"
 
 # If scanning a tests directory, remove 'tests' from exclusions
 # Use portable method (no \b word boundary which is GNU-specific)
@@ -732,7 +732,7 @@ generate_html_report() {
   local json_data="$1"
   local output_file="$2"
   local log_file_path="${3:-}"
-  local template_file="$SCRIPT_DIR/templates/report-template.html"
+  local template_file="$SCRIPT_DIR/report-templates/report-template.html"
 
   # Check if template exists
   if [ ! -f "$template_file" ]; then
@@ -1433,32 +1433,31 @@ generate_baseline_file() {
 # Usage: process_aggregated_pattern "pattern_file"
 process_aggregated_pattern() {
   local pattern_file="$1"
-  local debug_log="/tmp/wp-code-check-debug.log"
 
   # Load pattern metadata
   if ! load_pattern "$pattern_file"; then
-    echo "[DEBUG] Failed to load pattern: $pattern_file" >> "$debug_log"
+    debug_echo "Failed to load pattern: $pattern_file"
     return 1
   fi
 
   # Debug: Log loaded pattern info
-  echo "[DEBUG] ===========================================" >> "$debug_log"
-  echo "[DEBUG] Processing pattern: $pattern_file" >> "$debug_log"
-  echo "[DEBUG] Pattern ID: $pattern_id" >> "$debug_log"
-  echo "[DEBUG] Pattern Title: $pattern_title" >> "$debug_log"
-  echo "[DEBUG] Pattern Enabled: $pattern_enabled" >> "$debug_log"
-  echo "[DEBUG] Pattern Search (length=${#pattern_search}): [$pattern_search]" >> "$debug_log"
-  echo "[DEBUG] ===========================================" >> "$debug_log"
+  debug_echo "==========================================="
+  debug_echo "Processing pattern: $pattern_file"
+  debug_echo "Pattern ID: $pattern_id"
+  debug_echo "Pattern Title: $pattern_title"
+  debug_echo "Pattern Enabled: $pattern_enabled"
+  debug_echo "Pattern Search (length=${#pattern_search}): [$pattern_search]"
+  debug_echo "==========================================="
 
   # Skip if pattern is disabled
   if [ "$pattern_enabled" != "true" ]; then
-    echo "[DEBUG] Pattern disabled, skipping" >> "$debug_log"
+    debug_echo "Pattern disabled, skipping"
     return 0
   fi
 
   # Check if pattern_search is empty
   if [ -z "$pattern_search" ]; then
-    echo "[DEBUG] ERROR: pattern_search is EMPTY!" >> "$debug_log"
+    debug_echo "ERROR: pattern_search is EMPTY!"
     text_echo "  ${RED}→ Pattern: ${NC}"
     text_echo "  ${RED}→ Found 0${NC}"
     text_echo "${RED}0 raw matches${NC}"
@@ -1475,7 +1474,7 @@ process_aggregated_pattern() {
   [ -z "$min_matches" ] && min_matches=6
   [ -z "$capture_group" ] && capture_group=2
 
-  echo "[DEBUG] Aggregation settings: min_files=$min_files, min_matches=$min_matches, capture_group=$capture_group" >> "$debug_log"
+  debug_echo "Aggregation settings: min_files=$min_files, min_matches=$min_matches, capture_group=$capture_group"
 
   # Create temp files for aggregation
   local temp_matches=$(mktemp)
@@ -1483,11 +1482,11 @@ process_aggregated_pattern() {
   # Run grep to find all matches using the pattern's search pattern
   # Note: pattern_search is set by load_pattern
   # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
-  echo "[DEBUG] Running grep with pattern: $pattern_search" >> "$debug_log"
-  echo "[DEBUG] Paths: $PATHS" >> "$debug_log"
+  debug_echo "Running grep with pattern: $pattern_search"
+  debug_echo "Paths: $PATHS"
   local matches=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null || true)
   local match_count=$(echo "$matches" | grep -c . || echo "0")
-  echo "[DEBUG] Found $match_count raw matches" >> "$debug_log"
+  debug_echo "Found $match_count raw matches"
 
   # Extract captured groups and aggregate
   if [ -n "$matches" ]; then
@@ -1556,17 +1555,16 @@ process_aggregated_pattern() {
 # Usage: process_clone_detection "pattern_file"
 process_clone_detection() {
   local pattern_file="$1"
-  local debug_log="/tmp/wp-code-check-debug.log"
 
   # Load pattern metadata
   if ! load_pattern "$pattern_file"; then
-    echo "[DEBUG] Failed to load pattern: $pattern_file" >> "$debug_log"
+    debug_echo "Failed to load pattern: $pattern_file"
     return 1
   fi
 
   # Skip if pattern is disabled
   if [ "$pattern_enabled" != "true" ]; then
-    echo "[DEBUG] Pattern disabled, skipping" >> "$debug_log"
+    debug_echo "Pattern disabled, skipping"
     return 0
   fi
 
@@ -1582,7 +1580,7 @@ process_clone_detection() {
   [ -z "$min_lines" ] && min_lines=5
   [ -z "$max_lines" ] && max_lines=500
 
-  echo "[DEBUG] Clone detection settings: min_files=$min_files, min_matches=$min_matches, min_lines=$min_lines, max_lines=$max_lines" >> "$debug_log"
+  debug_echo "Clone detection settings: min_files=$min_files, min_matches=$min_matches, min_lines=$min_lines, max_lines=$max_lines"
 
   # Create temp files
   local temp_functions=$(mktemp)
@@ -1600,15 +1598,15 @@ process_clone_detection() {
   fi
 
   if [ -z "$php_files" ]; then
-    echo "[DEBUG] No PHP files found in: $PATHS" >> "$debug_log"
+    debug_echo "No PHP files found in: $PATHS"
     rm -f "$temp_functions" "$temp_hashes"
     return 0
   fi
 
-  echo "[DEBUG] PHP files to scan: $php_files" >> "$debug_log"
+  debug_echo "PHP files to scan: $(echo "$php_files" | wc -l | tr -d ' ') files"
 
   # Extract all functions and compute hashes
-  echo "[DEBUG] Extracting functions from PHP files..." >> "$debug_log"
+  debug_echo "Extracting functions from PHP files..."
 
   safe_file_iterator "$php_files" | while IFS= read -r file; do
     [ -z "$file" ] && continue
@@ -1657,13 +1655,13 @@ process_clone_detection() {
 
   # Check if we found any functions
   if [ ! -s "$temp_functions" ]; then
-    echo "[DEBUG] No functions found" >> "$debug_log"
+    debug_echo "No functions found"
     rm -f "$temp_functions" "$temp_hashes"
     return 0
   fi
 
   # Aggregate by hash
-  echo "[DEBUG] Aggregating by hash..." >> "$debug_log"
+  debug_echo "Aggregating by hash..."
   local unique_hashes=$(cut -d'|' -f1 "$temp_functions" | sort -u)
 
   while IFS= read -r hash; do
@@ -1707,23 +1705,21 @@ process_clone_detection() {
 # Main Script Output
 # ============================================================================
 
-if [ "$DEBUG_TRACE" = "1" ]; then
-  echo "[DEBUG] Starting main script execution" >&2
-  echo "[DEBUG] PATHS=$PATHS" >&2
-  echo "[DEBUG] OUTPUT_FORMAT=$OUTPUT_FORMAT" >&2
-fi
+debug_echo "Starting main script execution"
+debug_echo "PATHS=$PATHS"
+debug_echo "OUTPUT_FORMAT=$OUTPUT_FORMAT"
 
 # Load existing baseline (if any) before running checks
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loading baseline..." >&2; fi
+debug_echo "Loading baseline..."
 load_baseline
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Baseline loaded" >&2; fi
+debug_echo "Baseline loaded"
 
 # Detect project info for display
 # Preserve full path even if it contains spaces
 FIRST_PATH="$PATHS"
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Detecting project info..." >&2; fi
+debug_echo "Detecting project info..."
 PROJECT_INFO_JSON=$(detect_project_info "$FIRST_PATH")
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Project info detected" >&2; fi
+debug_echo "Project info detected"
 PROJECT_TYPE=$(echo "$PROJECT_INFO_JSON" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
 PROJECT_NAME=$(echo "$PROJECT_INFO_JSON" | grep -o '"name": "[^"]*"' | cut -d'"' -f4)
 PROJECT_VERSION=$(echo "$PROJECT_INFO_JSON" | grep -o '"version": "[^"]*"' | cut -d'"' -f4)
@@ -1745,9 +1741,9 @@ fi
 
 # Run fixture validation (proof of detection)
 # This runs quietly in the background and sets global variables
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Running fixture validation..." >&2; fi
+debug_echo "Running fixture validation..."
 run_fixture_validation
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Fixture validation complete" >&2; fi
+debug_echo "Fixture validation complete"
 
 text_echo "Scanning paths: $PATHS"
 text_echo "Strict mode: $STRICT"
@@ -1756,7 +1752,7 @@ if [ "$ENABLE_LOGGING" = true ] && [ "$OUTPUT_FORMAT" = "text" ]; then
 fi
 text_echo ""
 
-if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Starting checks..." >&2; fi
+debug_echo "Starting checks..."
 
 ERRORS=0
 WARNINGS=0
@@ -3660,8 +3656,7 @@ if [ -z "$AGGREGATED_PATTERNS" ]; then
   text_echo ""
 else
   # Debug: Log aggregated patterns found
-  echo "[DEBUG] Aggregated patterns found:" >> /tmp/wp-code-check-debug.log
-  echo "$AGGREGATED_PATTERNS" >> /tmp/wp-code-check-debug.log
+  debug_echo "Aggregated patterns found: $(echo "$AGGREGATED_PATTERNS" | wc -l | tr -d ' ') patterns"
 
   # Process each aggregated pattern
   while IFS= read -r pattern_file; do
@@ -3671,8 +3666,10 @@ else
     if load_pattern "$pattern_file"; then
       text_echo "${BLUE}▸ $pattern_title${NC}"
 
-      # Debug: Show pattern info in output
-      text_echo "  ${BLUE}→ Pattern: $pattern_search${NC}"
+      # Only show pattern regex in verbose mode or debug mode
+      if [ "$VERBOSE" = "true" ]; then
+        text_echo "  ${BLUE}→ Pattern: $pattern_search${NC}"
+      fi
 
       # Store current violation count
       violations_before=$DRY_VIOLATIONS_COUNT
@@ -3712,8 +3709,7 @@ if [ -n "$CLONE_PATTERNS" ]; then
   text_echo ""
 
   # Debug: Log clone patterns found
-  echo "[DEBUG] Clone detection patterns found:" >> /tmp/wp-code-check-debug.log
-  echo "$CLONE_PATTERNS" >> /tmp/wp-code-check-debug.log
+  debug_echo "Clone detection patterns found: $(echo "$CLONE_PATTERNS" | wc -l | tr -d ' ') patterns"
 
   # Process each clone detection pattern
   while IFS= read -r pattern_file; do
@@ -3748,9 +3744,7 @@ fi
 	# Generate baseline file if requested
 	generate_baseline_file
 
-if [ "$DEBUG_TRACE" = "1" ]; then
-  echo "[DEBUG] All checks complete. ERRORS=$ERRORS, WARNINGS=$WARNINGS" >&2
-fi
+debug_echo "All checks complete. ERRORS=$ERRORS, WARNINGS=$WARNINGS"
 
 	# Determine exit code
 EXIT_CODE=0
@@ -3760,17 +3754,15 @@ elif [ "$STRICT" = "true" ] && [ "$WARNINGS" -gt 0 ]; then
   EXIT_CODE=1
 fi
 
-if [ "$DEBUG_TRACE" = "1" ]; then
-  echo "[DEBUG] Generating output (format=$OUTPUT_FORMAT)..." >&2
-fi
+debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
 
 # Output based on format
 if [ "$OUTPUT_FORMAT" = "json" ]; then
-  if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Generating JSON output..." >&2; fi
+  debug_echo "Generating JSON output..."
   JSON_OUTPUT=$(output_json "$EXIT_CODE")
-  if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] JSON output generated, echoing..." >&2; fi
+  debug_echo "JSON output generated, echoing..."
   echo "$JSON_OUTPUT"
-  if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] JSON output echoed" >&2; fi
+  debug_echo "JSON output echoed"
 
   # Generate HTML report if running locally (not in GitHub Actions)
   if [ -z "$GITHUB_ACTIONS" ]; then
