@@ -1,7 +1,8 @@
 # Project Stability Review (Main Script)
 
 **Created:** 2026-01-05
-**Status:** Not Started
+**Updated:** 2026-01-05
+**Status:** In Progress
 **Priority:** High
 
 ## Problem/Request
@@ -14,8 +15,56 @@ Review stability risks in the main scanner script (`dist/bin/check-performance.s
 - Users run scans against very large WordPress codebases (plugins/themes + dependencies), often in paths with spaces.
 - The script performs many recursive grep/find passes plus post-processing loops; a few “bad” patterns or edge-case inputs can lead to slow runs, hangs, or runaway logs.
 - Recent debug additions can make long runs more visible but also risk adding noise/overhead.
+- **Current Status:** Script is functionally correct (v1.0.81) but lacks performance safeguards for edge cases.
 
-## Acceptance Criteria
+## Phased Approach
+
+This work is divided into three phases based on risk/value analysis:
+
+### Phase 1: Quick Wins (Safety Nets) - **RECOMMENDED NOW**
+**Effort:** 1-2 hours | **Risk:** Low | **Value:** High
+
+- [ ] Add basic timeout wrapper for long-running grep operations
+- [ ] Add file count limits to prevent runaway scans (e.g., max 10,000 files)
+- [ ] Add early-exit conditions for aggregation loops (max iterations)
+- [ ] Document known performance bottlenecks in code comments
+- [ ] Add `MAX_SCAN_TIME` environment variable (default: 300s per pattern)
+
+**Rationale:** Low-risk safety nets that prevent catastrophic hangs without changing core logic.
+
+### Phase 2: Performance Profiling - **DO AFTER PHASE 1**
+**Effort:** 2-4 hours | **Risk:** Low | **Value:** Medium
+
+- [ ] Add optional timing instrumentation (`PROFILE=1` mode)
+- [ ] Run against large real codebases (WooCommerce, WordPress core + plugins)
+- [ ] Identify top 3-5 slowest operations with actual data
+- [ ] Create performance baseline report
+- [ ] Document typical scan times for reference codebases
+
+**Rationale:** Need real-world data to optimize effectively. Guessing at bottlenecks risks wasted effort.
+
+### Phase 3: Optimization - **DO AFTER PHASE 2 DATA**
+**Effort:** 4-8 hours | **Risk:** Medium | **Value:** High (if bottlenecks confirmed)
+
+- [ ] Optimize the slowest grep patterns (based on Phase 2 data)
+- [ ] Implement file list caching (scan once, reuse for multiple patterns)
+- [ ] Add progress indicators for long scans
+- [ ] Parallelize independent pattern checks (if safe)
+- [ ] Add incremental scan mode (only changed files)
+
+**Rationale:** Optimize based on actual bottlenecks, not assumptions. Higher risk requires careful testing.
+
+## Acceptance Criteria (Phase 1 Only)
+- [ ] No scan can run longer than `MAX_SCAN_TIME` without user override
+- [ ] No single pattern can process more than `MAX_FILES` without warning
+- [ ] All loops have documented termination conditions
+- [ ] Timeout failures are graceful (warning + continue, or fail in strict mode)
+- [ ] All existing tests pass unchanged
+- [ ] Performance on small codebases unchanged (< 1% overhead)
+
+---
+
+## Original Acceptance Criteria (For Reference)
 - [ ] Identify the top 5–10 highest-cost grep/find operations (by call site + why they are expensive).
 - [ ] For each, document a safe optimization option that preserves behavior (e.g., narrower includes, precomputed file lists, fewer re-scans).
 - [ ] Identify where timeouts should exist (external commands / scans) and define a standard approach compatible with macOS (Bash 3.2).
@@ -59,3 +108,31 @@ Review stability risks in the main scanner script (`dist/bin/check-performance.s
 ## Notes
 - Scope is intentionally limited to stability and performance guardrails; no feature additions.
 - Preserve output formats (text/JSON/HTML) and baseline behavior.
+
+---
+
+## Recommendation Summary
+
+**Current Status:** Script is working correctly (v1.0.81) with all critical bugs fixed.
+
+**Recommended Action:** **Proceed with Phase 1 only** (1-2 hours)
+
+**Why Phase 1 Now:**
+- ✅ Low risk, high value safety nets
+- ✅ Prevents catastrophic edge cases (hangs, runaway scans)
+- ✅ No changes to core logic or output
+- ✅ Easy to test and verify
+
+**Why Defer Phase 2-3:**
+- ⏸️ Need real-world profiling data to optimize effectively
+- ⏸️ Higher risk of regressions without data
+- ⏸️ Better to wait for user feedback on actual performance issues
+- ⏸️ Premature optimization is the root of all evil
+
+**Decision Point:** After Phase 1, wait for user feedback. Only proceed to Phase 2-3 if users report actual performance problems on large codebases.
+
+**Success Metrics for Phase 1:**
+- No scan hangs indefinitely (timeout protection)
+- No runaway file processing (count limits)
+- All existing tests pass
+- Zero performance regression on small codebases
