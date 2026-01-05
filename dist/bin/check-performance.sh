@@ -37,12 +37,25 @@ LIB_DIR="$SCRIPT_DIR/lib"
 # Changed from ../.. to .. on 2025-12-31 to fix template loading
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# DEBUG: Enable tracing
+DEBUG_TRACE="${DEBUG_TRACE:-0}"
+if [ "$DEBUG_TRACE" = "1" ]; then
+  echo "[DEBUG] SCRIPT_DIR=$SCRIPT_DIR" >&2
+  echo "[DEBUG] LIB_DIR=$LIB_DIR" >&2
+  echo "[DEBUG] REPO_ROOT=$REPO_ROOT" >&2
+fi
+
 # shellcheck source=dist/bin/lib/colors.sh
 source "$LIB_DIR/colors.sh"
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded colors.sh" >&2; fi
+
 # shellcheck source=dist/bin/lib/common-helpers.sh
 source "$LIB_DIR/common-helpers.sh"
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded common-helpers.sh" >&2; fi
+
 # shellcheck source=dist/lib/pattern-loader.sh
 source "$REPO_ROOT/lib/pattern-loader.sh"
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loaded pattern-loader.sh" >&2; fi
 
 # ============================================================
 # VERSION - SINGLE SOURCE OF TRUTH
@@ -190,6 +203,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [ "$DEBUG_TRACE" = "1" ]; then
+  echo "[DEBUG] Arguments parsed. PATHS=$PATHS" >&2
+  echo "[DEBUG] OUTPUT_FORMAT=$OUTPUT_FORMAT" >&2
+  echo "[DEBUG] ENABLE_LOGGING=$ENABLE_LOGGING" >&2
+fi
 
 # If scanning a tests directory, remove 'tests' from exclusions
 # Use portable method (no \b word boundary which is GNU-specific)
@@ -1688,13 +1707,23 @@ process_clone_detection() {
 # Main Script Output
 # ============================================================================
 
+if [ "$DEBUG_TRACE" = "1" ]; then
+  echo "[DEBUG] Starting main script execution" >&2
+  echo "[DEBUG] PATHS=$PATHS" >&2
+  echo "[DEBUG] OUTPUT_FORMAT=$OUTPUT_FORMAT" >&2
+fi
+
 # Load existing baseline (if any) before running checks
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Loading baseline..." >&2; fi
 load_baseline
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Baseline loaded" >&2; fi
 
 # Detect project info for display
 # Preserve full path even if it contains spaces
 FIRST_PATH="$PATHS"
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Detecting project info..." >&2; fi
 PROJECT_INFO_JSON=$(detect_project_info "$FIRST_PATH")
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Project info detected" >&2; fi
 PROJECT_TYPE=$(echo "$PROJECT_INFO_JSON" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
 PROJECT_NAME=$(echo "$PROJECT_INFO_JSON" | grep -o '"name": "[^"]*"' | cut -d'"' -f4)
 PROJECT_VERSION=$(echo "$PROJECT_INFO_JSON" | grep -o '"version": "[^"]*"' | cut -d'"' -f4)
@@ -1716,7 +1745,9 @@ fi
 
 # Run fixture validation (proof of detection)
 # This runs quietly in the background and sets global variables
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Running fixture validation..." >&2; fi
 run_fixture_validation
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Fixture validation complete" >&2; fi
 
 text_echo "Scanning paths: $PATHS"
 text_echo "Strict mode: $STRICT"
@@ -1724,6 +1755,8 @@ if [ "$ENABLE_LOGGING" = true ] && [ "$OUTPUT_FORMAT" = "text" ]; then
 	text_echo "Logging to: $LOG_FILE"
 fi
 text_echo ""
+
+if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Starting checks..." >&2; fi
 
 ERRORS=0
 WARNINGS=0
@@ -3715,6 +3748,10 @@ fi
 	# Generate baseline file if requested
 	generate_baseline_file
 
+if [ "$DEBUG_TRACE" = "1" ]; then
+  echo "[DEBUG] All checks complete. ERRORS=$ERRORS, WARNINGS=$WARNINGS" >&2
+fi
+
 	# Determine exit code
 EXIT_CODE=0
 if [ "$ERRORS" -gt 0 ]; then
@@ -3723,10 +3760,17 @@ elif [ "$STRICT" = "true" ] && [ "$WARNINGS" -gt 0 ]; then
   EXIT_CODE=1
 fi
 
+if [ "$DEBUG_TRACE" = "1" ]; then
+  echo "[DEBUG] Generating output (format=$OUTPUT_FORMAT)..." >&2
+fi
+
 # Output based on format
 if [ "$OUTPUT_FORMAT" = "json" ]; then
+  if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] Generating JSON output..." >&2; fi
   JSON_OUTPUT=$(output_json "$EXIT_CODE")
+  if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] JSON output generated, echoing..." >&2; fi
   echo "$JSON_OUTPUT"
+  if [ "$DEBUG_TRACE" = "1" ]; then echo "[DEBUG] JSON output echoed" >&2; fi
 
   # Generate HTML report if running locally (not in GitHub Actions)
   if [ -z "$GITHUB_ACTIONS" ]; then
