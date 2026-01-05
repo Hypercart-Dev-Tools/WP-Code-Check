@@ -197,7 +197,7 @@ VERSION='2.1.3'
 When you run with `--format json`:
 
 1. The script outputs JSON to a log file in `dist/logs/`
-2. The script automatically generates an HTML report from that JSON
+2. The script automatically calls the **Python-based HTML converter** (`dist/bin/json-to-html.py`)
 3. The HTML report is saved to `dist/reports/` with a timestamp
 4. On macOS/Linux, the report auto-opens in the default browser
 
@@ -208,8 +208,14 @@ When you run with `--format json`:
 
 # Output locations:
 # - JSON: dist/logs/2025-12-31-035126-UTC.json
-# - HTML: dist/reports/2025-12-31-035126-UTC.html
+# - HTML: dist/reports/2025-12-31-035126-UTC.html (auto-generated from JSON)
 ```
+
+**Technical Details:**
+- HTML generation uses a **standalone Python 3 script** for reliability
+- The converter is fast (< 1 second for 100+ findings)
+- No external dependencies required (uses Python 3 standard library)
+- If Python 3 is not available, JSON will still be saved (HTML generation skipped)
 
 ### Finding Generated Reports
 
@@ -218,6 +224,54 @@ After running a scan, check these directories:
 - **HTML reports**: `dist/reports/` (timestamped `.html` files)
 
 The most recent file in each directory is the latest scan result.
+
+### Manually Converting JSON to HTML
+
+If HTML generation fails during a scan, or if you need to regenerate an HTML report from an existing JSON log, use the standalone converter:
+
+**Basic Usage:**
+```bash
+python3 /path/to/wp-code-check/dist/bin/json-to-html.py <input.json> <output.html>
+```
+
+**Example:**
+```bash
+# Convert a specific JSON log to HTML
+python3 /path/to/wp-code-check/dist/bin/json-to-html.py \
+  /path/to/wp-code-check/dist/logs/2026-01-05-032317-UTC.json \
+  /path/to/wp-code-check/dist/reports/my-report.html
+
+# Find and convert the latest JSON log
+latest_json=$(ls -t /path/to/wp-code-check/dist/logs/*.json | head -1)
+python3 /path/to/wp-code-check/dist/bin/json-to-html.py \
+  "$latest_json" \
+  /path/to/wp-code-check/dist/reports/latest-report.html
+```
+
+**When to Use Manual Conversion:**
+- The main scan completed but HTML generation hung or timed out
+- You want to regenerate an HTML report with updated styling
+- You need to create multiple HTML reports from the same JSON data
+- You're troubleshooting HTML generation issues
+
+**Converter Features:**
+- ✅ Fast & reliable (Python-based, no bash subprocess issues)
+- ✅ Standalone (works independently of main scanner)
+- ✅ Auto-opens report in browser (macOS/Linux)
+- ✅ No external dependencies (Python 3 standard library only)
+- ✅ Detailed progress output
+
+**Troubleshooting:**
+```bash
+# Check Python 3 is installed
+python3 --version
+
+# Verify JSON file is valid
+jq empty /path/to/wp-code-check/dist/logs/your-file.json
+
+# Check template exists
+ls -lh /path/to/wp-code-check/dist/bin/templates/report-template.html
+```
 
 ---
 
@@ -443,6 +497,27 @@ ls -1 /path/to/wp-code-check/dist/TEMPLATES/*.txt
 cat /path/to/wp-code-check/dist/TEMPLATES/my-plugin.txt
 ```
 
+### Convert JSON log to HTML manually:
+```bash
+# Find latest JSON log
+latest_json=$(ls -t /path/to/wp-code-check/dist/logs/*.json | head -1)
+
+# Convert to HTML
+python3 /path/to/wp-code-check/dist/bin/json-to-html.py \
+  "$latest_json" \
+  /path/to/wp-code-check/dist/reports/manual-report.html
+```
+
+### Check Python 3 is available:
+```bash
+python3 --version
+```
+
+### Validate JSON log file:
+```bash
+jq empty /path/to/wp-code-check/dist/logs/your-file.json
+```
+
 ---
 
 ## Error Messages to Watch For
@@ -454,6 +529,9 @@ cat /path/to/wp-code-check/dist/TEMPLATES/my-plugin.txt
 | `Template not found` | Template file doesn't exist | Check `TEMPLATES/` directory |
 | `command not found: run` | Script not in PATH | Use absolute path to `run` script |
 | `Path does not exist` | Template points to non-existent path | Verify `PROJECT_PATH` in template |
+| `python3: command not found` | Python 3 not installed | Install Python 3 or skip HTML generation |
+| `HTML template not found` | Missing report template | Verify `dist/bin/templates/report-template.html` exists |
+| `Invalid JSON` | Corrupted JSON log file | Check JSON syntax with `jq` |
 
 ---
 
@@ -486,7 +564,7 @@ When an invalid format is passed, the script validation should catch it, but the
 **Always use `--format json` to generate HTML reports:**
 
 ```bash
-# ✅ CORRECT - Generates HTML report
+# ✅ CORRECT - Generates HTML report (via Python converter)
 /path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
 
 # ❌ WRONG - No such format exists
@@ -503,7 +581,7 @@ After running with `--format json`:
 
 **Example workflow:**
 ```bash
-# Run the scan
+# Run the scan (automatically generates HTML via Python converter)
 /path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
 
 # Find the latest report
@@ -513,6 +591,25 @@ ls -lh /path/to/wp-code-check/dist/reports/ | tail -1
 open /path/to/wp-code-check/dist/reports/2025-12-31-035126-UTC.html
 ```
 
+### If HTML Generation Fails
+
+If the scan completes but HTML generation hangs or fails:
+
+1. **JSON is still saved** - Check `dist/logs/` for the JSON file
+2. **Manually convert to HTML** using the standalone converter:
+
+```bash
+# Find the latest JSON log
+latest_json=$(ls -t /path/to/wp-code-check/dist/logs/*.json | head -1)
+
+# Convert to HTML
+python3 /path/to/wp-code-check/dist/bin/json-to-html.py \
+  "$latest_json" \
+  /path/to/wp-code-check/dist/reports/manual-report.html
+```
+
+3. **Report the issue** so the integration can be improved
+
 ### For Future AI Agents
 
 When a user asks to "run a template and output to HTML":
@@ -520,11 +617,17 @@ When a user asks to "run a template and output to HTML":
 1. **Use `--format json`** (not `--format html`)
 2. **Wait for the scan to complete** (large themes/plugins may take 1-2 minutes)
 3. **Check `dist/reports/`** for the generated HTML file
-4. **Open the latest `.html` file** in the browser
+4. **If HTML generation fails**, manually convert the JSON using the Python converter
+5. **Open the latest `.html` file** in the browser
 
 The script will automatically:
-- Generate JSON output
-- Create an HTML report from the JSON
-- Save both to timestamped files
+- Generate JSON output to `dist/logs/`
+- Call the Python-based HTML converter (`dist/bin/json-to-html.py`)
+- Save the HTML report to `dist/reports/` with matching timestamp
 - Auto-open the HTML in the browser (on macOS/Linux)
+
+**If HTML generation hangs or fails:**
+- The JSON log is still saved and valid
+- Use the standalone Python converter to generate HTML manually
+- See "Manually Converting JSON to HTML" section above for details
 
