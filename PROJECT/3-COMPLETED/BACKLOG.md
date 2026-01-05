@@ -45,7 +45,7 @@ NEOCHROME_SKIP_FIXTURE_VALIDATION=1 ./bin/check-performance.sh --paths "./tests/
 
 ### Files Modified
 - `dist/bin/check-performance.sh` - Added fixture validation functions (lines 809-905 approx)
-- `dist/templates/report-template.html` - Added fixture status badge in footer
+- `dist/bin/report-templates/report-template.html` - Added fixture status badge in footer
 - `CHANGELOG.md` - Documented feature (entry exists but feature not fully working)
 
 ### Debug Code Left In

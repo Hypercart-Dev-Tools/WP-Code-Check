@@ -19,7 +19,10 @@ set -euo pipefail
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# REPO_ROOT points to dist/ directory (not repository root)
+# This ensures templates are loaded from dist/TEMPLATES/ where they belong
+# Fixed on 2026-01-05 to match check-performance.sh behavior
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATES_DIR="$REPO_ROOT/TEMPLATES"
 CHECK_SCRIPT="$SCRIPT_DIR/check-performance.sh"
 LIB_DIR="$SCRIPT_DIR/lib"
