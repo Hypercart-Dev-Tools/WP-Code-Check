@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.80] - 2026-01-05
+
+### Added
+- **Headless WordPress Pattern Support (Phase 1)** - New checks for decoupled/headless WordPress frontends
+  - **HWP-001: API Key Exposure** [CRITICAL] - Detects API keys/secrets exposed in client-side JavaScript bundles
+    - Catches hardcoded API keys, secrets, tokens in JS/TS files
+    - Detects sensitive values in `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_` environment variables
+    - **Impact:** Prevents credential leaks in browser-accessible code
+  - **HWP-002: Hardcoded WordPress URLs** [MEDIUM] - Detects hardcoded WordPress API URLs
+    - Catches full URLs to wp-json endpoints instead of environment variables
+    - Flags hardcoded GraphQL endpoints in Apollo Client setup
+    - **Impact:** Improves deployment flexibility across environments
+  - **HWP-003: GraphQL No Error Handling** [HIGH] - Detects Apollo Client hooks without error handling
+    - Catches `useQuery`/`useMutation` without error destructuring or `onError` callback
+    - Also detects `useSWR` without error handling
+    - **Impact:** Prevents silent failures and broken UIs
+  - **HWP-004: Next.js Missing Revalidate** [MEDIUM] - Detects `getStaticProps` without ISR
+    - Catches static generation without `revalidate` property for WordPress content
+    - **Impact:** Prevents stale content after WordPress updates
+  - **New Pattern Files:**
+    - `dist/patterns/headless/api-key-exposure.json`
+    - `dist/patterns/headless/fetch-no-error-handling.json`
+    - `dist/patterns/headless/missing-auth-headers.json`
+    - `dist/patterns/headless/nextjs-missing-revalidate.json`
+    - `dist/patterns/headless/graphql-no-error-handling.json`
+    - `dist/patterns/headless/hardcoded-wordpress-url.json`
+  - **New Test Fixtures:**
+    - `dist/tests/fixtures/headless/fetch-antipatterns.js` - 8 violations, 4 safe patterns
+    - `dist/tests/fixtures/headless/nextjs-antipatterns.js` - 6 violations, 4 safe patterns
+    - `dist/tests/fixtures/headless/graphql-antipatterns.js` - 6 violations, 4 safe patterns
+  - **Check Count:** Increased from 33 to 37 checks (+4 headless WordPress checks)
+  - **Documentation:** Created `PROJECT/1-INBOX/PROJECT-NODEJS.md` roadmap for JS/TS support
+
+### Changed
+- **Scanner Output** - Added "HEADLESS WORDPRESS CHECKS" section to scan output
+  - New section appears after HCC security checks
+  - Scans `.js`, `.jsx`, `.ts`, `.tsx` files for headless patterns
+
 ## [1.0.79] - 2026-01-02
 
 ### Fixed

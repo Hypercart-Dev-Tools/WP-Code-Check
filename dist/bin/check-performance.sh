@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.76
+# Version: 1.0.80
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -50,7 +50,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.79"
+SCRIPT_VERSION="1.0.80"
 
 # Defaults
 PATHS="."
@@ -1962,6 +1962,49 @@ text_echo ""
 OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx --include=*.php"
 run_check "ERROR" "$(get_severity "hcc-008-unsafe-regexp" "MEDIUM")" "User input in RegExp without escaping (HCC-008)" "hcc-008-unsafe-regexp" \
   "-E ((new[[:space:]]+)?RegExp[[:space:]]*\\([^)]*[[:space:]]\\+[[:space:]])|((new[[:space:]]+)?RegExp.*\\$\\{)"
+unset OVERRIDE_GREP_INCLUDE
+text_echo ""
+
+# ============================================================================
+# HEADLESS WORDPRESS CHECKS (JS/TS for decoupled frontends)
+# ============================================================================
+text_echo "${RED}━━━ HEADLESS WORDPRESS CHECKS ━━━${NC}"
+text_echo ""
+
+# HWP-001: API keys/secrets exposed in client-side code
+# Detects hardcoded API keys, secrets, tokens that will be exposed in browser bundles
+# Also detects NEXT_PUBLIC_/NUXT_PUBLIC_/VITE_ env vars containing sensitive values
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "ERROR" "$(get_severity "headless-api-key-exposure" "CRITICAL")" "API keys/secrets exposed in client-side code" "headless-api-key-exposure" \
+  "-E (API_KEY|API_SECRET|SECRET_KEY|PRIVATE_KEY|AUTH_TOKEN)[[:space:]]*=[[:space:]]*['\"][a-zA-Z0-9_-]{16,}['\"]" \
+  "-E process\\.env\\.NEXT_PUBLIC_[A-Z_]*(SECRET|PRIVATE|PASSWORD)" \
+  "-E process\\.env\\.NUXT_PUBLIC_[A-Z_]*(SECRET|PRIVATE|PASSWORD)" \
+  "-E import\\.meta\\.env\\.VITE_[A-Z_]*(SECRET|PRIVATE|PASSWORD)"
+unset OVERRIDE_GREP_INCLUDE
+
+# HWP-002: Hardcoded WordPress API URLs (should use environment variables)
+# Detects full URLs to wp-json endpoints instead of env vars
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "WARNING" "$(get_severity "headless-hardcoded-wordpress-url" "MEDIUM")" "Hardcoded WordPress API URL (use env vars)" "headless-hardcoded-wordpress-url" \
+  "-E fetch\\([[:space:]]*['\"]https?://[^'\"]+/wp-json" \
+  "-E uri:[[:space:]]*['\"]https?://[^'\"]+/graphql['\"]" \
+  "-E baseURL:[[:space:]]*['\"]https?://[^'\"]+/wp-json"
+unset OVERRIDE_GREP_INCLUDE
+
+# HWP-003: useQuery/useMutation without error handling
+# Detects Apollo Client hooks that don't handle errors
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "WARNING" "$(get_severity "headless-graphql-no-error-handling" "HIGH")" "GraphQL useQuery/useMutation without error handling" "headless-graphql-no-error-handling" \
+  "-E useQuery\\([^)]+\\)[[:space:]]*;[[:space:]]*$" \
+  "-E useMutation\\([^)]+\\)[[:space:]]*;[[:space:]]*$" \
+  "-E const[[:space:]]+\\{[[:space:]]*data[[:space:]]*,[[:space:]]*loading[[:space:]]*\\}[[:space:]]*=[[:space:]]*useQuery"
+unset OVERRIDE_GREP_INCLUDE
+
+# HWP-004: getStaticProps without revalidate (stale WordPress data)
+# Detects Next.js static generation without ISR for WordPress content
+OVERRIDE_GREP_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+run_check "WARNING" "$(get_severity "headless-nextjs-missing-revalidate" "MEDIUM")" "Next.js getStaticProps may need revalidate for WordPress data" "headless-nextjs-missing-revalidate" \
+  "-E export[[:space:]]+(async[[:space:]]+)?function[[:space:]]+getStaticProps"
 unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
