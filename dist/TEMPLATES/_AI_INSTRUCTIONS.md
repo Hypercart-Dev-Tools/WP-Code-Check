@@ -187,14 +187,14 @@ VERSION='2.1.3'
 ### Important: How Output Formats Work
 
 **The script supports TWO output formats:**
-- `--format text` - Console output (default)
-- `--format json` - JSON output to log file + auto-generates HTML report
+- `--format json` - JSON output (default) + auto-generates an HTML report locally
+- `--format text` - Console output (no HTML report)
 
 **There is NO `--format html` option.** HTML reports are automatically generated from JSON output.
 
 ### How HTML Reports Are Generated
 
-When you run with `--format json`:
+When you run with `--format json` (or omit `--format`, since JSON is the default):
 
 1. The script outputs JSON to a log file in `dist/logs/`
 2. The script automatically generates an HTML report from that JSON
@@ -205,6 +205,9 @@ When you run with `--format json`:
 ```bash
 # This generates BOTH JSON log AND HTML report
 /path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
+
+# Equivalent (JSON is the default):
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme
 
 # Output locations:
 # - JSON: dist/logs/2025-12-31-035126-UTC.json
@@ -476,18 +479,21 @@ When running `run universal-child-theme-oct-2024 --format html`, the script appe
 ### Root Cause
 
 **The `--format html` option does not exist.** The script only supports:
-- `--format text` (default, console output)
-- `--format json` (JSON output + auto-generated HTML)
+- `--format json` (default, JSON output + auto-generated HTML)
+- `--format text` (console output)
 
 When an invalid format is passed, the script validation should catch it, but the error handling wasn't immediately visible in the terminal.
 
 ### The Solution
 
-**Always use `--format json` to generate HTML reports:**
+**Use JSON output to generate HTML reports** (and avoid `--format html`):
 
 ```bash
 # ✅ CORRECT - Generates HTML report
 /path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format json
+
+# ✅ ALSO CORRECT - JSON is the default (unless a template overrides FORMAT)
+/path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme
 
 # ❌ WRONG - No such format exists
 /path/to/wp-code-check/dist/bin/check-performance.sh --paths /path/to/theme --format html
@@ -517,7 +523,8 @@ open /path/to/wp-code-check/dist/reports/2025-12-31-035126-UTC.html
 
 When a user asks to "run a template and output to HTML":
 
-1. **Use `--format json`** (not `--format html`)
+1. **Use JSON output** (not `--format html`)
+  - Prefer being explicit with `--format json`, because templates can override `FORMAT`.
 2. **Wait for the scan to complete** (large themes/plugins may take 1-2 minutes)
 3. **Check `dist/reports/`** for the generated HTML file
 4. **Open the latest `.html` file** in the browser

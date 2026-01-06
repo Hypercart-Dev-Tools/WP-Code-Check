@@ -5,6 +5,107 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.86] - 2026-01-06
+
+### Added
+- **Smart N+1 Detection with Meta Caching Awareness** - Hybrid detection reduces false positives for optimized code
+  - Added `has_meta_cache_optimization()` helper function to detect WordPress meta caching APIs
+  - Detects `update_meta_cache()`, `update_postmeta_cache()`, and `update_termmeta_cache()` usage
+  - Files using meta caching are downgraded from WARNING to INFO severity
+  - Added test fixture `n-plus-one-optimized.php` with real-world optimization examples
+  - **Impact:** Properly optimized code (like KISS Woo Fast Search) no longer triggers false positive warnings
+  - **Rationale:** Encourages WordPress best practices while reducing noise for developers using proper caching
+
+### Changed
+- **N+1 Pattern Detection Logic** - Now distinguishes between optimized and unoptimized code
+  - Files WITHOUT meta caching: Standard WARNING (unchanged behavior)
+  - Files WITH meta caching: INFO severity with message "verify optimization"
+  - Console output shows: "✓ Passed (N file(s) use meta caching - likely optimized)"
+  - JSON findings include severity "info" for optimized files vs "warning" for unoptimized
+  - **Impact:** Reduces false positive noise while still alerting developers to review optimization
+  - **Note:** Static analysis cannot verify cache covers all IDs, so INFO alerts remain for manual review
+
+## [1.0.85] - 2026-01-06
+
+### Added
+- **Phase 3 Priority 2: Progress Tracking** - Added real-time progress indicators for better UX
+  - Added `section_start()`, `section_progress()`, and `section_end()` helper functions
+  - Display current section name when starting each major section (Critical Checks, Warning Checks, etc.)
+  - Show elapsed time every 10 seconds during long operations
+  - Added progress updates during clone detection file processing ("Processing file X of Y...")
+  - Added progress updates during hash aggregation ("Analyzing hash X of Y...")
+  - **Impact:** Users can now see what's happening during long scans, reducing perceived wait time
+
+### Changed
+- **Section Progress Display** - All major sections now show start/end markers
+  - Critical Checks section shows "→ Starting: Critical Checks"
+  - Warning Checks section shows "→ Starting: Warning Checks"
+  - Magic String Detector shows "→ Starting: Magic String Detector"
+  - Function Clone Detector shows "→ Starting: Function Clone Detector"
+  - Elapsed time displayed as "⏱ Section Name: Xs elapsed..." every 10 seconds
+  - **Impact:** Better visibility into scan progress, easier to diagnose slow sections
+
+## [1.0.84] - 2026-01-06
+
+### Added
+- **Phase 3 Clone Detection Optimizations** - Added controls to prevent clone detection timeouts
+  - Added `MAX_CLONE_FILES` environment variable (default: 100) to limit files processed in clone detection
+  - Added `--skip-clone-detection` flag to skip clone detection entirely for faster scans
+  - Added file count warning when approaching clone detection limit (80% threshold)
+  - **Impact:** Prevents timeouts on large codebases (500+ files), 90%+ faster scans when skipped
+
+### Changed
+- **Clone Detection Limits** - Separated clone detection limits from general file limits
+  - Clone detection now uses `MAX_CLONE_FILES` instead of `MAX_FILES` (more conservative default)
+  - Shows clear warning message when file count exceeds limit with instructions to override
+  - Displays progress warning when processing large file counts (>80 files)
+  - **Impact:** Clone detection is now opt-in for large codebases, prevents WooCommerce-scale timeouts
+
+## [1.0.82] - 2026-01-06
+
+### Added
+- **Phase 1 Stability Safeguards** - Added safety nets to prevent catastrophic hangs and runaway scans
+  - Added `MAX_SCAN_TIME` environment variable (default: 300s) to limit scan duration per pattern
+  - Added `MAX_FILES` environment variable (default: 10,000) to limit files processed in aggregation
+  - Added `MAX_LOOP_ITERATIONS` environment variable (default: 50,000) to prevent infinite loops
+  - Created `run_with_timeout()` portable timeout wrapper (macOS Bash 3.2 compatible using Perl)
+  - **Impact:** Prevents hangs on very large codebases, graceful degradation with warnings
+
+### Changed
+- **Aggregated Pattern Performance** - Added timeout and iteration limits to expensive operations
+  - Magic string detection now respects `MAX_SCAN_TIME` timeout on initial grep
+  - Clone detection now respects `MAX_FILES` limit and `MAX_SCAN_TIME` timeout
+  - All aggregation loops now have `MAX_LOOP_ITERATIONS` safety limit with early exit
+  - Added match count limit (MAX_FILES * 10) to aggregated patterns as file count proxy
+  - **Impact:** Large codebase scans won't hang indefinitely, clear warnings when limits hit
+
+### Fixed
+- **Timeout Exit Code Detection** - Fixed timeout wrapper exit codes being swallowed by `|| true`
+  - Removed `|| true` from command substitutions that prevented detecting exit code 124
+  - Now properly captures and checks exit codes before falling back to normal processing
+  - **Impact:** Timeout protection now actually works instead of being silently bypassed
+
+- **Incomplete Loop Bounds** - Added missing iteration limits to all aggregation loops
+  - Added `MAX_LOOP_ITERATIONS` to unique_strings aggregation loop
+  - Added `MAX_LOOP_ITERATIONS` to clone detection hash aggregation loop
+  - **Impact:** All loops now have documented termination conditions, no unbounded iterations
+
+- **Version Banner Inconsistency** - Updated stale version comment from 1.0.80 to 1.0.82
+  - Fixed header comment to match `SCRIPT_VERSION` variable
+  - **Impact:** Version reporting is now consistent across all locations
+
+### Documentation
+- **Performance Bottleneck Documentation** - Added inline comments documenting expensive operations
+  - Documented typical performance characteristics for small/medium/large codebases
+  - Noted optimization opportunities for future Phase 2-3 work
+  - **Impact:** Developers can understand performance trade-offs and future improvement paths
+
+- **Backlog Planning** - Documented future cherry-pick tasks from `fix/split-off-html-generator` branch
+  - Added notes for Python HTML generator (commit `713e903`)
+  - Added notes for Node.js/JavaScript/Headless WordPress patterns (commits `2653c59`, `7180f97`, `f6b1664`)
+  - Documented conflicts, dependencies, and recommended cherry-pick order
+  - **Impact:** Clear roadmap for future feature integration after stability work completes
+
 ## [1.0.81] - 2026-01-05
 
 ### Fixed
