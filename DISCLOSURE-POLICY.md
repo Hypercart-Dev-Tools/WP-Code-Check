@@ -138,6 +138,8 @@ We will **not** delay disclosure:
 
 Final decisions regarding disclosure timing rest with Hypercart / Neochrome. Disclosure timelines may be adjusted to align with broader ecosystem safety considerations or platform-level guidance.
 
+**We do not guarantee our performance as it relates to increases or delays to the disclosure timeline.** Timelines are provided as general guidance and reasonable-effort commitments, not contractual obligations. Authors should not rely on extensions being granted or on specific disclosure dates for planning purposes.
+
 ---
 
 ## Report Classification
