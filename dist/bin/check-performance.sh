@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.88
+# Version: 1.0.90
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.88"
+SCRIPT_VERSION="1.0.90"
 
 # Defaults
 PATHS="."
@@ -68,7 +68,8 @@ ENABLE_LOGGING=true
 OUTPUT_FORMAT="json"  # text or json (default: json for HTML reports)
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
-EXCLUDE_DIRS="vendor node_modules .git tests"
+EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
+EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
 DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
 
@@ -352,13 +353,16 @@ debug_echo "ENABLE_LOGGING=$ENABLE_LOGGING"
 # If scanning a tests directory, remove 'tests' from exclusions
 # Use portable method (no \b word boundary which is GNU-specific)
 if echo "$PATHS" | grep -q "tests"; then
-  EXCLUDE_DIRS="vendor node_modules .git"
+  EXCLUDE_DIRS="vendor node_modules .git .next dist build"
 fi
 
 # Build exclude arguments
 EXCLUDE_ARGS=""
 for dir in $EXCLUDE_DIRS; do
   EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude-dir=$dir"
+done
+for file in $EXCLUDE_FILES; do
+  EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude=$file"
 done
 
 # ============================================================================
@@ -1692,11 +1696,18 @@ process_aggregated_pattern() {
   # PERFORMANCE: Wrap grep in timeout to prevent hangs on large codebases
   debug_echo "Running grep with pattern: $pattern_search"
   debug_echo "Paths: $PATHS"
+  debug_echo "File patterns: $pattern_file_patterns"
+
+  # Build --include flags from pattern_file_patterns (supports PHP, JS, TS, etc.)
+  local include_args=""
+  for ext in $pattern_file_patterns; do
+    include_args="$include_args --include=$ext"
+  done
 
   # Run grep with timeout (don't use || true here - it swallows exit codes)
   local matches
   local grep_exit_code=0
-  matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null) || grep_exit_code=$?
+  matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null) || grep_exit_code=$?
 
   # Check for timeout (exit code 124)
   if [ "$grep_exit_code" -eq 124 ]; then
@@ -2927,6 +2938,177 @@ else
 fi
 text_echo ""
 
+# ============================================================================
+# Helper Functions: Mitigation Detection for Unbounded Queries
+# ============================================================================
+# These functions detect mitigating factors that reduce the real-world impact
+# of unbounded queries, allowing us to reduce false positive rates while
+# maintaining detection of genuine performance issues.
+#
+# Mitigating factors:
+# 1. Caching - Results are cached, reducing database load
+# 2. Parent scoping - Query is limited to children of a single parent
+# 3. IDs only - Query returns only IDs, not full objects (lower memory)
+# 4. Admin context - Query only runs in admin area (lower traffic)
+# ============================================================================
+
+# Check if query results are cached (transients or object cache)
+# Usage: has_caching_mitigation "$file" "$line_number"
+# Returns: 0 if caching detected, 1 otherwise
+has_caching_mitigation() {
+  local file="$1"
+  local lineno="$2"
+
+  # Find the function boundaries (look for function declaration before and after)
+  local function_start=$(awk -v line="$lineno" '
+    NR <= line && /^[[:space:]]*function[[:space:]]/ { start=NR }
+    END { print start ? start : (line > 20 ? line - 20 : 1) }
+  ' "$file")
+
+  local function_end=$(awk -v line="$lineno" '
+    NR > line && /^[[:space:]]*function[[:space:]]/ { print NR-1; found=1; exit }
+    END { if (!found && NR >= line) print NR }
+  ' "$file")
+
+  # Get context within the same function (or ±20 lines if function boundaries not found)
+  local context=$(sed -n "${function_start},${function_end}p" "$file" 2>/dev/null || true)
+
+  # Check for WordPress caching patterns in the same function
+  # Look for both cache reads (get_transient, wp_cache_get) and writes (set_transient, wp_cache_set)
+  if echo "$context" | grep -q -E "(get_transient|set_transient|wp_cache_get|wp_cache_set|wp_cache_add)\s*\("; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Check if query is scoped to a parent (e.g., variations of a single product)
+# Usage: has_parent_scope_mitigation "$file" "$line_number"
+# Returns: 0 if parent scoping detected, 1 otherwise
+has_parent_scope_mitigation() {
+  local file="$1"
+  local lineno="$2"
+  local context_lines=10  # Look 10 lines before and after
+
+  local start_line=$((lineno - context_lines))
+  [ "$start_line" -lt 1 ] && start_line=1
+  local end_line=$((lineno + context_lines))
+
+  local context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
+
+  # Check for parent parameter in query args
+  if echo "$context" | grep -q -E "('|\")parent('|\")\s*=>"; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Check if query returns only IDs (not full objects)
+# Usage: has_ids_only_mitigation "$file" "$line_number"
+# Returns: 0 if IDs-only detected, 1 otherwise
+has_ids_only_mitigation() {
+  local file="$1"
+  local lineno="$2"
+  local context_lines=10  # Look 10 lines before and after
+
+  local start_line=$((lineno - context_lines))
+  [ "$start_line" -lt 1 ] && start_line=1
+  local end_line=$((lineno + context_lines))
+
+  local context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
+
+  # Check for 'return' => 'ids' or 'fields' => 'ids'
+  if echo "$context" | grep -q -E "('|\")return('|\")\s*=>\s*('|\")ids('|\")"; then
+    return 0
+  fi
+  if echo "$context" | grep -q -E "('|\")fields('|\")\s*=>\s*('|\")ids('|\")"; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Check if query is in admin context only
+# Usage: has_admin_context_mitigation "$file" "$line_number"
+# Returns: 0 if admin context detected, 1 otherwise
+has_admin_context_mitigation() {
+  local file="$1"
+  local lineno="$2"
+  local context_lines=30  # Look 30 lines before
+
+  local start_line=$((lineno - context_lines))
+  [ "$start_line" -lt 1 ] && start_line=1
+
+  local context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+
+  # Check for admin checks before the query
+  if echo "$context" | grep -q -E "(is_admin\(\)|current_user_can\(|if\s*\(\s*!\s*is_admin)"; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Calculate adjusted severity based on mitigating factors
+# Usage: get_adjusted_severity "$file" "$line_number" "$base_severity"
+# Returns: Adjusted severity level and mitigation reasons
+get_adjusted_severity() {
+  local file="$1"
+  local lineno="$2"
+  local base_severity="$3"
+  local mitigations=""
+  local mitigation_count=0
+
+  # Check each mitigation factor
+  if has_caching_mitigation "$file" "$lineno"; then
+    mitigations="${mitigations}caching,"
+    ((mitigation_count++))
+  fi
+
+  if has_parent_scope_mitigation "$file" "$lineno"; then
+    mitigations="${mitigations}parent-scoped,"
+    ((mitigation_count++))
+  fi
+
+  if has_ids_only_mitigation "$file" "$lineno"; then
+    mitigations="${mitigations}ids-only,"
+    ((mitigation_count++))
+  fi
+
+  if has_admin_context_mitigation "$file" "$lineno"; then
+    mitigations="${mitigations}admin-only,"
+    ((mitigation_count++))
+  fi
+
+  # Remove trailing comma
+  mitigations="${mitigations%,}"
+
+  # Adjust severity based on mitigation count
+  local adjusted_severity="$base_severity"
+
+  if [ "$mitigation_count" -ge 3 ]; then
+    # 3+ mitigations: CRITICAL → LOW, HIGH → LOW, MEDIUM → LOW
+    adjusted_severity="LOW"
+  elif [ "$mitigation_count" -ge 2 ]; then
+    # 2 mitigations: CRITICAL → MEDIUM, HIGH → MEDIUM, MEDIUM → LOW
+    case "$base_severity" in
+      CRITICAL) adjusted_severity="MEDIUM" ;;
+      HIGH) adjusted_severity="MEDIUM" ;;
+      MEDIUM) adjusted_severity="LOW" ;;
+    esac
+  elif [ "$mitigation_count" -ge 1 ]; then
+    # 1 mitigation: CRITICAL → HIGH, HIGH → MEDIUM
+    case "$base_severity" in
+      CRITICAL) adjusted_severity="HIGH" ;;
+      HIGH) adjusted_severity="MEDIUM" ;;
+    esac
+  fi
+
+  # Return both severity and mitigations
+  echo "${adjusted_severity}|${mitigations}"
+}
+
 run_check "ERROR" "$(get_severity "unbounded-posts-per-page" "CRITICAL")" "Unbounded posts_per_page" "unbounded-posts-per-page" \
   "-e posts_per_page[[:space:]]*=>[[:space:]]*-1"
 
@@ -2936,8 +3118,80 @@ run_check "ERROR" "$(get_severity "unbounded-numberposts" "CRITICAL")" "Unbounde
 run_check "ERROR" "$(get_severity "nopaging-true" "CRITICAL")" "nopaging => true" "nopaging-true" \
   "-e nopaging[[:space:]]*=>[[:space:]]*true"
 
-run_check "ERROR" "$(get_severity "unbounded-wc-get-orders" "CRITICAL")" "Unbounded wc_get_orders limit" "unbounded-wc-get-orders" \
-  "-e 'limit'[[:space:]]*=>[[:space:]]*-1"
+# Unbounded WooCommerce queries with mitigation detection
+WC_UNBOUNDED_SEVERITY=$(get_severity "unbounded-wc-get-orders" "CRITICAL")
+WC_UNBOUNDED_COLOR="${YELLOW}"
+if [ "$WC_UNBOUNDED_SEVERITY" = "CRITICAL" ] || [ "$WC_UNBOUNDED_SEVERITY" = "HIGH" ]; then WC_UNBOUNDED_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Unbounded wc_get_orders/wc_get_products limit ${WC_UNBOUNDED_COLOR}[$WC_UNBOUNDED_SEVERITY]${NC}"
+WC_UNBOUNDED_FAILED=false
+WC_UNBOUNDED_FINDING_COUNT=0
+WC_UNBOUNDED_VISIBLE=""
+
+# Find all unbounded WooCommerce queries
+WC_UNBOUNDED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "'limit'[[:space:]]*=>[[:space:]]*-1" "$PATHS" 2>/dev/null || true)
+
+if [ -n "$WC_UNBOUNDED_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    # Get adjusted severity based on mitigating factors
+    mitigation_result=$(get_adjusted_severity "$file" "$lineno" "$WC_UNBOUNDED_SEVERITY")
+    adjusted_severity=$(echo "$mitigation_result" | cut -d'|' -f1)
+    mitigations=$(echo "$mitigation_result" | cut -d'|' -f2)
+
+    # Apply baseline suppression
+    if ! should_suppress_finding "unbounded-wc-get-orders" "$file"; then
+      WC_UNBOUNDED_FAILED=true
+      ((WC_UNBOUNDED_FINDING_COUNT++))
+
+      # Build message with mitigation info
+      message="Unbounded WooCommerce query (limit => -1)"
+      if [ -n "$mitigations" ]; then
+        message="$message [Mitigated by: $mitigations]"
+      fi
+
+      match_output="${file}:${lineno}:${code}"
+      if [ -z "$WC_UNBOUNDED_VISIBLE" ]; then
+        WC_UNBOUNDED_VISIBLE="$match_output"
+      else
+        WC_UNBOUNDED_VISIBLE="${WC_UNBOUNDED_VISIBLE}
+$match_output"
+      fi
+
+      # Add to JSON with adjusted severity
+      add_json_finding "unbounded-wc-get-orders" "error" "$adjusted_severity" "$file" "$lineno" "$message" "$code"
+    fi
+  done <<< "$WC_UNBOUNDED_MATCHES"
+fi
+
+if [ "$WC_UNBOUNDED_FAILED" = true ]; then
+  # Use the base severity for error/warning counting (not adjusted)
+  if [ "$WC_UNBOUNDED_SEVERITY" = "CRITICAL" ] || [ "$WC_UNBOUNDED_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$WC_UNBOUNDED_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$WC_UNBOUNDED_VISIBLE" | head -10)"
+  fi
+  add_json_check "Unbounded wc_get_orders/wc_get_products limit" "$WC_UNBOUNDED_SEVERITY" "failed" "$WC_UNBOUNDED_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Unbounded wc_get_orders/wc_get_products limit" "$WC_UNBOUNDED_SEVERITY" "passed" 0
+fi
+text_echo ""
 
 # WooCommerce Subscriptions queries without limits
 text_echo ""
@@ -3029,9 +3283,11 @@ if [ -n "$USERS_MATCHES" ]; then
       continue
     fi
 
-    # Check if THIS specific get_users() call has 'number' parameter within next 5 lines
-    start_line=$lineno
-    end_line=$((lineno + 5))
+    # Check if THIS specific get_users() call has 'number' parameter within ±10 lines
+    # Look both before and after because the array might be defined before the call
+    start_line=$((lineno - 10))
+    [ "$start_line" -lt 1 ] && start_line=1
+    end_line=$((lineno + 10))
     context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
 
     # Check if 'number' parameter exists in this specific call's context
@@ -3040,7 +3296,18 @@ if [ -n "$USERS_MATCHES" ]; then
       if ! should_suppress_finding "unbounded-get-users" "$file"; then
         USERS_UNBOUNDED=true
         ((USERS_FINDING_COUNT++))
-        
+
+        # Get adjusted severity based on mitigating factors
+        mitigation_result=$(get_adjusted_severity "$file" "$lineno" "$USERS_SEVERITY")
+        adjusted_severity=$(echo "$mitigation_result" | cut -d'|' -f1)
+        mitigations=$(echo "$mitigation_result" | cut -d'|' -f2)
+
+        # Build message with mitigation info
+        message="get_users() without 'number' limit can fetch ALL users"
+        if [ -n "$mitigations" ]; then
+          message="$message [Mitigated by: $mitigations]"
+        fi
+
         match_output="${file}:${lineno}:${code}"
         if [ -z "$USERS_VISIBLE" ]; then
           USERS_VISIBLE="$match_output"
@@ -3048,8 +3315,9 @@ if [ -n "$USERS_MATCHES" ]; then
           USERS_VISIBLE="${USERS_VISIBLE}
 $match_output"
         fi
-        
-        add_json_finding "get-users-no-limit" "error" "$USERS_SEVERITY" "$file" "$lineno" "get_users() without 'number' limit can fetch ALL users" "$code"
+
+        # Add to JSON with adjusted severity
+        add_json_finding "get-users-no-limit" "error" "$adjusted_severity" "$file" "$lineno" "$message" "$code"
       fi
     fi
   done <<< "$USERS_MATCHES"
@@ -3094,10 +3362,25 @@ if [ -n "$TERMS_FILES" ]; then
 	    if ! grep -A5 "get_terms[[:space:]]*(" "$file" 2>/dev/null | grep -q -e "'number'" -e '"number"'; then
 	      # Apply baseline suppression per file
 	      if ! should_suppress_finding "get-terms-no-limit" "$file"; then
-	        text_echo "  $file: get_terms() may be missing 'number' parameter"
 	        # Get line number for JSON
 	        lineno=$(grep -n "get_terms[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
-	        add_json_finding "get-terms-no-limit" "error" "$TERMS_SEVERITY" "$file" "${lineno:-0}" "get_terms() may be missing 'number' parameter" "get_terms("
+	        lineno=${lineno:-0}
+
+	        # Get adjusted severity based on mitigating factors
+	        mitigation_result=$(get_adjusted_severity "$file" "$lineno" "$TERMS_SEVERITY")
+	        adjusted_severity=$(echo "$mitigation_result" | cut -d'|' -f1)
+	        mitigations=$(echo "$mitigation_result" | cut -d'|' -f2)
+
+	        # Build message with mitigation info
+	        message="get_terms() may be missing 'number' parameter"
+	        if [ -n "$mitigations" ]; then
+	          message="$message [Mitigated by: $mitigations]"
+	        fi
+
+	        text_echo "  $file: $message"
+
+	        # Add to JSON with adjusted severity
+	        add_json_finding "get-terms-no-limit" "error" "$adjusted_severity" "$file" "$lineno" "$message" "get_terms("
 	        TERMS_UNBOUNDED=true
 	        ((TERMS_FINDING_COUNT++))
 	      fi
@@ -4001,6 +4284,101 @@ section_end
 profile_end "WARNING_CHECKS"
 profile_start "MAGIC_STRING_DETECTOR"
 section_start "Magic String Detector"
+
+# ============================================================================
+# Direct Pattern Detection (JavaScript/Node.js/Headless WordPress)
+# ============================================================================
+# Process patterns with detection_type: "direct" from JSON files
+# These are typically single-file checks (not aggregated across files)
+
+# Find all direct patterns from headless/, nodejs/, and js/ subdirectories
+DIRECT_PATTERNS=$(find "$REPO_ROOT/patterns/headless" "$REPO_ROOT/patterns/nodejs" "$REPO_ROOT/patterns/js" -name "*.json" -type f 2>/dev/null | while read -r pattern_file; do
+  detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ "$detection_type" = "direct" ]; then
+    echo "$pattern_file"
+  fi
+done)
+
+if [ -n "$DIRECT_PATTERNS" ]; then
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo "${BLUE}  JAVASCRIPT/NODE.JS/HEADLESS WORDPRESS CHECKS${NC}"
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo ""
+
+  # Process each direct pattern
+  while IFS= read -r pattern_file; do
+    [ -z "$pattern_file" ] && continue
+
+    # Load pattern metadata
+    if load_pattern "$pattern_file"; then
+      # Get severity with fallback
+      check_severity=$(get_severity "$pattern_id" "$pattern_severity")
+      check_color="${YELLOW}"
+      if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then check_color="${RED}"; fi
+
+      text_echo "${BLUE}▸ $pattern_title ${check_color}[$check_severity]${NC}"
+
+      # Build --include flags from pattern_file_patterns
+      include_args=""
+      for ext in $pattern_file_patterns; do
+        include_args="$include_args --include=$ext"
+      done
+
+      # Run grep with the pattern
+      matches=""
+      match_count=0
+      matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+
+      if [ -n "$matches" ]; then
+        match_count=$(echo "$matches" | grep -c . 2>/dev/null)
+        match_count=${match_count:-0}
+      fi
+
+      if [ "$match_count" -gt 0 ]; then
+        text_echo "${check_color}  ⚠ Found $match_count violation(s)${NC}"
+
+        # Increment error/warning counters
+        if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then
+          ((ERRORS++))
+        else
+          ((WARNINGS++))
+        fi
+
+        # Add to findings for JSON output
+        while IFS= read -r match; do
+          [ -z "$match" ] && continue
+
+          file=$(echo "$match" | cut -d: -f1)
+          line=$(echo "$match" | cut -d: -f2)
+          code=$(echo "$match" | cut -d: -f3-)
+
+          # Add to JSON findings (using same format as run_check)
+          FINDINGS_JSON="$FINDINGS_JSON
+  {\"id\":\"$pattern_id\",\"severity\":\"error\",\"impact\":\"$check_severity\",\"file\":\"$file\",\"line\":$line,\"message\":\"$pattern_title\",\"code\":$(echo "$code" | jq -Rs .)},"
+
+          # Show in text output if not too many
+          if [ "$match_count" -le 10 ]; then
+            text_echo "  ${check_color}→ $file:$line${NC}"
+            if [ "$CONTEXT_LINES" -gt 0 ]; then
+              text_echo "    ${code:0:100}"
+            fi
+          fi
+        done <<< "$matches"
+
+        if [ "$match_count" -gt 10 ]; then
+          text_echo "  ${check_color}  (showing first 10 of $match_count violations)${NC}"
+        fi
+
+        # Add to JSON checks summary
+        add_json_check "$pattern_title" "$check_severity" "failed" "$match_count"
+      else
+        text_echo "${GREEN}  ✓ Passed${NC}"
+        add_json_check "$pattern_title" "$check_severity" "passed" 0
+      fi
+      text_echo ""
+    fi
+  done <<< "$DIRECT_PATTERNS"
+fi
 
 # ============================================================================
 # Magic String Detector ("DRY") - Aggregated Patterns

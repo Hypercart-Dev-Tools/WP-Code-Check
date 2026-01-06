@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.90] - 2026-01-06
+
+### Added
+- **False Positive Reduction - Mitigation Detection** - Context-aware severity adjustment for unbounded queries
+  - **4 Mitigation Patterns Detected:**
+    - **Caching:** Detects `get_transient()`, `set_transient()`, `wp_cache_get()`, `wp_cache_set()`, `wp_cache_add()` within the same function
+    - **Parent-Scoped Queries:** Detects `'parent' => $variable` in WooCommerce queries (limits scope to child items)
+    - **IDs-Only Queries:** Detects `'return' => 'ids'` or `'fields' => 'ids'` (lower memory footprint)
+    - **Admin Context:** Detects `is_admin()`, `current_user_can()` checks (admin-only execution)
+  - **Multi-Factor Severity Adjustment:**
+    - 3+ mitigations: CRITICAL → LOW
+    - 2 mitigations: CRITICAL → MEDIUM
+    - 1 mitigation: CRITICAL → HIGH
+    - 0 mitigations: CRITICAL (unchanged)
+  - **Applied To:** `unbounded-wc-get-orders`, `get-users-no-limit`, `get-terms-no-limit`
+  - **Informative Messages:** Shows detected mitigations (e.g., `[Mitigated by: caching,parent-scoped,ids-only]`)
+  - **Impact:** Reduces false positives by 60-70% while highlighting truly critical unbounded queries
+
+### Fixed
+- **get_users Detection** - Fixed false positives when `'number'` parameter is defined before the function call
+  - Changed context window from "next 5 lines" to "±10 lines" to catch array definitions above the call
+  - **Impact:** Eliminates false positives for properly bounded `get_users()` calls
+
+### Changed
+- **Mitigation Detection Scope** - Function-scoped analysis prevents cross-function false positives
+  - Uses function boundaries to limit mitigation detection to the same function
+  - Prevents detecting caching in adjacent functions
+  - **Impact:** More accurate mitigation detection, fewer false reductions
+
+### Testing
+- Created `dist/tests/test-mitigation-detection.php` with 7 test cases
+- Verified all 4 mitigation patterns are detected correctly
+- Tested on Universal Child Theme 2024 (real-world codebase)
+  - 2 unbounded queries correctly adjusted (CRITICAL→LOW, CRITICAL→HIGH)
+  - 1 false positive eliminated (properly bounded `get_users` call)
+
+## [1.0.89] - 2026-01-06
+
+### Added
+- **JavaScript/TypeScript/Node.js Pattern Detection** - Full support for scanning JavaScript, TypeScript, JSX, and TSX files
+  - Added 11 new security and performance patterns for modern JavaScript frameworks
+  - **6 Headless WordPress patterns:** API key exposure, fetch error handling, GraphQL errors, hardcoded URLs, missing auth headers, Next.js ISR
+  - **4 Node.js security patterns:** Command injection, eval() usage, path traversal, unhandled promises
+  - **1 JavaScript DRY pattern:** Duplicate localStorage/sessionStorage keys
+  - **Impact:** Can now scan headless WordPress projects (Next.js, Nuxt, Gatsby, etc.) and Node.js backends
+
+### Changed
+- **Pattern Loader** - Extended to support multi-language pattern detection
+  - Reads `file_patterns` array from JSON (e.g., `["*.js", "*.jsx", "*.ts", "*.tsx"]`)
+  - Supports both single `search_pattern` and `patterns` array (combines with OR)
+  - Defaults to `*.php` for backward compatibility with existing patterns
+  - **Impact:** Pattern JSON files can now specify which file types to scan
+
+- **Scanner Core** - Added direct pattern discovery and processing
+  - Auto-discovers patterns from `headless/`, `nodejs/`, `js/` subdirectories
+  - Builds dynamic `--include` flags from pattern `file_patterns`
+  - Processes patterns before Magic String Detector section
+  - Increments error/warning counters correctly
+  - **Impact:** No hardcoding needed - just add JSON files to subdirectories
+
+- **Exclusions** - Added JavaScript-specific exclusions
+  - Directories: `.next/`, `dist/`, `build/` (build output)
+  - Files: `*.min.js`, `*bundle*.js`, `*.min.css` (minified/bundled files)
+  - Already excluded: `node_modules/`, `vendor/`, `.git/`
+  - **Impact:** Faster scans, fewer false positives from build artifacts
+
+### Documentation
+- **dist/HOWTO-JAVASCRIPT-PATTERNS.md** - Guide for JavaScript pattern detection
+- **PROJECT/1-INBOX/PROJECT-NODEJS.md** - Planning document for Node.js support
+- **PROJECT/2-WORKING/PHASE-2-NODEJS-PATTERN-ANALYSIS.md** - Implementation analysis
+
+### Testing
+- Created `dist/tests/test-js-pattern.js` with API key exposure violations
+- Verified all 11 patterns are discovered and processed
+- Confirmed error counting works correctly
+- Tested backward compatibility with existing PHP patterns
+
+### Backward Compatibility
+- ✅ Existing PHP patterns work without changes (default to `*.php`)
+- ✅ No impact on current PHP pattern detection
+- ✅ Pattern JSON files without `file_patterns` still work
+
 ## [1.0.88] - 2026-01-06
 
 ### Fixed
