@@ -4014,6 +4014,101 @@ profile_start "MAGIC_STRING_DETECTOR"
 section_start "Magic String Detector"
 
 # ============================================================================
+# Direct Pattern Detection (JavaScript/Node.js/Headless WordPress)
+# ============================================================================
+# Process patterns with detection_type: "direct" from JSON files
+# These are typically single-file checks (not aggregated across files)
+
+# Find all direct patterns from headless/, nodejs/, and js/ subdirectories
+DIRECT_PATTERNS=$(find "$REPO_ROOT/patterns/headless" "$REPO_ROOT/patterns/nodejs" "$REPO_ROOT/patterns/js" -name "*.json" -type f 2>/dev/null | while read -r pattern_file; do
+  detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ "$detection_type" = "direct" ]; then
+    echo "$pattern_file"
+  fi
+done)
+
+if [ -n "$DIRECT_PATTERNS" ]; then
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo "${BLUE}  JAVASCRIPT/NODE.JS/HEADLESS WORDPRESS CHECKS${NC}"
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo ""
+
+  # Process each direct pattern
+  while IFS= read -r pattern_file; do
+    [ -z "$pattern_file" ] && continue
+
+    # Load pattern metadata
+    if load_pattern "$pattern_file"; then
+      # Get severity with fallback
+      check_severity=$(get_severity "$pattern_id" "$pattern_severity")
+      check_color="${YELLOW}"
+      if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then check_color="${RED}"; fi
+
+      text_echo "${BLUE}▸ $pattern_title ${check_color}[$check_severity]${NC}"
+
+      # Build --include flags from pattern_file_patterns
+      include_args=""
+      for ext in $pattern_file_patterns; do
+        include_args="$include_args --include=$ext"
+      done
+
+      # Run grep with the pattern
+      matches=""
+      match_count=0
+      matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+
+      if [ -n "$matches" ]; then
+        match_count=$(echo "$matches" | grep -c . 2>/dev/null)
+        match_count=${match_count:-0}
+      fi
+
+      if [ "$match_count" -gt 0 ]; then
+        text_echo "${check_color}  ⚠ Found $match_count violation(s)${NC}"
+
+        # Increment error/warning counters
+        if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then
+          ((ERRORS++))
+        else
+          ((WARNINGS++))
+        fi
+
+        # Add to findings for JSON output
+        while IFS= read -r match; do
+          [ -z "$match" ] && continue
+
+          file=$(echo "$match" | cut -d: -f1)
+          line=$(echo "$match" | cut -d: -f2)
+          code=$(echo "$match" | cut -d: -f3-)
+
+          # Add to JSON findings (using same format as run_check)
+          FINDINGS_JSON="$FINDINGS_JSON
+  {\"id\":\"$pattern_id\",\"severity\":\"error\",\"impact\":\"$check_severity\",\"file\":\"$file\",\"line\":$line,\"message\":\"$pattern_title\",\"code\":$(echo "$code" | jq -Rs .)},"
+
+          # Show in text output if not too many
+          if [ "$match_count" -le 10 ]; then
+            text_echo "  ${check_color}→ $file:$line${NC}"
+            if [ "$CONTEXT_LINES" -gt 0 ]; then
+              text_echo "    ${code:0:100}"
+            fi
+          fi
+        done <<< "$matches"
+
+        if [ "$match_count" -gt 10 ]; then
+          text_echo "  ${check_color}  (showing first 10 of $match_count violations)${NC}"
+        fi
+
+        # Add to JSON checks summary
+        add_json_check "$pattern_title" "$check_severity" "failed" "$match_count"
+      else
+        text_echo "${GREEN}  ✓ Passed${NC}"
+        add_json_check "$pattern_title" "$check_severity" "passed" 0
+      fi
+      text_echo ""
+    fi
+  done <<< "$DIRECT_PATTERNS"
+fi
+
+# ============================================================================
 # Magic String Detector ("DRY") - Aggregated Patterns
 # ============================================================================
 
