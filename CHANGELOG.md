@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.87] - 2026-01-06
+
+### Added
+- **Python HTML Report Generator** - Standalone Python script for reliable HTML report generation
+  - Added `dist/bin/json-to-html.py` - Python 3 script to convert JSON logs to HTML reports
+  - Added `dist/bin/json-to-html.sh` - Bash wrapper for Python generator (backward compatibility)
+  - Added `dist/bin/templates/report-template.html` - HTML template for report generation
+  - **Impact:** More reliable HTML generation, can regenerate reports from existing JSON logs
+  - **Benefits:** No bash subprocess issues, faster execution, better error handling
+  - **Usage:** `python3 dist/bin/json-to-html.py <input.json> <output.html>`
+
+### Changed
+- **HTML Report Generation** - Switched from bash to Python for better reliability
+  - Main scanner now calls Python generator instead of inline bash function
+  - Requires Python 3.6+ (gracefully skips HTML generation if not available)
+  - Auto-opens generated report in browser (macOS/Linux)
+  - Shows detailed progress and file size information
+  - **Impact:** Eliminates HTML generation timeouts and subprocess hangs
+
+### Documentation
+- **AGENTS.md** - Added JSON to HTML Report Conversion section
+  - Documents when to use the Python generator
+  - Provides usage examples and troubleshooting tips
+  - Explains integration with main scanner
+- **dist/TEMPLATES/_AI_INSTRUCTIONS.md** - Updated with Python generator guidance
+
 ## [1.0.86] - 2026-01-06
 
 ### Added

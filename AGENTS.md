@@ -41,6 +41,50 @@ This project includes a **Project Templates** feature (alpha) that allows users 
 
 ---
 
+### JSON to HTML Report Conversion
+
+This project includes a **standalone JSON-to-HTML converter** (`dist/bin/json-to-html.py`) that converts scan logs to beautiful HTML reports. This tool is designed for reliability and should be used when the main scanner's HTML generation stalls or fails.
+
+**When to use:**
+- The main scan completes but HTML report generation hangs or times out
+- You need to regenerate an HTML report from an existing JSON log
+- The user explicitly asks to convert a JSON log to HTML
+
+**Usage:**
+```bash
+python3 dist/bin/json-to-html.py <input.json> <output.html>
+```
+
+**Example:**
+```bash
+# Convert a specific JSON log to HTML
+python3 dist/bin/json-to-html.py dist/logs/2026-01-05-032317-UTC.json dist/reports/my-report.html
+
+# Find the latest JSON log and convert it
+latest_json=$(ls -t dist/logs/*.json | head -1)
+python3 dist/bin/json-to-html.py "$latest_json" dist/reports/latest-report.html
+```
+
+**Features:**
+- ✅ **Fast & Reliable** - Python-based, no bash subprocess issues
+- ✅ **Standalone** - Works independently of the main scanner
+- ✅ **Auto-opens** - Automatically opens the report in your browser (macOS/Linux)
+- ✅ **No Dependencies** - Uses only Python 3 standard library
+- ✅ **Detailed Output** - Shows progress and file size
+
+**Troubleshooting:**
+- If the script fails, check that Python 3 is installed: `python3 --version`
+- If the template is missing, ensure `dist/bin/templates/report-template.html` exists
+- If JSON is invalid, validate it with: `jq empty <file.json>`
+
+**Integration:**
+The main scanner (`check-performance.sh`) automatically calls this converter when using `--format json`. If you encounter issues with HTML generation during a scan, you can:
+1. Let the scan complete (JSON will be saved)
+2. Manually run the converter on the saved JSON log
+3. Report the issue so the integration can be improved
+
+---
+
 ## 🔐 Security
 
 - [ ] **Sanitize all inputs** using WordPress functions (`sanitize_text_field()`, `sanitize_email()`, `absint()`, etc.)

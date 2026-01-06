@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.86
+# Version: 1.0.87
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.86"
+SCRIPT_VERSION="1.0.87"
 
 # Defaults
 PATHS="."
@@ -4155,17 +4155,18 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
     REPORT_TIMESTAMP=$(timestamp_filename)
     HTML_REPORT="$REPORTS_DIR/$REPORT_TIMESTAMP.html"
 
-    # Generate the HTML report
-    if generate_html_report "$JSON_OUTPUT" "$HTML_REPORT" "$LOG_FILE"; then
-      echo "" >&2
-      echo "📊 HTML Report: $HTML_REPORT" >&2
-
-      # Auto-open in browser (macOS/Linux)
-      if command -v open &> /dev/null; then
-        open "$HTML_REPORT" 2>/dev/null || true
-      elif command -v xdg-open &> /dev/null; then
-        xdg-open "$HTML_REPORT" 2>/dev/null || true
+    # Generate the HTML report using standalone Python converter
+    # This is more reliable than the inline bash function
+    if command -v python3 &> /dev/null; then
+      if "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" >&2; then
+        echo "" >&2
+        echo "📊 HTML Report: $HTML_REPORT" >&2
+      else
+        echo "⚠ HTML report generation failed (Python converter error)" >&2
       fi
+    else
+      echo "⚠ HTML report generation skipped (python3 not found)" >&2
+      echo "   Install Python 3 to enable HTML reports" >&2
     fi
   fi
 else
