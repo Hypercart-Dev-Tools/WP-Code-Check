@@ -4,33 +4,42 @@ Retrieve following from other branch that were not merged.
 
 ## 🍒 Cherry-Pick Tasks (from `fix/split-off-html-generator` branch)
 
-### 1. Python HTML Report Generator
+### 1. Python HTML Report Generator ✅ **COMPLETED**
 **Branch:** `fix/split-off-html-generator`
 **Commit:** `713e903` - "Convert HTML generation to Python"
 **Priority:** Medium
 **Effort:** 1-2 hours (includes testing)
+**Completed:** 2026-01-06
+**Version:** v1.0.87
 
 **What it adds:**
 - `dist/bin/json-to-html.py` - Python script to convert JSON reports to HTML
 - `dist/bin/json-to-html.sh` - Bash wrapper for the Python generator
+- `dist/bin/templates/report-template.html` - HTML template for report generation
 - More maintainable than current bash-based HTML generation
 - Can generate HTML from existing JSON files (useful for re-generating reports)
 
 **Files modified:**
-- `AGENTS.md` (+44 lines)
-- `dist/TEMPLATES/_AI_INSTRUCTIONS.md` (+119 lines)
-- `dist/bin/check-performance.sh` (+21 lines - switches to Python generator)
+- `AGENTS.md` (+44 lines) - Added JSON to HTML conversion documentation
+- `dist/TEMPLATES/_AI_INSTRUCTIONS.md` (+119 lines) - Updated with Python generator guidance
+- `dist/bin/check-performance.sh` (+21 lines) - Switches to Python generator
+- `CHANGELOG.md` - Documented v1.0.87 changes
 
-**Conflicts to resolve:**
-- `dist/bin/check-performance.sh` - Both branches modified this heavily
-- Will need to manually extract and integrate Python generator call into current version
+**Resolution:**
+- ✅ Cherry-picked successfully with `--no-commit`
+- ✅ No conflicts - auto-merged cleanly
+- ✅ Added missing template file from commit
+- ✅ Tested with clean JSON - works perfectly
+- ✅ Updated version to 1.0.87
+- ✅ Committed to `feature/switch-html-generator-python-2026-01-06` branch
 
-**When to do this:**
-- After Phase 2-3 stability work is complete
-- When we want better HTML report maintainability
-- If users request ability to regenerate HTML from JSON
+**Testing:**
+- ✅ Python generator tested with `dist/logs/test-clean.json`
+- ✅ HTML report generated successfully (18.2K)
+- ✅ Auto-opens in browser
+- ✅ Shows detailed progress and file size
 
-- [ ] Status: **Not started**
+- [x] Status: **Complete** (commit 1a9b40b)
 
 ---
 

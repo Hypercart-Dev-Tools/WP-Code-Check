@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.88] - 2026-01-06
+
+### Fixed
+- **JSON Output Corruption** - Fixed bash error messages being prepended/appended to JSON logs
+  - Fixed line 1709: Removed redundant `|| echo "0"` that caused duplicate output in `match_count`
+  - Added `match_count=${match_count:-0}` to ensure valid integer value
+  - Redirected Python HTML generator output to `/dev/tty` instead of stderr
+  - **Impact:** JSON logs are now valid and can be parsed without manual cleanup
+  - **Before:** JSON files had error message `/dist/bin/check-performance.sh: line 1713: [: 0\n0: integer expression expected` prepended
+  - **After:** Clean JSON output starting with `{` and ending with `}`
+
+### Technical Details
+- **Root Cause:** `grep -c .` returns "0" when no matches, but `|| echo "0"` also executed, resulting in "0\n0"
+- **Integer Comparison:** Line 1713 comparison `[ "$match_count" -gt "$((MAX_FILES * 10))" ]` failed with non-integer value
+- **Output Redirection:** Python generator stderr was captured by `exec 2>&1` on line 616, mixing with JSON output
+- **Solution:** Removed redundant fallback, added parameter expansion, and redirected to `/dev/tty`
+
+## [1.0.87] - 2026-01-06
+
+### Added
+- **Python HTML Report Generator** - Standalone Python script for reliable HTML report generation
+  - Added `dist/bin/json-to-html.py` - Python 3 script to convert JSON logs to HTML reports
+  - Added `dist/bin/json-to-html.sh` - Bash wrapper for Python generator (backward compatibility)
+  - Added `dist/bin/templates/report-template.html` - HTML template for report generation
+  - **Impact:** More reliable HTML generation, can regenerate reports from existing JSON logs
+  - **Benefits:** No bash subprocess issues, faster execution, better error handling
+  - **Usage:** `python3 dist/bin/json-to-html.py <input.json> <output.html>`
+
+### Changed
+- **HTML Report Generation** - Switched from bash to Python for better reliability
+  - Main scanner now calls Python generator instead of inline bash function
+  - Requires Python 3.6+ (gracefully skips HTML generation if not available)
+  - Auto-opens generated report in browser (macOS/Linux)
+  - Shows detailed progress and file size information
+  - **Impact:** Eliminates HTML generation timeouts and subprocess hangs
+
+### Documentation
+- **AGENTS.md** - Added JSON to HTML Report Conversion section
+  - Documents when to use the Python generator
+  - Provides usage examples and troubleshooting tips
+  - Explains integration with main scanner
+- **dist/TEMPLATES/_AI_INSTRUCTIONS.md** - Updated with Python generator guidance
+
 ## [1.0.86] - 2026-01-06
 
 ### Added
