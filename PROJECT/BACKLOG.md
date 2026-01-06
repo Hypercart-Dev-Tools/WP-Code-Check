@@ -1,5 +1,7 @@
 # Backlog - Future Work
 
+Retrieve following from other branch that were not merged.
+
 ## 🍒 Cherry-Pick Tasks (from `fix/split-off-html-generator` branch)
 
 ### 1. Python HTML Report Generator
@@ -21,12 +23,14 @@
 
 **Conflicts to resolve:**
 - `dist/bin/check-performance.sh` - Both branches modified this heavily
-- Will need to manually integrate Python generator call into current version
+- Will need to manually extract and integrate Python generator call into current version
 
 **When to do this:**
 - After Phase 2-3 stability work is complete
 - When we want better HTML report maintainability
 - If users request ability to regenerate HTML from JSON
+
+- [ ] Status: **Not started**
 
 ---
 
@@ -94,6 +98,8 @@
 - ✅ **YES** - Validator files are in separate test fixture directories
 - ⚠️ **PARTIAL** - `check-performance.sh` modifications will need manual merge
 - ⚠️ **PARTIAL** - Need to test that Node.js patterns respect Phase 1 safeguards
+
+- [ ] Status: **Not started**
 
 ---
 

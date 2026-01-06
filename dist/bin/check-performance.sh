@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.84
+# Version: 1.0.85
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.84"
+SCRIPT_VERSION="1.0.85"
 
 # Defaults
 PATHS="."
@@ -101,6 +101,14 @@ PROFILE="${PROFILE:-0}"  # Set to 1 to enable profiling
 PROFILE_DATA=()          # Array to store timing data: "operation_name:duration_ms"
 PROFILE_START_TIME=0     # Global start time for entire script
 
+# ============================================================
+# PHASE 3 PRIORITY 2: PROGRESS TRACKING (v1.0.85)
+# ============================================================
+# Track current section and display elapsed time for better UX
+
+CURRENT_SECTION=""       # Name of currently running section
+SECTION_START_TIME=0     # Start time of current section (seconds since epoch)
+
 # Start profiling timer for a named operation
 # Usage: profile_start "operation_name"
 profile_start() {
@@ -122,6 +130,38 @@ profile_end() {
     fi
     PROFILE_SECTION_START=0
   fi
+}
+
+# Start tracking a section (shows section name and starts timer)
+# Usage: section_start "Section Name"
+section_start() {
+  local section_name="$1"
+  CURRENT_SECTION="$section_name"
+  SECTION_START_TIME=$(date +%s 2>/dev/null || echo "0")
+
+  # Display section name
+  text_echo "${BLUE}→ Starting: ${section_name}${NC}"
+}
+
+# Display elapsed time for current section
+# Usage: section_progress (call periodically during long operations)
+section_progress() {
+  if [ "$SECTION_START_TIME" != "0" ] && [ -n "$CURRENT_SECTION" ]; then
+    local current_time=$(date +%s 2>/dev/null || echo "0")
+    if [ "$current_time" != "0" ]; then
+      local elapsed=$((current_time - SECTION_START_TIME))
+      if [ "$elapsed" -gt 0 ]; then
+        text_echo "  ${BLUE}⏱  ${CURRENT_SECTION}: ${elapsed}s elapsed...${NC}"
+      fi
+    fi
+  fi
+}
+
+# End section tracking
+# Usage: section_end
+section_end() {
+  CURRENT_SECTION=""
+  SECTION_START_TIME=0
 }
 
 # Print profiling report at end of script
@@ -1837,6 +1877,8 @@ process_clone_detection() {
   debug_echo "Extracting functions from PHP files..."
 
   local file_iteration=0
+  local last_progress_time=$(date +%s 2>/dev/null || echo "0")
+
   safe_file_iterator "$php_files" | while IFS= read -r file; do
     [ -z "$file" ] && continue
 
@@ -1845,6 +1887,17 @@ process_clone_detection() {
     if [ "$MAX_CLONE_FILES" -gt 0 ] && [ "$file_iteration" -gt "$MAX_CLONE_FILES" ]; then
       debug_echo "Max clone file limit reached, stopping extraction"
       break
+    fi
+
+    # PROGRESS: Show progress every 10 seconds
+    local current_time=$(date +%s 2>/dev/null || echo "0")
+    if [ "$current_time" != "0" ] && [ "$last_progress_time" != "0" ]; then
+      local time_diff=$((current_time - last_progress_time))
+      if [ "$time_diff" -ge 10 ]; then
+        section_progress
+        text_echo "  ${BLUE}  Processing file $file_iteration of $file_count...${NC}"
+        last_progress_time=$current_time
+      fi
     fi
 
     # Extract functions using grep with Perl regex
@@ -1899,8 +1952,11 @@ process_clone_detection() {
   # Aggregate by hash
   debug_echo "Aggregating by hash..."
   local unique_hashes=$(cut -d'|' -f1 "$temp_functions" | sort -u)
+  local total_hashes=$(echo "$unique_hashes" | wc -l | tr -d ' ')
 
   local hash_iteration=0
+  local last_hash_progress_time=$(date +%s 2>/dev/null || echo "0")
+
   while IFS= read -r hash; do
     [ -z "$hash" ] && continue
 
@@ -1909,6 +1965,17 @@ process_clone_detection() {
     if [ "$MAX_LOOP_ITERATIONS" -gt 0 ] && [ "$hash_iteration" -gt "$MAX_LOOP_ITERATIONS" ]; then
       text_echo "  ${RED}⚠ Max hash aggregation iterations ($MAX_LOOP_ITERATIONS) reached - truncating results${NC}"
       break
+    fi
+
+    # PROGRESS: Show progress every 10 seconds during hash aggregation
+    local current_time=$(date +%s 2>/dev/null || echo "0")
+    if [ "$current_time" != "0" ] && [ "$last_hash_progress_time" != "0" ]; then
+      local time_diff=$((current_time - last_hash_progress_time))
+      if [ "$time_diff" -ge 10 ]; then
+        section_progress
+        text_echo "  ${BLUE}  Analyzing hash $hash_iteration of $total_hashes...${NC}"
+        last_hash_progress_time=$current_time
+      fi
     fi
 
     # Count files and total occurrences for this hash
@@ -2198,6 +2265,7 @@ if [ "$PROFILE" = "1" ]; then
 fi
 
 profile_start "CRITICAL_CHECKS"
+section_start "Critical Checks"
 text_echo "${RED}━━━ CRITICAL CHECKS (will fail build) ━━━${NC}"
 text_echo ""
 
@@ -3263,8 +3331,10 @@ else
 fi
 text_echo ""
 
+section_end
 profile_end "CRITICAL_CHECKS"
 profile_start "WARNING_CHECKS"
+section_start "Warning Checks"
 
 text_echo "${YELLOW}━━━ WARNING CHECKS (review recommended) ━━━${NC}"
 text_echo ""
@@ -3902,8 +3972,10 @@ else
 fi
 text_echo ""
 
+section_end
 profile_end "WARNING_CHECKS"
 profile_start "MAGIC_STRING_DETECTOR"
+section_start "Magic String Detector"
 
 # ============================================================================
 # Magic String Detector ("DRY") - Aggregated Patterns
@@ -3961,8 +4033,10 @@ else
   done <<< "$AGGREGATED_PATTERNS"
 fi
 
+section_end
 profile_end "MAGIC_STRING_DETECTOR"
 profile_start "FUNCTION_CLONE_DETECTOR"
+section_start "Function Clone Detector"
 
 # ============================================================================
 # Function Clone Detector - Clone Detection Patterns
@@ -4104,6 +4178,7 @@ fi
 # ============================================================
 # PROFILING REPORT
 # ============================================================
+section_end
 profile_end "FUNCTION_CLONE_DETECTOR"
 profile_report
 

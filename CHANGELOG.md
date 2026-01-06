@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.85] - 2026-01-06
+
+### Added
+- **Phase 3 Priority 2: Progress Tracking** - Added real-time progress indicators for better UX
+  - Added `section_start()`, `section_progress()`, and `section_end()` helper functions
+  - Display current section name when starting each major section (Critical Checks, Warning Checks, etc.)
+  - Show elapsed time every 10 seconds during long operations
+  - Added progress updates during clone detection file processing ("Processing file X of Y...")
+  - Added progress updates during hash aggregation ("Analyzing hash X of Y...")
+  - **Impact:** Users can now see what's happening during long scans, reducing perceived wait time
+
+### Changed
+- **Section Progress Display** - All major sections now show start/end markers
+  - Critical Checks section shows "→ Starting: Critical Checks"
+  - Warning Checks section shows "→ Starting: Warning Checks"
+  - Magic String Detector shows "→ Starting: Magic String Detector"
+  - Function Clone Detector shows "→ Starting: Function Clone Detector"
+  - Elapsed time displayed as "⏱ Section Name: Xs elapsed..." every 10 seconds
+  - **Impact:** Better visibility into scan progress, easier to diagnose slow sections
+
 ## [1.0.84] - 2026-01-06
 
 ### Added
