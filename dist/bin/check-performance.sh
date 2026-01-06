@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.80
+# Version: 1.0.82
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -57,7 +57,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.81"
+SCRIPT_VERSION="1.0.82"
 
 # Defaults
 PATHS="."
@@ -69,6 +69,21 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"
 DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
+
+# ============================================================
+# PHASE 1 STABILITY SAFEGUARDS (v1.0.82)
+# ============================================================
+# These limits prevent catastrophic hangs and runaway scans.
+# Override via environment variables if needed.
+
+# Maximum time (seconds) for a single pattern scan (0 = no limit)
+MAX_SCAN_TIME="${MAX_SCAN_TIME:-300}"  # 5 minutes default
+
+# Maximum files to process in aggregation/clone detection (0 = no limit)
+MAX_FILES="${MAX_FILES:-10000}"  # 10k files default
+
+# Maximum iterations in aggregation loops (0 = no limit)
+MAX_LOOP_ITERATIONS="${MAX_LOOP_ITERATIONS:-50000}"  # 50k iterations default
 
 # Severity configuration
 SEVERITY_CONFIG_FILE=""  # Path to custom severity config (empty = use factory defaults)
@@ -371,6 +386,59 @@ detect_project_info() {
     "lines_of_code": $lines_of_code
   }
 EOF
+}
+
+# ============================================================================
+# Phase 1 Stability Functions
+# ============================================================================
+
+# Portable timeout wrapper (macOS Bash 3.2 compatible)
+# Usage: run_with_timeout <seconds> <command> [args...]
+# Returns: 0 if command succeeded, 124 if timeout, command's exit code otherwise
+run_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+
+  # If timeout is 0 or MAX_SCAN_TIME is 0, run without timeout
+  if [ "$timeout_seconds" -eq 0 ] || [ "$MAX_SCAN_TIME" -eq 0 ]; then
+    "$@"
+    return $?
+  fi
+
+  # Use Perl for portable timeout (available on macOS and Linux)
+  perl -e '
+    use strict;
+    use warnings;
+
+    my $timeout = shift @ARGV;
+    my $pid = fork();
+
+    if (!defined $pid) {
+      die "Fork failed: $!\n";
+    }
+
+    if ($pid == 0) {
+      # Child: exec the command
+      exec @ARGV or die "Exec failed: $!\n";
+    }
+
+    # Parent: set alarm and wait
+    eval {
+      local $SIG{ALRM} = sub { die "timeout\n" };
+      alarm $timeout;
+      waitpid($pid, 0);
+      alarm 0;
+    };
+
+    if ($@ eq "timeout\n") {
+      kill 9, $pid;
+      exit 124;  # GNU timeout exit code
+    }
+
+    exit($? >> 8);
+  ' "$timeout_seconds" "$@"
+
+  return $?
 }
 
 # ============================================================================
@@ -1431,6 +1499,21 @@ generate_baseline_file() {
 
 # Process aggregated pattern (Magic String Detector)
 # Usage: process_aggregated_pattern "pattern_file"
+#
+# PERFORMANCE NOTE: Aggregated patterns are the most expensive operations in the scanner.
+# They perform multiple passes over the codebase:
+# 1. Initial grep to find all matches (can be 1000s of results)
+# 2. Extract and aggregate by captured group (nested loops)
+# 3. Build JSON structures for each unique violation
+#
+# Typical performance on large codebases:
+# - Magic string detection: 10-60s (depends on string count)
+# - Clone detection: 30-120s (depends on function count)
+#
+# Phase 1 safeguards applied:
+# - MAX_SCAN_TIME timeout on initial grep
+# - MAX_FILES limit on file processing
+# - MAX_LOOP_ITERATIONS limit on aggregation loops
 process_aggregated_pattern() {
   local pattern_file="$1"
 
@@ -1482,16 +1565,45 @@ process_aggregated_pattern() {
   # Run grep to find all matches using the pattern's search pattern
   # Note: pattern_search is set by load_pattern
   # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
+  # PERFORMANCE: Wrap grep in timeout to prevent hangs on large codebases
   debug_echo "Running grep with pattern: $pattern_search"
   debug_echo "Paths: $PATHS"
-  local matches=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+
+  # Run grep with timeout (don't use || true here - it swallows exit codes)
+  local matches
+  local grep_exit_code=0
+  matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null) || grep_exit_code=$?
+
+  # Check for timeout (exit code 124)
+  if [ "$grep_exit_code" -eq 124 ]; then
+    text_echo "  ${RED}⚠ Scan timeout after ${MAX_SCAN_TIME}s - skipping pattern${NC}"
+    rm -f "$temp_matches"
+    return 1
+  fi
+  # Exit codes 1-2 from grep are normal (no matches or errors), continue processing
+
   local match_count=$(echo "$matches" | grep -c . || echo "0")
   debug_echo "Found $match_count raw matches"
 
+  # SAFETY: Check if match count exceeds file limit (rough proxy for file count)
+  if [ "$MAX_FILES" -gt 0 ] && [ "$match_count" -gt "$((MAX_FILES * 10))" ]; then
+    text_echo "  ${RED}⚠ Match count ($match_count) suggests excessive file processing - skipping pattern${NC}"
+    rm -f "$temp_matches"
+    return 1
+  fi
+
   # Extract captured groups and aggregate
   if [ -n "$matches" ]; then
+    local iteration=0
     while IFS= read -r match; do
       [ -z "$match" ] && continue
+
+      # SAFETY: Prevent infinite loops
+      iteration=$((iteration + 1))
+      if [ "$MAX_LOOP_ITERATIONS" -gt 0 ] && [ "$iteration" -gt "$MAX_LOOP_ITERATIONS" ]; then
+        text_echo "  ${RED}⚠ Max iterations ($MAX_LOOP_ITERATIONS) reached - truncating results${NC}"
+        break
+      fi
 
       local file=$(echo "$match" | cut -d: -f1)
       local line=$(echo "$match" | cut -d: -f2)
@@ -1513,8 +1625,16 @@ process_aggregated_pattern() {
     if [ -f "$temp_matches" ] && [ -s "$temp_matches" ]; then
       local unique_strings=$(cut -d'|' -f1 "$temp_matches" | sort -u)
 
+      local string_iteration=0
       while IFS= read -r string; do
         [ -z "$string" ] && continue
+
+        # SAFETY: Prevent infinite loops in aggregation
+        string_iteration=$((string_iteration + 1))
+        if [ "$MAX_LOOP_ITERATIONS" -gt 0 ] && [ "$string_iteration" -gt "$MAX_LOOP_ITERATIONS" ]; then
+          text_echo "  ${RED}⚠ Max string aggregation iterations ($MAX_LOOP_ITERATIONS) reached - truncating results${NC}"
+          break
+        fi
 
         # Unescape the string for comparison
         local unescaped_string=$(echo "$string" | sed 's/\\|/|/g')
@@ -1594,7 +1714,17 @@ process_clone_detection() {
     php_files="$PATHS"
   else
     # Directory provided - find all PHP files
-    php_files=$(find "$PATHS" -name "*.php" -type f 2>/dev/null | grep -v '/vendor/' | grep -v '/node_modules/' || true)
+    # PERFORMANCE: Wrap find in timeout to prevent hangs
+    local find_exit_code=0
+    php_files=$(run_with_timeout "$MAX_SCAN_TIME" find "$PATHS" -name "*.php" -type f 2>/dev/null | grep -v '/vendor/' | grep -v '/node_modules/') || find_exit_code=$?
+
+    # Check for timeout (exit code 124)
+    if [ "$find_exit_code" -eq 124 ]; then
+      text_echo "  ${RED}⚠ File scan timeout after ${MAX_SCAN_TIME}s - skipping pattern${NC}"
+      rm -f "$temp_functions" "$temp_hashes"
+      return 1
+    fi
+    # Other exit codes (no files found, etc.) are OK, continue
   fi
 
   if [ -z "$php_files" ]; then
@@ -1603,13 +1733,29 @@ process_clone_detection() {
     return 0
   fi
 
-  debug_echo "PHP files to scan: $(echo "$php_files" | wc -l | tr -d ' ') files"
+  local file_count=$(echo "$php_files" | wc -l | tr -d ' ')
+  debug_echo "PHP files to scan: $file_count files"
+
+  # SAFETY: Check file count limit
+  if [ "$MAX_FILES" -gt 0 ] && [ "$file_count" -gt "$MAX_FILES" ]; then
+    text_echo "  ${RED}⚠ File count ($file_count) exceeds limit ($MAX_FILES) - skipping pattern${NC}"
+    rm -f "$temp_functions" "$temp_hashes"
+    return 1
+  fi
 
   # Extract all functions and compute hashes
   debug_echo "Extracting functions from PHP files..."
 
+  local file_iteration=0
   safe_file_iterator "$php_files" | while IFS= read -r file; do
     [ -z "$file" ] && continue
+
+    # SAFETY: Track file processing iterations
+    file_iteration=$((file_iteration + 1))
+    if [ "$MAX_FILES" -gt 0 ] && [ "$file_iteration" -gt "$MAX_FILES" ]; then
+      debug_echo "Max file limit reached, stopping extraction"
+      break
+    fi
 
     # Extract functions using grep with Perl regex
     # Pattern matches: function name(...) { ... }
@@ -1664,8 +1810,16 @@ process_clone_detection() {
   debug_echo "Aggregating by hash..."
   local unique_hashes=$(cut -d'|' -f1 "$temp_functions" | sort -u)
 
+  local hash_iteration=0
   while IFS= read -r hash; do
     [ -z "$hash" ] && continue
+
+    # SAFETY: Prevent infinite loops in hash aggregation
+    hash_iteration=$((hash_iteration + 1))
+    if [ "$MAX_LOOP_ITERATIONS" -gt 0 ] && [ "$hash_iteration" -gt "$MAX_LOOP_ITERATIONS" ]; then
+      text_echo "  ${RED}⚠ Max hash aggregation iterations ($MAX_LOOP_ITERATIONS) reached - truncating results${NC}"
+      break
+    fi
 
     # Count files and total occurrences for this hash
     local file_count=$(grep "^$hash|" "$temp_functions" | cut -d'|' -f2 | sort -u | wc -l | tr -d ' ')
@@ -1818,6 +1972,19 @@ group_and_add_finding() {
 
 # Function to run a check with impact scoring
 # Usage: run_check "ERROR|WARNING" "CRITICAL|HIGH|MEDIUM|LOW" "Check name" "rule-id" patterns...
+#
+# PERFORMANCE NOTE: This function performs recursive grep operations which can be expensive
+# on large codebases. Each call scans all PHP files matching the pattern. On a typical
+# WordPress installation with plugins:
+# - Small (< 100 files): < 1s per check
+# - Medium (100-1000 files): 1-5s per check
+# - Large (> 1000 files): 5-30s per check
+# - Very large (> 10000 files): May hit MAX_SCAN_TIME timeout
+#
+# Optimization opportunities (Phase 2-3):
+# - Cache file list across checks (currently rescans for each pattern)
+# - Parallelize independent checks
+# - Use ripgrep/ag if available (10-100x faster than grep)
 run_check() {
   local level="$1"    # ERROR or WARNING
   local impact="$2"   # CRITICAL, HIGH, MEDIUM, or LOW

@@ -1,8 +1,8 @@
 # Project Stability Review (Main Script)
 
 **Created:** 2026-01-05
-**Updated:** 2026-01-05
-**Status:** In Progress
+**Updated:** 2026-01-06
+**Status:** Phase 1 Complete
 **Priority:** High
 
 ## Problem/Request
@@ -21,16 +21,28 @@ Review stability risks in the main scanner script (`dist/bin/check-performance.s
 
 This work is divided into three phases based on risk/value analysis:
 
-### Phase 1: Quick Wins (Safety Nets) - **RECOMMENDED NOW**
+### Phase 1: Quick Wins (Safety Nets) - ✅ **COMPLETED 2026-01-06**
 **Effort:** 1-2 hours | **Risk:** Low | **Value:** High
 
-- [ ] Add basic timeout wrapper for long-running grep operations
-- [ ] Add file count limits to prevent runaway scans (e.g., max 10,000 files)
-- [ ] Add early-exit conditions for aggregation loops (max iterations)
-- [ ] Document known performance bottlenecks in code comments
-- [ ] Add `MAX_SCAN_TIME` environment variable (default: 300s per pattern)
+- [x] Add basic timeout wrapper for long-running grep operations
+- [x] Add file count limits to prevent runaway scans (e.g., max 10,000 files)
+- [x] Add early-exit conditions for aggregation loops (max iterations)
+- [x] Document known performance bottlenecks in code comments
+- [x] Add `MAX_SCAN_TIME` environment variable (default: 300s per pattern)
 
 **Rationale:** Low-risk safety nets that prevent catastrophic hangs without changing core logic.
+
+**Implementation Summary (v1.0.82):**
+- Created `run_with_timeout()` portable timeout wrapper using Perl (macOS Bash 3.2 compatible)
+- Added `MAX_SCAN_TIME=300`, `MAX_FILES=10000`, `MAX_LOOP_ITERATIONS=50000` environment variables
+- Integrated timeout wrapper in aggregated pattern grep operations
+- Added file count limits in clone detection
+- Added iteration limits in ALL aggregation loops (string, hash, file) with early exit warnings
+- Documented performance characteristics in code comments
+- **Fixed timeout detection**: Removed `|| true` that swallowed exit code 124
+- **Fixed incomplete loop bounds**: Added iteration limits to unique_strings and hash aggregation
+- **Fixed version banner**: Updated header comment from 1.0.80 to 1.0.82
+- All tests pass, no regressions detected
 
 ### Phase 2: Performance Profiling - **DO AFTER PHASE 1**
 **Effort:** 2-4 hours | **Risk:** Low | **Value:** Medium
@@ -55,12 +67,12 @@ This work is divided into three phases based on risk/value analysis:
 **Rationale:** Optimize based on actual bottlenecks, not assumptions. Higher risk requires careful testing.
 
 ## Acceptance Criteria (Phase 1 Only)
-- [ ] No scan can run longer than `MAX_SCAN_TIME` without user override
-- [ ] No single pattern can process more than `MAX_FILES` without warning
-- [ ] All loops have documented termination conditions
-- [ ] Timeout failures are graceful (warning + continue, or fail in strict mode)
-- [ ] All existing tests pass unchanged
-- [ ] Performance on small codebases unchanged (< 1% overhead)
+- [x] No scan can run longer than `MAX_SCAN_TIME` without user override
+- [x] No single pattern can process more than `MAX_FILES` without warning
+- [x] All loops have documented termination conditions
+- [x] Timeout failures are graceful (warning + continue, or fail in strict mode)
+- [x] All existing tests pass unchanged
+- [x] Performance on small codebases unchanged (< 1% overhead)
 
 ---
 

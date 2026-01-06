@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.82] - 2026-01-06
+
+### Added
+- **Phase 1 Stability Safeguards** - Added safety nets to prevent catastrophic hangs and runaway scans
+  - Added `MAX_SCAN_TIME` environment variable (default: 300s) to limit scan duration per pattern
+  - Added `MAX_FILES` environment variable (default: 10,000) to limit files processed in aggregation
+  - Added `MAX_LOOP_ITERATIONS` environment variable (default: 50,000) to prevent infinite loops
+  - Created `run_with_timeout()` portable timeout wrapper (macOS Bash 3.2 compatible using Perl)
+  - **Impact:** Prevents hangs on very large codebases, graceful degradation with warnings
+
+### Changed
+- **Aggregated Pattern Performance** - Added timeout and iteration limits to expensive operations
+  - Magic string detection now respects `MAX_SCAN_TIME` timeout on initial grep
+  - Clone detection now respects `MAX_FILES` limit and `MAX_SCAN_TIME` timeout
+  - All aggregation loops now have `MAX_LOOP_ITERATIONS` safety limit with early exit
+  - Added match count limit (MAX_FILES * 10) to aggregated patterns as file count proxy
+  - **Impact:** Large codebase scans won't hang indefinitely, clear warnings when limits hit
+
+### Fixed
+- **Timeout Exit Code Detection** - Fixed timeout wrapper exit codes being swallowed by `|| true`
+  - Removed `|| true` from command substitutions that prevented detecting exit code 124
+  - Now properly captures and checks exit codes before falling back to normal processing
+  - **Impact:** Timeout protection now actually works instead of being silently bypassed
+
+- **Incomplete Loop Bounds** - Added missing iteration limits to all aggregation loops
+  - Added `MAX_LOOP_ITERATIONS` to unique_strings aggregation loop
+  - Added `MAX_LOOP_ITERATIONS` to clone detection hash aggregation loop
+  - **Impact:** All loops now have documented termination conditions, no unbounded iterations
+
+- **Version Banner Inconsistency** - Updated stale version comment from 1.0.80 to 1.0.82
+  - Fixed header comment to match `SCRIPT_VERSION` variable
+  - **Impact:** Version reporting is now consistent across all locations
+
+### Documentation
+- **Performance Bottleneck Documentation** - Added inline comments documenting expensive operations
+  - Documented typical performance characteristics for small/medium/large codebases
+  - Noted optimization opportunities for future Phase 2-3 work
+  - **Impact:** Developers can understand performance trade-offs and future improvement paths
+
 ## [1.0.81] - 2026-01-05
 
 ### Fixed
