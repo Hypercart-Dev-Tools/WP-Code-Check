@@ -28,7 +28,7 @@ load_pattern() {
   pattern_title=$(grep '"title"' "$pattern_file" | head -1 | sed 's/.*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
 
   # Extract search_pattern using Python for reliable JSON parsing
-  # Use stdin to avoid issues with special characters in filenames
+  # Supports both single search_pattern and patterns array
   if command -v python3 &> /dev/null; then
     pattern_search=$(python3 <<EOFPYTHON 2>/dev/null
 import json
@@ -36,19 +36,44 @@ import sys
 try:
     with open('$pattern_file', 'r') as f:
         data = json.load(f)
-        print(data['detection']['search_pattern'])
+        detection = data.get('detection', {})
+
+        # Check for single search_pattern first (backward compatibility)
+        if 'search_pattern' in detection:
+            print(detection['search_pattern'])
+        # Then check for patterns array (new format for multi-pattern rules)
+        elif 'patterns' in detection and isinstance(detection['patterns'], list):
+            # Combine all patterns with OR (|)
+            patterns = [p.get('pattern', '') for p in detection['patterns'] if 'pattern' in p]
+            if patterns:
+                # Join patterns with | for grep -E
+                print('|'.join(patterns))
+        else:
+            sys.stderr.write('No search_pattern or patterns found\\n')
+            sys.exit(1)
 except Exception as e:
-    sys.stderr.write(str(e))
+    sys.stderr.write(str(e) + '\\n')
     sys.exit(1)
 EOFPYTHON
 )
   elif command -v python &> /dev/null; then
     pattern_search=$(python <<EOFPYTHON 2>/dev/null
 import json
+import sys
 try:
     with open('$pattern_file', 'r') as f:
         data = json.load(f)
-        print data['detection']['search_pattern']
+        detection = data.get('detection', {})
+
+        if 'search_pattern' in detection:
+            print detection['search_pattern']
+        elif 'patterns' in detection and isinstance(detection['patterns'], list):
+            patterns = [p.get('pattern', '') for p in detection['patterns'] if 'pattern' in p]
+            if patterns:
+                print '|'.join(patterns)
+        else:
+            print >> sys.stderr, 'No search_pattern or patterns found'
+            sys.exit(1)
 except Exception as e:
     print >> sys.stderr, str(e)
     sys.exit(1)
@@ -64,9 +89,31 @@ EOFPYTHON
     pattern_detection_type="direct"
   fi
 
+  # Extract file_patterns array from JSON (for JavaScript/TypeScript support)
+  # Use Python for reliable JSON array parsing
+  if command -v python3 &> /dev/null; then
+    pattern_file_patterns=$(python3 <<EOFPYTHON 2>/dev/null
+import json
+try:
+    with open('$pattern_file', 'r') as f:
+        data = json.load(f)
+        file_patterns = data.get('detection', {}).get('file_patterns', [])
+        if file_patterns:
+            print(' '.join(file_patterns))
+        else:
+            print('*.php')  # Default to PHP for backward compatibility
+except Exception:
+    print('*.php')  # Fallback to PHP on error
+EOFPYTHON
+)
+  else
+    # Fallback: default to PHP if Python not available
+    pattern_file_patterns="*.php"
+  fi
+
   # Export for use in calling script
-  export pattern_id pattern_enabled pattern_detection_type pattern_category pattern_severity pattern_title pattern_search
-  
+  export pattern_id pattern_enabled pattern_detection_type pattern_category pattern_severity pattern_title pattern_search pattern_file_patterns
+
   return 0
 }
 

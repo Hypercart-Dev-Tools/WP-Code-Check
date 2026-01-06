@@ -68,7 +68,8 @@ ENABLE_LOGGING=true
 OUTPUT_FORMAT="json"  # text or json (default: json for HTML reports)
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
-EXCLUDE_DIRS="vendor node_modules .git tests"
+EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
+EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
 DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
 
@@ -352,13 +353,16 @@ debug_echo "ENABLE_LOGGING=$ENABLE_LOGGING"
 # If scanning a tests directory, remove 'tests' from exclusions
 # Use portable method (no \b word boundary which is GNU-specific)
 if echo "$PATHS" | grep -q "tests"; then
-  EXCLUDE_DIRS="vendor node_modules .git"
+  EXCLUDE_DIRS="vendor node_modules .git .next dist build"
 fi
 
 # Build exclude arguments
 EXCLUDE_ARGS=""
 for dir in $EXCLUDE_DIRS; do
   EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude-dir=$dir"
+done
+for file in $EXCLUDE_FILES; do
+  EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude=$file"
 done
 
 # ============================================================================
@@ -1692,11 +1696,18 @@ process_aggregated_pattern() {
   # PERFORMANCE: Wrap grep in timeout to prevent hangs on large codebases
   debug_echo "Running grep with pattern: $pattern_search"
   debug_echo "Paths: $PATHS"
+  debug_echo "File patterns: $pattern_file_patterns"
+
+  # Build --include flags from pattern_file_patterns (supports PHP, JS, TS, etc.)
+  local include_args=""
+  for ext in $pattern_file_patterns; do
+    include_args="$include_args --include=$ext"
+  done
 
   # Run grep with timeout (don't use || true here - it swallows exit codes)
   local matches
   local grep_exit_code=0
-  matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -rHn $EXCLUDE_ARGS --include="*.php" -E "$pattern_search" "$PATHS" 2>/dev/null) || grep_exit_code=$?
+  matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null) || grep_exit_code=$?
 
   # Check for timeout (exit code 124)
   if [ "$grep_exit_code" -eq 124 ]; then
