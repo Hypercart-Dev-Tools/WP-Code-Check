@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.86] - 2026-01-06
+
+### Added
+- **Smart N+1 Detection with Meta Caching Awareness** - Hybrid detection reduces false positives for optimized code
+  - Added `has_meta_cache_optimization()` helper function to detect WordPress meta caching APIs
+  - Detects `update_meta_cache()`, `update_postmeta_cache()`, and `update_termmeta_cache()` usage
+  - Files using meta caching are downgraded from WARNING to INFO severity
+  - Added test fixture `n-plus-one-optimized.php` with real-world optimization examples
+  - **Impact:** Properly optimized code (like KISS Woo Fast Search) no longer triggers false positive warnings
+  - **Rationale:** Encourages WordPress best practices while reducing noise for developers using proper caching
+
+### Changed
+- **N+1 Pattern Detection Logic** - Now distinguishes between optimized and unoptimized code
+  - Files WITHOUT meta caching: Standard WARNING (unchanged behavior)
+  - Files WITH meta caching: INFO severity with message "verify optimization"
+  - Console output shows: "✓ Passed (N file(s) use meta caching - likely optimized)"
+  - JSON findings include severity "info" for optimized files vs "warning" for unoptimized
+  - **Impact:** Reduces false positive noise while still alerting developers to review optimization
+  - **Note:** Static analysis cannot verify cache covers all IDs, so INFO alerts remain for manual review
+
 ## [1.0.85] - 2026-01-06
 
 ### Added
