@@ -127,6 +127,8 @@ If you're unsure whether to create a new workflow or modify `ci.yml`, ask yourse
 3. **Is this for other repos to consume?** → Create reusable workflow with `workflow_call`
 4. **Is this completely unrelated to CI?** → Maybe OK, but document why
 
+For WP Code Check's responsible disclosure and report publication policy, see `../../DISCLOSURE-POLICY.md`.
+
 ## History
 
 - **2025-12-31**: Consolidated 3 workflows into 1

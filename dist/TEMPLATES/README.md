@@ -213,6 +213,7 @@ Use templates in CI/CD pipelines:
 
 - **[HOWTO-TEMPLATES.md](../HOWTO-TEMPLATES.md)** - Detailed template guide
 - **[README.md](../README.md)** - Main documentation
+- **[Disclosure Policy](../../DISCLOSURE-POLICY.md)** - Responsible disclosure and public report publication policy
 - **[_TEMPLATE.txt](_TEMPLATE.txt)** - Reference template
 
 ---

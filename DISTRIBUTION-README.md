@@ -159,6 +159,7 @@ Use these for GitHub description and promotional materials:
 - **Issues:** GitHub Issues (once repo is public)
 - **Email:** support@hypercart.com
 - **Documentation:** README.md and dist/README.md
+- **Disclosure Policy:** DISCLOSURE-POLICY.md
 
 ---
 

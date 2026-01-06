@@ -179,4 +179,5 @@ IRL files should have **two types of annotations**:
 - `dist/tests/fixtures/` - Synthetic test cases
 - `dist/patterns/` - Pattern definitions (JSON)
 - `SAFEGUARDS.md` - Critical implementation safeguards
+- `../../../DISCLOSURE-POLICY.md` - Responsible disclosure and public report publication policy
 

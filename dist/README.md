@@ -531,6 +531,7 @@ echo "dist/logs/" >> .gitignore
 - **Repository:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check
 - **Issues:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues
 - **Documentation:** See `PROJECT/` directory for detailed guides
+- **Disclosure Policy:** See `../DISCLOSURE-POLICY.md`
 - **Contact:** noel@hypercart.io
 
 ---

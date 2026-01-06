@@ -159,6 +159,7 @@ wp-code-check:
 - **[Template Guide](dist/HOWTO-TEMPLATES.md)** - Project template system
 - **[Changelog](CHANGELOG.md)** - Version history and development progress
 - **[AI Agent Guide](AGENTS.md)** - WordPress development guidelines for AI assistants
+- **[Disclosure Policy](DISCLOSURE-POLICY.md)** - Responsible disclosure and public report publication policy
 
 ---
 
