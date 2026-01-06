@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.89
+# Version: 1.0.90
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.89"
+SCRIPT_VERSION="1.0.90"
 
 # Defaults
 PATHS="."
@@ -3283,9 +3283,11 @@ if [ -n "$USERS_MATCHES" ]; then
       continue
     fi
 
-    # Check if THIS specific get_users() call has 'number' parameter within next 5 lines
-    start_line=$lineno
-    end_line=$((lineno + 5))
+    # Check if THIS specific get_users() call has 'number' parameter within ±10 lines
+    # Look both before and after because the array might be defined before the call
+    start_line=$((lineno - 10))
+    [ "$start_line" -lt 1 ] && start_line=1
+    end_line=$((lineno + 10))
     context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
 
     # Check if 'number' parameter exists in this specific call's context

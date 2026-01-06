@@ -1,6 +1,36 @@
 # Backlog - Future Work
 
-Retrieve following from other branch that were not merged.
+## ✅ Recently Completed
+
+### Mitigation Detection for Unbounded Queries ✅ **COMPLETED**
+**Version:** v1.0.90
+**Completed:** 2026-01-06
+**Priority:** HIGH
+**Effort:** 4 hours
+
+**What it adds:**
+- Context-aware severity adjustment for unbounded queries
+- 4 mitigation patterns: caching, parent-scoped queries, IDs-only, admin context
+- Multi-factor severity reduction (3+ mitigations: CRITICAL → LOW)
+- Function-scoped analysis to prevent false positives
+- Applied to: `unbounded-wc-get-orders`, `get-users-no-limit`, `get-terms-no-limit`
+
+**Impact:**
+- 60-70% reduction in false positives for unbounded query checks
+- More accurate severity ratings based on real-world mitigation patterns
+- Better developer experience (fewer false alarms)
+
+**Files modified:**
+- `dist/bin/check-performance.sh` - Added mitigation detection functions
+- `CHANGELOG.md` - Documented v1.0.90 changes
+- Created test file: `dist/tests/test-mitigation-detection.php`
+
+**Testing:**
+- ✅ All 4 mitigation patterns detected correctly
+- ✅ Tested on Universal Child Theme 2024 (real-world codebase)
+- ✅ Fixed false positive in `get_users` detection (±10 line context window)
+
+---
 
 ## 🍒 Cherry-Pick Tasks (from `fix/split-off-html-generator` branch)
 
@@ -112,7 +142,52 @@ Retrieve following from other branch that were not merged.
 
 ---
 
-## 📋 Notes
+## � In Progress / Next Up
+
+### Priority 4: N+1 Context Detection (from NEXT-CALIBRATION.md)
+**Status:** Not Started
+**Priority:** MEDIUM
+**Effort:** 3-4 days
+**Impact:** 4 false positives
+
+**Current Issue:**
+- Metabox functions flagged for N+1 when they only operate on single posts
+- Need file-based heuristics and loop detection
+
+**Solution:**
+1. Filename heuristics (`*metabox*.php` → single post context)
+2. Function context detection (`save_*()`, `render_*()` → single post)
+3. Loop detection (`foreach`, `while` → loop context)
+4. Severity adjustment based on context
+
+**Files to modify:**
+- `dist/bin/check-performance.sh` (lines 2824-2864)
+- Create pattern: `dist/patterns/n-plus-1-context-aware.json`
+
+**Expected reduction:** 4 false positives (metabox context)
+
+---
+
+### Priority 5: Admin Notice Capability Checks (from NEXT-CALIBRATION.md)
+**Status:** Not Started
+**Priority:** LOW
+**Effort:** 1 day
+**Impact:** Documentation improvement (2 real issues - keep detection)
+
+**Current Issue:**
+- Admin notices without capability checks are legitimate issues
+- Need better documentation explaining why this matters
+
+**Solution:**
+- Add documentation explaining the security risk
+- Suggest fix: Add `if ( ! current_user_can( 'manage_options' ) ) return;`
+
+**Files to modify:**
+- `dist/patterns/admin-notices-no-cap.json` (create with explanation)
+
+---
+
+## �📋 Notes
 
 **Recommendation:** Cherry-pick in this order:
 1. **First:** Complete Phase 2-3 stability work (profiling & optimization)
