@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.84] - 2026-01-06
+
+### Added
+- **Phase 3 Clone Detection Optimizations** - Added controls to prevent clone detection timeouts
+  - Added `MAX_CLONE_FILES` environment variable (default: 100) to limit files processed in clone detection
+  - Added `--skip-clone-detection` flag to skip clone detection entirely for faster scans
+  - Added file count warning when approaching clone detection limit (80% threshold)
+  - **Impact:** Prevents timeouts on large codebases (500+ files), 90%+ faster scans when skipped
+
+### Changed
+- **Clone Detection Limits** - Separated clone detection limits from general file limits
+  - Clone detection now uses `MAX_CLONE_FILES` instead of `MAX_FILES` (more conservative default)
+  - Shows clear warning message when file count exceeds limit with instructions to override
+  - Displays progress warning when processing large file counts (>80 files)
+  - **Impact:** Clone detection is now opt-in for large codebases, prevents WooCommerce-scale timeouts
+
 ## [1.0.82] - 2026-01-06
 
 ### Added

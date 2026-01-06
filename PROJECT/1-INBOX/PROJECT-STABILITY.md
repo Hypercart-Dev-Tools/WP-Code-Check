@@ -62,16 +62,36 @@ This work is divided into three phases based on risk/value analysis:
 - Profiling data shows O(n²) complexity in clone detection (25M comparisons for WooCommerce)
 - Detailed analysis in `PROJECT/2-WORKING/PHASE-2-PERFORMANCE-PROFILING.md`
 
-### Phase 3: Optimization - **DO AFTER PHASE 2 DATA**
-**Effort:** 4-8 hours | **Risk:** Medium | **Value:** High (if bottlenecks confirmed)
+### Phase 3: Optimization - **IN PROGRESS 2026-01-06**
+**Effort:** 4-8 hours | **Risk:** Medium | **Value:** High (bottlenecks confirmed)
 
-- [ ] Optimize the slowest grep patterns (based on Phase 2 data)
+**Based on Phase 2 data, Function Clone Detector is the primary bottleneck (94% of scan time).**
+
+#### Priority 1: Optimize Function Clone Detector (HIGH IMPACT) - **IN PROGRESS**
+- [ ] Add MAX_FILES limit to clone detection (default: 100 files)
+- [ ] Add timeout wrapper around clone detection (use existing run_with_timeout)
+- [ ] Make clone detection optional with --skip-clone-detection flag
+- [ ] Add --enable-clone-detection flag (make opt-in instead of default)
+- [ ] Add file count warning when approaching limits
+
+**Expected Impact:** 90%+ reduction in scan time for large codebases, prevents timeouts
+
+#### Priority 2: Add Progress Indicators (MEDIUM IMPACT)
+- [ ] Show "Processing file X of Y..." during clone detection
+- [ ] Display elapsed time every 10 seconds for long operations
+- [ ] Show which section is currently running
+- [ ] Add spinner/progress bar for better UX
+
+**Expected Impact:** Better user experience, easier to diagnose hangs vs slow scans
+
+#### Priority 3: Additional Optimizations (LOWER PRIORITY)
 - [ ] Implement file list caching (scan once, reuse for multiple patterns)
-- [ ] Add progress indicators for long scans
+- [ ] Cache function signatures instead of re-extracting
+- [ ] Add early exit if no duplicates found in first N files
 - [ ] Parallelize independent pattern checks (if safe)
 - [ ] Add incremental scan mode (only changed files)
 
-**Rationale:** Optimize based on actual bottlenecks, not assumptions. Higher risk requires careful testing.
+**Rationale:** Optimize based on actual bottlenecks (Phase 2 data), not assumptions. Higher risk requires careful testing.
 
 ## Acceptance Criteria (Phase 1 Only)
 - [x] No scan can run longer than `MAX_SCAN_TIME` without user override

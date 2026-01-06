@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.83
+# Version: 1.0.84
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -22,6 +22,7 @@
 #   --generate-baseline      Generate .hcc-baseline from current findings
 #   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
 #   --ignore-baseline        Ignore baseline file even if present
+#   --skip-clone-detection   Skip function clone detection (faster scans)
 #   --help                   Show this help message
 
 # Note: We intentionally do NOT use 'set -e' here because:
@@ -57,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.83"
+SCRIPT_VERSION="1.0.84"
 
 # Defaults
 PATHS="."
@@ -69,6 +70,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"
 DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
+SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
 
 # ============================================================
 # PHASE 1 STABILITY SAFEGUARDS (v1.0.82)
@@ -84,6 +86,10 @@ MAX_FILES="${MAX_FILES:-10000}"  # 10k files default
 
 # Maximum iterations in aggregation loops (0 = no limit)
 MAX_LOOP_ITERATIONS="${MAX_LOOP_ITERATIONS:-50000}"  # 50k iterations default
+
+# Maximum files for clone detection (0 = no limit)
+# Clone detection has O(n²) complexity, so we limit it separately
+MAX_CLONE_FILES="${MAX_CLONE_FILES:-100}"  # 100 files default (prevents timeouts)
 
 # ============================================================
 # PHASE 2 PERFORMANCE PROFILING (v1.0.83)
@@ -258,6 +264,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ignore-baseline)
       IGNORE_BASELINE=true
+      shift
+      ;;
+    --skip-clone-detection)
+      SKIP_CLONE_DETECTION=true
       shift
       ;;
     --no-context)
@@ -1810,11 +1820,17 @@ process_clone_detection() {
   local file_count=$(echo "$php_files" | wc -l | tr -d ' ')
   debug_echo "PHP files to scan: $file_count files"
 
-  # SAFETY: Check file count limit
-  if [ "$MAX_FILES" -gt 0 ] && [ "$file_count" -gt "$MAX_FILES" ]; then
-    text_echo "  ${RED}⚠ File count ($file_count) exceeds limit ($MAX_FILES) - skipping pattern${NC}"
+  # SAFETY: Check file count limit (use MAX_CLONE_FILES for clone detection)
+  if [ "$MAX_CLONE_FILES" -gt 0 ] && [ "$file_count" -gt "$MAX_CLONE_FILES" ]; then
+    text_echo "  ${YELLOW}⚠ File count ($file_count) exceeds clone detection limit ($MAX_CLONE_FILES)${NC}"
+    text_echo "  ${YELLOW}  Skipping clone detection to prevent timeout. Set MAX_CLONE_FILES=0 to disable limit.${NC}"
     rm -f "$temp_functions" "$temp_hashes"
     return 1
+  fi
+
+  # Show warning if approaching limit
+  if [ "$MAX_CLONE_FILES" -gt 0 ] && [ "$file_count" -gt $((MAX_CLONE_FILES * 80 / 100)) ]; then
+    text_echo "  ${YELLOW}⚠ Processing $file_count files (limit: $MAX_CLONE_FILES) - this may take a while...${NC}"
   fi
 
   # Extract all functions and compute hashes
@@ -1824,10 +1840,10 @@ process_clone_detection() {
   safe_file_iterator "$php_files" | while IFS= read -r file; do
     [ -z "$file" ] && continue
 
-    # SAFETY: Track file processing iterations
+    # SAFETY: Track file processing iterations (use MAX_CLONE_FILES for clone detection)
     file_iteration=$((file_iteration + 1))
-    if [ "$MAX_FILES" -gt 0 ] && [ "$file_iteration" -gt "$MAX_FILES" ]; then
-      debug_echo "Max file limit reached, stopping extraction"
+    if [ "$MAX_CLONE_FILES" -gt 0 ] && [ "$file_iteration" -gt "$MAX_CLONE_FILES" ]; then
+      debug_echo "Max clone file limit reached, stopping extraction"
       break
     fi
 
@@ -3961,39 +3977,50 @@ CLONE_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f | while read 
 done)
 
 if [ -n "$CLONE_PATTERNS" ]; then
-  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  text_echo "${BLUE}  FUNCTION CLONE DETECTOR${NC}"
-  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  text_echo ""
+  # Check if clone detection should be skipped
+  if [ "$SKIP_CLONE_DETECTION" = "true" ]; then
+    text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    text_echo "${BLUE}  FUNCTION CLONE DETECTOR${NC}"
+    text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    text_echo ""
+    text_echo "${YELLOW}  ○ Skipped (use --enable-clone-detection to run)${NC}"
+    text_echo ""
+  else
+    text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    text_echo "${BLUE}  FUNCTION CLONE DETECTOR${NC}"
+    text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    text_echo ""
 
-  # Debug: Log clone patterns found
-  debug_echo "Clone detection patterns found: $(echo "$CLONE_PATTERNS" | wc -l | tr -d ' ') patterns"
+    # Debug: Log clone patterns found
+    debug_echo "Clone detection patterns found: $(echo "$CLONE_PATTERNS" | wc -l | tr -d ' ') patterns"
 
-  # Process each clone detection pattern
-  while IFS= read -r pattern_file; do
-    [ -z "$pattern_file" ] && continue
+    # Process each clone detection pattern
+    while IFS= read -r pattern_file; do
+      [ -z "$pattern_file" ] && continue
 
-    # Load pattern to get title
-    if load_pattern "$pattern_file"; then
-      text_echo "${BLUE}▸ $pattern_title${NC}"
+      # Load pattern to get title
+      if load_pattern "$pattern_file"; then
+        text_echo "${BLUE}▸ $pattern_title${NC}"
 
-      # Store current violation count
-      violations_before=$DRY_VIOLATIONS_COUNT
+        # Store current violation count
+        violations_before=$DRY_VIOLATIONS_COUNT
 
-      process_clone_detection "$pattern_file"
+        # Process clone detection (timeout is handled inside the function)
+        process_clone_detection "$pattern_file"
 
-      # Check if new violations were added
-      violations_after=$DRY_VIOLATIONS_COUNT
-      new_violations=$((violations_after - violations_before))
+        # Check if new violations were added
+        violations_after=$DRY_VIOLATIONS_COUNT
+        new_violations=$((violations_after - violations_before))
 
-      if [ "$new_violations" -gt 0 ]; then
-        text_echo "${YELLOW}  ⚠ Found $new_violations duplicate function(s)${NC}"
-      else
-        text_echo "${GREEN}  ✓ No duplicates found${NC}"
+        if [ "$new_violations" -gt 0 ]; then
+          text_echo "${YELLOW}  ⚠ Found $new_violations duplicate function(s)${NC}"
+        else
+          text_echo "${GREEN}  ✓ No duplicates found${NC}"
+        fi
+        text_echo ""
       fi
-      text_echo ""
-    fi
-  done <<< "$CLONE_PATTERNS"
+    done <<< "$CLONE_PATTERNS"
+  fi
 fi
 
 	# Evaluate baseline entries for staleness before computing exit code / JSON
