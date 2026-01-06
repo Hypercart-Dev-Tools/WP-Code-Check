@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Noted optimization opportunities for future Phase 2-3 work
   - **Impact:** Developers can understand performance trade-offs and future improvement paths
 
+- **Backlog Planning** - Documented future cherry-pick tasks from `fix/split-off-html-generator` branch
+  - Added notes for Python HTML generator (commit `713e903`)
+  - Added notes for Node.js/JavaScript/Headless WordPress patterns (commits `2653c59`, `7180f97`, `f6b1664`)
+  - Documented conflicts, dependencies, and recommended cherry-pick order
+  - **Impact:** Clear roadmap for future feature integration after stability work completes
+
 ## [1.0.81] - 2026-01-05
 
 ### Fixed

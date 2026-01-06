@@ -12,7 +12,7 @@
 # Options:
 #   --project <name>         Load configuration from TEMPLATES/<name>.txt
 #   --paths "dir1 dir2"      Paths to scan (default: current directory)
-#   --format text|json       Output format (default: text)
+#   --format text|json       Output format (default: json, generates HTML report)
 #   --strict                 Fail on warnings (N+1 patterns)
 #   --verbose                Show all matches, not just first occurrence
 #   --no-log                 Disable logging to file
@@ -64,7 +64,7 @@ PATHS="."
 STRICT=false
 VERBOSE=false
 ENABLE_LOGGING=true
-OUTPUT_FORMAT="text"  # text or json
+OUTPUT_FORMAT="json"  # text or json (default: json for HTML reports)
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests"

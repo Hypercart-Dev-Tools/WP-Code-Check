@@ -1,180 +1,115 @@
-# Backlog - Issues to Investigate
+# Backlog - Future Work
 
-## ✅ RESOLVED 2025-12-31: Fixture Validation Subprocess Issue
+## 🍒 Cherry-Pick Tasks (from `fix/split-off-html-generator` branch)
 
-**Resolution:** Refactored to use direct pattern matching instead of subprocess calls.
+### 1. Python HTML Report Generator
+**Branch:** `fix/split-off-html-generator`
+**Commit:** `713e903` - "Convert HTML generation to Python"
+**Priority:** Medium
+**Effort:** 1-2 hours (includes testing)
 
-### Original Problem
-The fixture validation feature (proof of detection) was partially implemented but had a subprocess output parsing issue.
+**What it adds:**
+- `dist/bin/json-to-html.py` - Python script to convert JSON reports to HTML
+- `dist/bin/json-to-html.sh` - Bash wrapper for the Python generator
+- More maintainable than current bash-based HTML generation
+- Can generate HTML from existing JSON files (useful for re-generating reports)
 
-### What We Built
-1. Added `validate_single_fixture()` function that runs check-performance.sh against a fixture file
-2. Added `run_fixture_validation()` function that tests 4 core fixtures:
-   - `antipatterns.php` (expect 6 errors, 3-5 warnings)
-   - `clean-code.php` (expect 0 errors, 1 warning)
-   - `ajax-safe.php` (expect 0 errors, 0 warnings)
-   - `file-get-contents-url.php` (expect 4 errors, 0 warnings)
-3. Added `NEOCHROME_SKIP_FIXTURE_VALIDATION=1` environment variable to prevent infinite recursion
-4. Added output to text, JSON, and HTML reports
+**Files modified:**
+- `AGENTS.md` (+44 lines)
+- `dist/TEMPLATES/_AI_INSTRUCTIONS.md` (+119 lines)
+- `dist/bin/check-performance.sh` (+21 lines - switches to Python generator)
 
-### The Bug
-When the script calls itself recursively to validate fixtures, the subprocess output is different:
-- **Manual command line run**: Output is ~11,000 chars, correctly shows `"total_errors": 6`
-- **From within script**: Output is ~3,200 chars, parsing returns 0 errors/0 warnings
+**Conflicts to resolve:**
+- `dist/bin/check-performance.sh` - Both branches modified this heavily
+- Will need to manually integrate Python generator call into current version
 
-### Debug Evidence
-```
-[DEBUG] Testing fixture: antipatterns.php (expect 6 errors, 3-5 warnings)
-[DEBUG]   Output length: 3274
-[DEBUG]   Got: 0 errors, 0 warnings
-[DEBUG] antipatterns.php: FAILED
-```
-
-But manually running the same command works:
-```bash
-NEOCHROME_SKIP_FIXTURE_VALIDATION=1 ./bin/check-performance.sh --paths "./tests/fixtures/antipatterns.php" --format json --no-log
-# Returns: "total_errors": 6, "total_warnings": 5
-```
-
-### Possible Causes to Investigate
-1. **Environment inheritance**: Some variable from parent process affecting child
-2. **Path resolution**: `$SCRIPT_DIR` might resolve differently in subprocess
-3. **Output format**: Subprocess might be outputting text instead of JSON
-4. **Grep parsing**: The regex might not be matching due to whitespace/formatting
-5. **Subshell behavior**: Variables or state being shared unexpectedly
-
-### Files Modified
-- `dist/bin/check-performance.sh` - Added fixture validation functions (lines 809-905 approx)
-- `dist/bin/report-templates/report-template.html` - Added fixture status badge in footer
-- `CHANGELOG.md` - Documented feature (entry exists but feature not fully working)
-
-### Debug Code Left In
-The following debug statements are currently in the code (search for `NEOCHROME_DEBUG`):
-- Line ~825: Output length debug
-- Line ~840: Got X errors debug  
-- Line ~878: Testing fixture debug
-- Line ~884: PASSED/FAILED debug
-
-### Next Steps
-1. Add more debug to see actual output content (not just length)
-2. Check if subprocess is outputting text format instead of JSON
-3. Try redirecting stderr separately to see if there are errors
-4. Check if `$SCRIPT_DIR` resolves correctly in subprocess context
-5. Consider alternative approach: use exit codes instead of parsing JSON
-
-### Workaround (if needed)
-Could disable fixture validation temporarily by setting:
-```bash
-export NEOCHROME_SKIP_FIXTURE_VALIDATION=1
-```
-
-### Priority
-Medium - Feature is additive (proof of detection), core scanning still works fine.
+**When to do this:**
+- After Phase 2-3 stability work is complete
+- When we want better HTML report maintainability
+- If users request ability to regenerate HTML from JSON
 
 ---
 
-### Resolution Details (2025-12-31)
+### 2. Node.js/JavaScript/Headless WordPress Pattern Detection
+**Branch:** `fix/split-off-html-generator`
+**Commits:** `2653c59`, `7180f97`, `f6b1664` - "Phase 1 & 2 completed"
+**Priority:** Low (unless users request it)
+**Effort:** 2-4 hours (includes testing and integration)
 
-**Problem:** Subprocess calls were returning truncated/different output when called from within the script.
+**What it adds:**
 
-**Solution:** Instead of spawning subprocesses to run full scans, we now use direct `grep` pattern matching against fixture files:
+#### **Headless WordPress Patterns (10 patterns):**
+- `dist/patterns/headless/api-key-exposure.json` - API keys exposed in client-side code
+- `dist/patterns/headless/fetch-no-error-handling.json` - Missing error handling in fetch()
+- `dist/patterns/headless/graphql-no-error-handling.json` - GraphQL without error handling
+- `dist/patterns/headless/hardcoded-wordpress-url.json` - Hardcoded WP URLs (should use env vars)
+- `dist/patterns/headless/missing-auth-headers.json` - Missing authentication headers
+- `dist/patterns/headless/nextjs-missing-revalidate.json` - Next.js ISR without revalidation
 
-```bash
-# Old approach (broken):
-output=$("$SCRIPT_DIR/check-performance.sh" --paths "$fixture_file" --format json)
+#### **Node.js Security Patterns (4 patterns):**
+- `dist/patterns/nodejs/command-injection.json` - Command injection vulnerabilities
+- `dist/patterns/nodejs/eval-injection.json` - eval() usage (XSS risk)
+- `dist/patterns/nodejs/path-traversal.json` - Path traversal vulnerabilities
+- `dist/patterns/nodejs/unhandled-promise.json` - Unhandled promise rejections
 
-# New approach (working):
-actual_count=$(grep -c "$pattern" "$fixture_file")
-```
+#### **JavaScript DRY Violations (1 pattern):**
+- `dist/patterns/js/duplicate-storage-keys.json` - Duplicate localStorage/sessionStorage keys
 
-**Result:** All 4 fixture validations now pass:
-- `antipatterns.php` - detects `get_results` (unbounded queries)
-- `antipatterns.php` - detects `get_post_meta` (N+1 patterns)
-- `file-get-contents-url.php` - detects `file_get_contents` (external URLs)
-- `clean-code.php` - detects `posts_per_page` (bounded queries)
+#### **JavaScript Validators (6 files):**
+- `dist/tests/fixtures/headless/api-key-exposure-violations.js`
+- `dist/tests/fixtures/headless/fetch-antipatterns.js`
+- `dist/tests/fixtures/headless/graphql-antipatterns.js`
+- `dist/tests/fixtures/headless/nextjs-antipatterns.js`
+- `dist/tests/fixtures/js/command-injection-violations.js`
+- `dist/tests/fixtures/js/eval-violations.js`
+- `dist/tests/fixtures/js/promise-antipatterns.js`
+- `dist/tests/fixtures/js/security-antipatterns.js`
 
-**Output locations:**
-- Text: Shows "✓ Detection verified: 4 test fixtures passed" in SUMMARY
-- JSON: Includes `fixture_validation` object with status, passed, failed counts
-- HTML: Shows green "✓ Detection Verified (4 fixtures)" badge in footer
+#### **Documentation:**
+- `PROJECT/1-INBOX/PROJECT-NODEJS.md` - Planning doc
+- `dist/HOWTO-JAVASCRIPT-PATTERNS.md` - Guide for JavaScript pattern detection
+
+**Files modified:**
+- `dist/bin/check-performance.sh` - Adds ~250 lines for Node.js pattern loading and execution
+- `dist/patterns/duplicate-functions.json` - Updated for JavaScript function detection
+- `CHANGELOG.md` - Documents the feature
+
+**Conflicts to resolve:**
+- `dist/bin/check-performance.sh` - Major conflict (both branches modified heavily)
+- Will need to manually integrate Node.js pattern checks into current version
+- Need to ensure Node.js patterns work with Phase 1 safeguards (timeout, limits)
+
+**Dependencies:**
+- Requires `node` to be installed (for running JavaScript validators)
+- Adds ~3,400 lines of code (significant scope increase)
+
+**When to do this:**
+- If users request JavaScript/Node.js security scanning
+- If we need to scan headless WordPress projects (Next.js, Nuxt, etc.)
+- After Phase 2-3 stability work is complete
+- Only if there's actual demand for this feature
+
+**Can we cherry-pick cleanly?**
+- ✅ **YES** - Pattern files are in separate directories (`headless/`, `nodejs/`, `js/`)
+- ✅ **YES** - Validator files are in separate test fixture directories
+- ⚠️ **PARTIAL** - `check-performance.sh` modifications will need manual merge
+- ⚠️ **PARTIAL** - Need to test that Node.js patterns respect Phase 1 safeguards
 
 ---
 
-## 🚀 High Priority: Migrate Inline Patterns to External JSON Rules
+## 📋 Notes
 
-**Status:** Not Started  
-**Priority:** HIGH  
-**Owner:** Core maintainer  
-**Created:** 2026-01-02
+**Recommendation:** Cherry-pick in this order:
+1. **First:** Complete Phase 2-3 stability work (profiling & optimization)
+2. **Then:** Cherry-pick Python HTML generator (smaller, cleaner)
+3. **Finally:** Cherry-pick Node.js patterns (only if users request it)
 
-### Problem
-Many legacy detection rules are still defined inline in `check-performance.sh` as hard-coded `run_check` calls with embedded `-E` grep patterns. Newer rules (especially DRY/aggregated checks) now live in external JSON files under `dist/patterns/` and are loaded via the pattern loader.
+**Why this order:**
+- Stability work is higher priority (affects all users)
+- Python HTML generator is low-risk, high-maintainability
+- Node.js patterns are a separate feature with limited user demand (PHP-focused tool)
 
-This split makes it harder to:
-- See a single, authoritative list of rules
-- Reuse patterns across tools or future UIs
-- Maintain consistency in metadata (severity, categories, remediation)
-- Refactor or batch-update patterns safely
-
-### Goal
-Converge on **external JSON pattern definitions** as the single source of truth for all detection rules, with `check-performance.sh` acting primarily as an engine/runner.
-
-### Why Do This Sooner
-- **Maintainability:** New rules no longer require script edits; they are data-driven.
-- **Scalability:** Easier to add, disable, or tune rules without touching Bash.
-- **Consistency:** Same schema (id, severity, category, remediation) across all rules.
-- **Extensibility:** Future tools (web UI, IDE plugin, docs generator) can read the same JSON rule set.
-- **Testing:** Pattern behavior can be validated in isolation and reused in other contexts.
-
-### Scope
-1. **Identify all inline rules** in `dist/bin/check-performance.sh` that use `run_check` with embedded patterns.
-2. **Design/confirm JSON schema** (reuse existing DRY/aggregated schema where possible).
-3. **Create JSON files** in `dist/patterns/` for each rule family:
-   - Query performance (unbounded queries, N+1, raw SQL)
-   - Security (nonces, capabilities, unsafe serialization)
-   - HTTP/Network (timeouts, external URLs)
-   - Timezone
-   - Cron/scheduling
-   - SPO rules and KISS PQS findings
-4. **Wire the loader** so `check-performance.sh` runs all JSON-defined rules first, then any remaining inline rules.
-5. **Gradually migrate** inline rules to JSON, keeping behavior identical.
-6. **Deprecate inline definitions** once coverage is complete.
-
-### Phased Plan
-
-**Phase 0 – Inventory (2–3 hours)**
-- [ ] Grep for `run_check` in `check-performance.sh` and categorize all inline rules.
-- [ ] Create an inventory table (rule id, severity, category, status: inline/JSON).
-
-**Phase 1 – New Rules Only in JSON (Already in progress)**
-- [x] DRY / aggregated patterns defined in `dist/patterns/dry/*.json`.
-- [ ] Update CONTRIBUTING.md to prefer JSON pattern definitions for all new rules.
-
-**Phase 2 – Migrate High-Impact Rules (1–2 days)**
-- [ ] Move SPO rules and KISS PQS rules to JSON.
-- [ ] Move admin capability checks and nonce-related rules to JSON.
-- [ ] Move HTTP/timeout and external URL checks to JSON.
-- [ ] Ensure fixture tests still pass with identical findings.
-
-**Phase 3 – Migrate Remaining Legacy Rules (2–3 days)**
-- [ ] Move remaining query, timezone, cron, and misc rules to JSON.
-- [ ] Keep a thin compatibility layer in `check-performance.sh` that:
-  - Loads JSON rules
-  - Executes them via existing runners (simple and aggregated)
-
-**Phase 4 – Cleanup & Docs (1 day)**
-- [ ] Remove deprecated inline pattern definitions once JSON parity is confirmed.
-- [ ] Update CONTRIBUTING.md and dist/README.md with JSON-first guidance.
-- [ ] Add a short `PATTERN-LIBRARY-SUMMARY.md` entry describing the JSON rule library.
-
-### Definition of Done
-- [ ] All production rules live in `dist/patterns/*.json` (no hard-coded `-E` patterns in `check-performance.sh` except maybe for internal/debug checks).
-- [ ] Fixture and regression tests pass with **no change in counts or severities**.
-- [ ] CHANGELOG entry documents the migration and confirms behavior parity.
-- [ ] CONTRIBUTING.md updated to show JSON-based rule examples instead of inline `run_check` patterns.
-
-### Open Questions
-1. Do we want **one JSON per rule**, or **grouped JSON files** per category (e.g., `performance.json`, `security.json`, `dry.json`)?
-2. Should we store **remediation text** (examples, notes) exclusively in JSON, or keep some human-facing docs separate and link them?
-3. Do we eventually want a **generated rules catalog** (HTML/Markdown) from the JSON definitions?
-
+**Alternative approach:**
+- Wait for user feedback before adding Node.js patterns
+- Focus on core PHP/WordPress scanning excellence first
+- Add JavaScript support only if there's proven demand
