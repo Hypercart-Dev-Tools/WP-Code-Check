@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.82
+# Version: 1.0.83
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -57,7 +57,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.82"
+SCRIPT_VERSION="1.0.83"
 
 # Defaults
 PATHS="."
@@ -84,6 +84,80 @@ MAX_FILES="${MAX_FILES:-10000}"  # 10k files default
 
 # Maximum iterations in aggregation loops (0 = no limit)
 MAX_LOOP_ITERATIONS="${MAX_LOOP_ITERATIONS:-50000}"  # 50k iterations default
+
+# ============================================================
+# PHASE 2 PERFORMANCE PROFILING (v1.0.83)
+# ============================================================
+# Enable with PROFILE=1 environment variable
+# Outputs timing data for major operations to help identify bottlenecks
+
+PROFILE="${PROFILE:-0}"  # Set to 1 to enable profiling
+PROFILE_DATA=()          # Array to store timing data: "operation_name:duration_ms"
+PROFILE_START_TIME=0     # Global start time for entire script
+
+# Start profiling timer for a named operation
+# Usage: profile_start "operation_name"
+profile_start() {
+  if [ "$PROFILE" = "1" ]; then
+    PROFILE_SECTION_NAME="$1"
+    PROFILE_SECTION_START=$(date +%s%N 2>/dev/null || echo "0")
+  fi
+}
+
+# End profiling timer and record duration
+# Usage: profile_end "operation_name"
+profile_end() {
+  if [ "$PROFILE" = "1" ]; then
+    local end_time=$(date +%s%N 2>/dev/null || echo "0")
+    if [ "$PROFILE_SECTION_START" != "0" ] && [ "$end_time" != "0" ]; then
+      local duration_ns=$((end_time - PROFILE_SECTION_START))
+      local duration_ms=$((duration_ns / 1000000))
+      PROFILE_DATA+=("$1:${duration_ms}ms")
+    fi
+    PROFILE_SECTION_START=0
+  fi
+}
+
+# Print profiling report at end of script
+# Usage: profile_report
+profile_report() {
+  if [ "$PROFILE" = "1" ] && [ ${#PROFILE_DATA[@]} -gt 0 ]; then
+    echo "" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "  PERFORMANCE PROFILE" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+
+    # Sort by duration (descending) and display
+    printf "%s\n" "${PROFILE_DATA[@]}" | \
+      awk -F: '{
+        gsub(/ms$/, "", $2);
+        print $2 "\t" $1
+      }' | \
+      sort -rn | \
+      awk '{
+        duration = $1;
+        $1 = "";
+        operation = substr($0, 2);
+        printf "  %6d ms  %s\n", duration, operation
+      }' >&2
+
+    echo "" >&2
+
+    # Calculate total time
+    if [ "$PROFILE_START_TIME" != "0" ]; then
+      local end_time=$(date +%s%N 2>/dev/null || echo "0")
+      if [ "$end_time" != "0" ]; then
+        local total_ns=$((end_time - PROFILE_START_TIME))
+        local total_ms=$((total_ns / 1000000))
+        local total_sec=$((total_ms / 1000))
+        echo "  Total scan time: ${total_sec}s (${total_ms}ms)" >&2
+      fi
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+  fi
+}
 
 # Severity configuration
 SEVERITY_CONFIG_FILE=""  # Path to custom severity config (empty = use factory defaults)
@@ -2100,6 +2174,14 @@ $line"
 	  text_echo ""
 }
 
+# ============================================================
+# START PROFILING
+# ============================================================
+if [ "$PROFILE" = "1" ]; then
+  PROFILE_START_TIME=$(date +%s%N 2>/dev/null || echo "0")
+fi
+
+profile_start "CRITICAL_CHECKS"
 text_echo "${RED}━━━ CRITICAL CHECKS (will fail build) ━━━${NC}"
 text_echo ""
 
@@ -3165,6 +3247,9 @@ else
 fi
 text_echo ""
 
+profile_end "CRITICAL_CHECKS"
+profile_start "WARNING_CHECKS"
+
 text_echo "${YELLOW}━━━ WARNING CHECKS (review recommended) ━━━${NC}"
 text_echo ""
 
@@ -3801,6 +3886,9 @@ else
 fi
 text_echo ""
 
+profile_end "WARNING_CHECKS"
+profile_start "MAGIC_STRING_DETECTOR"
+
 # ============================================================================
 # Magic String Detector ("DRY") - Aggregated Patterns
 # ============================================================================
@@ -3856,6 +3944,9 @@ else
     fi
   done <<< "$AGGREGATED_PATTERNS"
 fi
+
+profile_end "MAGIC_STRING_DETECTOR"
+profile_start "FUNCTION_CLONE_DETECTOR"
 
 # ============================================================================
 # Function Clone Detector - Clone Detection Patterns
@@ -3982,5 +4073,11 @@ else
     text_echo "${YELLOW}○ Fixture validation skipped (fixtures not found)${NC}"
   fi
 fi
+
+# ============================================================
+# PROFILING REPORT
+# ============================================================
+profile_end "FUNCTION_CLONE_DETECTOR"
+profile_report
 
 exit $EXIT_CODE
