@@ -5,12 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.93] - 2026-01-07
+## [1.0.93] - 2026-01-06
 
 ### Added
 - **Phase 1: False Positive Reduction - Quick Wins** - Context-aware detection enhancements
   - **Enhancement 1: Nonce Verification Detection** (`spo-002-superglobals`)
-    - Detects `wp_verify_nonce()`, `check_admin_referer()`, `wp_nonce_field()` in function scope (20 lines before)
+    - Detects `wp_verify_nonce()`, `check_admin_referer()`, `wp_nonce_field()` near the match (20 lines before), clamped to the same function/method
     - Suppresses findings when nonce verification exists
     - **Impact:** Reduced false positives from 5 to 2 (-60%) on KISS plugin test
   - **Enhancement 2: Capability Parameter Parsing** (`spo-004-missing-cap-check`)
@@ -25,14 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **Impact:** 1 of 2 findings downgraded to LOW on KISS plugin test
   - **Enhancement 4: Prepared Variable Tracking** (`wpdb-query-no-prepare`)
     - Tracks variable assignments: `$sql = $wpdb->prepare(...)`
-    - Checks previous 10 lines for prepared variable pattern
+    - Checks previous 10 lines for prepared variable pattern, clamped to the same function/method
     - Suppresses findings when variable was prepared before use
     - **Impact:** Reduced false positives from 15 to 10 (-33%) on KISS plugin test
   - **Enhancement 5: Strict Comparison Detection** (`unsanitized-superglobal-read`)
     - Detects strict comparison to literals: `$_POST['key'] === '1'`
     - Recognizes this as implicit sanitization for boolean flags
-    - Requires nonce verification in function scope (20 lines before)
+    - Requires nonce verification in the same function/method (20 lines before)
     - Suppresses findings when both conditions met
+
+### Fixed
+- **Context leakage prevention (function/method boundaries):** Several “look back N lines” false-positive reducers now clamp their context windows to the enclosing function/method to avoid cross-function suppression.
+  - `spo-002-superglobals` nonce lookback
+  - `unsanitized-superglobal-read` nonce lookbacks
+  - `wpdb-query-no-prepare` prepared-variable lookback
+  - `unvalidated-cron-interval` validation lookback
 
 ### Changed
 - **Overall False Positive Reduction:** 24% reduction on KISS plugin test (33 → 25 findings)

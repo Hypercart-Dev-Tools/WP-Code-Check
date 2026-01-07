@@ -60,6 +60,51 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # Update this ONE line when bumping versions - never hardcode elsewhere.
 SCRIPT_VERSION="1.0.93"
 
+# Get the start/end line range for the enclosing function/method.
+#
+# We intentionally keep this heuristic and dependency-free (no AST). It is used
+# to prevent context checks from leaking across adjacent functions/methods.
+#
+# Supports common PHP method declarations such as:
+# - function foo() {}
+# - public function foo() {}
+# - private static function foo() {}
+# - final protected function foo() {}
+#
+# Usage: get_function_scope_range "$file" "$lineno" [fallback_lines]
+# Output: "start:end"
+get_function_scope_range() {
+  local file="$1"
+  local lineno="$2"
+  local fallback_lines="${3:-20}"
+
+  # Match function/method declarations at the start of a line.
+  # Note: We deliberately require whitespace after the 'function' keyword.
+  local decl_regex='^[[:space:]]*([[:alnum:]_]+[[:space:]]+)*function[[:space:]]+'
+
+  local start end
+  start=$(awk -v line="$lineno" -v fallback="$fallback_lines" -v re="$decl_regex" '
+    NR <= line && $0 ~ re { s=NR }
+    END {
+      if (s) { print s; exit }
+      if (line > fallback) { print line - fallback } else { print 1 }
+    }
+  ' "$file")
+
+  end=$(awk -v line="$lineno" -v re="$decl_regex" '
+    NR > line && $0 ~ re { print NR-1; found=1; exit }
+    END { if (!found) print NR }
+  ' "$file")
+
+  # Safety: ensure numeric bounds.
+  if ! [[ "$start" =~ ^[0-9]+$ ]]; then start=1; fi
+  if ! [[ "$end" =~ ^[0-9]+$ ]]; then end="$lineno"; fi
+  if [ "$start" -lt 1 ]; then start=1; fi
+  if [ "$end" -lt "$start" ]; then end="$start"; fi
+
+  echo "${start}:${end}"
+}
+
 # Defaults
 PATHS="."
 STRICT=false
@@ -2447,8 +2492,12 @@ if [ -n "$SUPERGLOBAL_MATCHES" ]; then
       continue
     fi
 
-    # FALSE POSITIVE REDUCTION: Check for nonce verification in function scope (20 lines before)
+    # FALSE POSITIVE REDUCTION: Check for nonce verification near the match,
+    # clamped to the current function/method to avoid cross-function leakage.
+    range=$(get_function_scope_range "$file" "$lineno" 30)
+    function_start=${range%%:*}
     start_line=$((lineno - 20))
+    [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
     [ "$start_line" -lt 1 ] && start_line=1
     context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
 
@@ -2571,6 +2620,9 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
       continue
     fi
 
+    range=$(get_function_scope_range "$file" "$lineno" 30)
+    function_start=${range%%:*}
+
     # CONTEXT-AWARE DETECTION: Check for nonce verification in previous 10 lines
     # If nonce check found AND superglobal is sanitized, skip this finding
     # Also skip if $_POST is used WITHIN nonce verification function itself
@@ -2587,12 +2639,10 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     # Pattern: isset( $_POST['key'] ) && $_POST['key'] === '1'
     # This is safe for boolean flags - value is constrained to literal
     if echo "$code" | grep -qE "\\\$_(GET|POST|REQUEST)\[[^]]*\][[:space:]]*===[[:space:]]*['\"][^'\"]*['\"]"; then
-      # Check if nonce verification exists in function scope
-      if [ "$lineno" -gt 20 ]; then
-        start_line=$((lineno - 20))
-      else
-        start_line=1
-      fi
+      # Check if nonce verification exists near this usage, clamped to function scope
+      start_line=$((lineno - 20))
+      [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
+      [ "$start_line" -lt 1 ] && start_line=1
       context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
 
       if echo "$context" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
@@ -2602,11 +2652,9 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     fi
 
     if [ "$has_nonce_protection" = false ]; then
-      if [ "$lineno" -gt 10 ]; then
-        start_line=$((lineno - 10))
-      else
-        start_line=1
-      fi
+      start_line=$((lineno - 10))
+      [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
+      [ "$start_line" -lt 1 ] && start_line=1
 
       # Get context (10 lines before current line)
       context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
@@ -2704,8 +2752,12 @@ if [ -n "$WPDB_MATCHES" ]; then
     var_name=$(echo "$code" | sed -n 's/.*\$wpdb->[a-z_]*[[:space:]]*([[:space:]]*\(\$[a-zA-Z_][a-zA-Z0-9_]*\).*/\1/p')
 
     if [ -n "$var_name" ]; then
+      range=$(get_function_scope_range "$file" "$lineno" 30)
+      function_start=${range%%:*}
+
       # Check if this variable was assigned from $wpdb->prepare() within previous 10 lines
       start_line=$((lineno - 10))
+      [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
       [ "$start_line" -lt 1 ] && start_line=1
       context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
 
@@ -3150,51 +3202,7 @@ text_echo ""
 # 4. Admin context - Query only runs in admin area (lower traffic)
 # ============================================================================
 
-# Get the start/end line range for the enclosing function/method.
-#
-# We intentionally keep this heuristic and dependency-free (no AST). It is used
-# to prevent mitigation detection from leaking across adjacent functions/methods,
-# which can cause false severity downgrades.
-#
-# Supports common PHP method declarations such as:
-# - function foo() {}
-# - public function foo() {}
-# - private static function foo() {}
-# - final protected function foo() {}
-#
-# Usage: get_function_scope_range "$file" "$lineno" [fallback_lines]
-# Output: "start:end"
-get_function_scope_range() {
-  local file="$1"
-  local lineno="$2"
-  local fallback_lines="${3:-20}"
-
-  # Match function/method declarations at the start of a line.
-  # Note: We deliberately require whitespace after the 'function' keyword.
-  local decl_regex='^[[:space:]]*([[:alnum:]_]+[[:space:]]+)*function[[:space:]]+'
-
-  local start end
-  start=$(awk -v line="$lineno" -v fallback="$fallback_lines" -v re="$decl_regex" '
-    NR <= line && $0 ~ re { s=NR }
-    END {
-      if (s) { print s; exit }
-      if (line > fallback) { print line - fallback } else { print 1 }
-    }
-  ' "$file")
-
-  end=$(awk -v line="$lineno" -v re="$decl_regex" '
-    NR > line && $0 ~ re { print NR-1; found=1; exit }
-    END { if (!found) print NR }
-  ' "$file")
-
-  # Safety: ensure numeric bounds.
-  if ! [[ "$start" =~ ^[0-9]+$ ]]; then start=1; fi
-  if ! [[ "$end" =~ ^[0-9]+$ ]]; then end="$lineno"; fi
-  if [ "$start" -lt 1 ]; then start=1; fi
-  if [ "$end" -lt "$start" ]; then end="$start"; fi
-
-  echo "${start}:${end}"
-}
+# Note: get_function_scope_range() is defined near the top of this script.
 
 # Check if query results are cached (transients or object cache)
 # Usage: has_caching_mitigation "$file" "$line_number"
@@ -4192,6 +4200,9 @@ if [ -n "$CRON_FILES" ]; then
 
         # Check 10 lines before for absint($var_name) or bounds checking
         start_line=$((lineno - 10))
+        range=$(get_function_scope_range "$file" "$lineno" 30)
+        function_start=${range%%:*}
+        [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
         [ "$start_line" -lt 1 ] && start_line=1
 
         # Get context lines
