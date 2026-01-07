@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.94] - 2026-01-06
+
+### Enhanced
+- **Enhancement 4 (Updated): Prepared Variable Tracking** (`wpdb-query-no-prepare`)
+  - **Increased context window from 10 to 20 lines** to catch multi-line `$wpdb->prepare()` statements
+  - **Added nested prepare detection:** Now detects `$wpdb->query( $wpdb->prepare(...) )` pattern
+  - **Impact:** Reduced false positives from 10 to 1 (-90%) on KISS plugin test
+  - **Root cause:** Multi-line prepare statements in KISS plugin span 14-18 lines, exceeding previous 10-line window
+  - **Analysis:** See `PROJECT/3-COMPLETED/ANALYSIS-WPDB-PREPARE-FALSE-POSITIVES.md` for detailed investigation
+
+### Changed
+- **Overall False Positive Reduction:** 36% reduction on KISS plugin test (25 → 16 findings)
+- **Version:** Bumped to 1.0.94
+
+### Performance Comparison (KISS Plugin Test)
+
+**Progressive Improvement Across Versions:**
+
+| Version | Total Findings | wpdb-query-no-prepare | spo-004-missing-cap-check | Overall Reduction |
+|---------|----------------|----------------------|---------------------------|-------------------|
+| **v1.0.92** (Baseline) | 33 | 15 | 9 | - |
+| **v1.0.93** | 25 | 10 | 7 | **-24%** |
+| **v1.0.94** | 16 | 1 | 4 | **-52%** |
+
+**Key Achievements:**
+- **v1.0.93:** Context-aware detection (nonce verification, capability parsing, prepared variable tracking)
+- **v1.0.94:** Extended context windows + nested pattern detection
+- **Total Improvement:** 52% reduction in false positives (33 → 16 findings)
+
 ## [1.0.93] - 2026-01-06
 
 ### Added

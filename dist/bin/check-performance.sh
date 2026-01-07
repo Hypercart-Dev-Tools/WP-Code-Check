@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.93
+# Version: 1.0.94
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.93"
+SCRIPT_VERSION="1.0.94"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -2746,6 +2746,13 @@ if [ -n "$WPDB_MATCHES" ]; then
       continue
     fi
 
+    # FALSE POSITIVE REDUCTION: Check for nested prepare pattern
+    # Pattern: $wpdb->query( $wpdb->prepare(...) )
+    if echo "$code" | grep -qE '\$wpdb->(query|get_var|get_row|get_results|get_col)[[:space:]]*\([[:space:]]*\$wpdb->prepare'; then
+      # Nested prepare detected - skip this finding
+      continue
+    fi
+
     # FALSE POSITIVE REDUCTION: Check if variable was prepared in previous lines
     # Pattern: $sql = $wpdb->prepare(...); ... $wpdb->get_col( $sql );
     # Extract variable name from $wpdb->get_*( $var )
@@ -2755,8 +2762,9 @@ if [ -n "$WPDB_MATCHES" ]; then
       range=$(get_function_scope_range "$file" "$lineno" 30)
       function_start=${range%%:*}
 
-      # Check if this variable was assigned from $wpdb->prepare() within previous 10 lines
-      start_line=$((lineno - 10))
+      # Check if this variable was assigned from $wpdb->prepare() within previous 20 lines
+      # Increased from 10 to 20 to catch multi-line prepare statements (v1.0.94)
+      start_line=$((lineno - 20))
       [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
       [ "$start_line" -lt 1 ] && start_line=1
       context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
