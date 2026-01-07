@@ -477,20 +477,8 @@ We may update this policy to reflect changes in our practices, legal requirement
 
 ## Contact Information
 
-**For general inquiries:**  
-hello@hypercart.com
-
-**For security researchers:**  
-security@hypercart.com
-
-**For plugin/theme authors with disputes:**  
-disputes@hypercart.com
-
-**For legal process:**  
-legal@hypercart.com
-
-**For media inquiries:**  
-press@hypercart.com
+**For all inquiries:**  
+info@hypercart.io
 
 ---
 
