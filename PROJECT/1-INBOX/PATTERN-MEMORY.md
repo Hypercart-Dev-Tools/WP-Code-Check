@@ -142,13 +142,14 @@ The fundamental issue is **WooCommerce's object model**:
 These patterns from this doc now map to scanner rule IDs (usable for baselines/severity overrides):
 
 - **Pattern #1 (WC_Order Object Bloat)** → `unbounded-wc-get-orders` (implemented; fixture: TODO)
-- **Pattern #2 (Unbounded Candidate Limit / multiplier)** → (no dedicated rule yet; covered indirectly via unbounded hydration rules above)
+- **Pattern #2 (Unbounded Candidate Limit / multiplier)** → `limit-multiplier-from-count` (implemented; heuristic; fixture: TODO)
 - **Pattern #3 (WP_User_Query Meta Cache)** → `wp-user-query-meta-bloat` (implemented; fixture: TODO)
 
 Related OOM patterns added alongside this work:
 
 - `unbounded-wc-get-products` (implemented; fixture: TODO)
 - `wp-query-unbounded` (implemented; fixture: TODO)
+- `array-merge-in-loop` (implemented; heuristic; fixture: TODO)
 
 ## 🔎 Grep / ripgrep patterns to detect OOM risks
 
@@ -197,7 +198,7 @@ These don’t always indicate a bug, but they’re great at surfacing “count($
 - Look specifically for `candidate_limit`-style variables:
     - `rg -n --pcre2 "\bcandidate_?limit\b\s*=" -g'*.php'`
 
-STATUS: ✅ grep commands ready; ⚠️ no dedicated scanner rule yet (heuristic signal)
+STATUS: ✅ grep commands ready; ✅ scanner coverage (`limit-multiplier-from-count`; heuristic; fixtures TODO)
 
 ### 5. “unbounded array growth” smells
 
@@ -208,4 +209,4 @@ Useful for finding “collect everything into an array” patterns that can expl
 - Appending to arrays in loops (very broad; use when hunting):
     - `rg -n --pcre2 "\$[a-zA-Z_][a-zA-Z0-9_]*\s*\[\s*\]\s*=" -g'*.php'`
 
-STATUS: ✅ grep commands ready; ⚠️ no dedicated scanner rule yet (heuristic signal)
+STATUS: ✅ grep commands ready; ✅ scanner coverage (`array-merge-in-loop`; heuristic; fixtures TODO)

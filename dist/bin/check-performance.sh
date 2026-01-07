@@ -70,7 +70,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=8  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=14  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
 
 # ============================================================
@@ -1192,7 +1192,12 @@ validate_single_fixture() {
 
   # Count matches using grep
   local actual_count
-  actual_count=$(grep -c "$pattern" "$fixture_file" 2>/dev/null || echo "0")
+  # Use fixed-string matching to avoid regex escaping issues in patterns.
+  # IMPORTANT: Do NOT append "|| echo 0" here, because grep -c prints "0" even
+  # when it exits with status 1 (no matches). Adding a fallback creates "0\n0"
+  # which breaks integer comparisons.
+  actual_count=$(grep -cF "$pattern" "$fixture_file" 2>/dev/null)
+  actual_count=${actual_count:-0}
 
   [ "${NEOCHROME_DEBUG:-}" = "1" ] && echo "[DEBUG] $fixture_file: pattern='$pattern' expected=$expected_count actual=$actual_count" >&2
 
@@ -1239,6 +1244,14 @@ run_fixture_validation() {
     "admin-no-capability.php:add_menu_page:1"
     # wpdb-no-prepare.php should include direct wpdb queries without prepare()
     "wpdb-no-prepare.php:wpdb->get_var:1"
+
+    # OOM / memory fixtures
+    "unbounded-wc-get-orders.php:wc_get_orders:1"
+    "unbounded-wc-get-products.php:wc_get_products:1"
+    "wp-query-unbounded.php:posts_per_page:1"
+    "wp-user-query-meta-bloat.php:new WP_User_Query:1"
+    "limit-multiplier-from-count.php:count( \$user_ids ):1"
+    "array-merge-in-loop.php:array_merge:1"
   )
 
   local fixture_count="$default_fixture_count"

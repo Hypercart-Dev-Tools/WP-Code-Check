@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `unbounded-wc-get-products` (detects `wc_get_products()` with `limit => -1`)
     - `wp-query-unbounded` (detects `WP_Query`/`get_posts()` with `posts_per_page => -1`, `nopaging => true`, or `numberposts => -1`)
     - `wp-user-query-meta-bloat` (detects `WP_User_Query` missing `update_user_meta_cache => false`)
+    - `limit-multiplier-from-count` (heuristic: flags `count(...) * N` limit multipliers)
+    - `array-merge-in-loop` (heuristic: flags `$arr = array_merge($arr, ...)` inside loops)
   - Integrated these checks into the main scanner output (text + JSON)
   - **Impact:** Helps catch high-probability OOM patterns in plugins/themes before production crashes
 
@@ -49,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tested on Universal Child Theme 2024 (real-world codebase)
   - 2 unbounded queries correctly adjusted (CRITICAL→LOW, CRITICAL→HIGH)
   - 1 false positive eliminated (properly bounded `get_users` call)
+
+### Documentation
+- Updated backlog with a concrete next-steps plan for hardening the new OOM/memory checks (including valid fixtures, heuristic tuning, and calibration)
+- Standardized the plan to checkbox style and fixed malformed section headings in `PROJECT/BACKLOG.md`
 
 ## [1.0.89] - 2026-01-06
 

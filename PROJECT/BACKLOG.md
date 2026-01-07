@@ -140,9 +140,39 @@
 
 - [ ] Status: **Not started**
 
----
 
-## � In Progress / Next Up
+## 🚧 In Progress / Next Up
+
+### Priority 3.5: OOM / Memory Pattern Hardening (from PATTERN-MEMORY.md)
+**Status:** Not Started
+**Priority:** HIGH
+**Effort:** 1-2 days
+**Impact:** Reduces risk of >512MB crashes; improves signal quality
+
+**Goal:** Turn the new memory/OOM checks into reliable, low-noise production rules.
+
+**Work Plan:**
+- [ ] **Add “valid” fixtures (false-positive guards)**
+  - Create safe counterparts in `dist/tests/fixtures/` that should NOT trigger the rules (e.g., bounded `wc_get_orders` with `limit => 50`, `WP_User_Query` with `update_user_meta_cache => false`, etc.)
+  - Extend fixture validation to confirm both “violation exists” and “no violation” cases
+- [ ] **Tune heuristics for Pattern #4 and #5**
+  - `limit-multiplier-from-count`: reduce noise by requiring nearby keywords like `limit`, `candidate_limit`, `per_page`, `posts_per_page`, `offset`
+  - `array-merge-in-loop`: consider adding a second heuristic to flag `$arr[] =` inside loops only when array grows unboundedly (optional)
+- [ ] **Add suppression guidance + severities**
+  - Document when `phpcs:ignore` or baseline suppression is appropriate vs when code should be changed
+  - Confirm default severities: hydration rules CRITICAL; heuristics LOW/MEDIUM warnings
+- [ ] **Real-world calibration pass**
+  - Run on 3-5 real plugins/themes (including `kiss-woo-fast-search`) and measure:
+    - True positives vs false positives
+    - Impact of mitigation detection on unbounded query rules
+- [ ] **(Optional) JSON-driven execution**
+  - Migrate these new rules toward the JSON pattern runner to reduce hard-coded scanner logic over time
+
+**Files to modify:**
+- `dist/bin/check-performance.sh`
+- `dist/patterns/*.json`
+- `dist/tests/fixtures/*`
+
 
 ### Priority 4: N+1 Context Detection (from NEXT-CALIBRATION.md)
 **Status:** Not Started
@@ -185,9 +215,8 @@
 **Files to modify:**
 - `dist/patterns/admin-notices-no-cap.json` (create with explanation)
 
----
 
-## �📋 Notes
+## 📋 Notes
 
 **Recommendation:** Cherry-pick in this order:
 1. **First:** Complete Phase 2-3 stability work (profiling & optimization)
