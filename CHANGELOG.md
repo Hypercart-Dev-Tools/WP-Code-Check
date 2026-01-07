@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.96] - 2026-01-07
+
+### Changed
+- **AI Instructions:** Condensed `dist/TEMPLATES/_AI_INSTRUCTIONS.md` to reduce context size while preserving core workflow and guidance
+- **Version:** Bumped to 1.0.96
+
 ## [1.0.95] - 2026-01-07
 
 ### Fixed
