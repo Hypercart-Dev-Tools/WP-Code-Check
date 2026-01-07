@@ -626,6 +626,7 @@ When a user asks to "run a template and output to HTML":
 3. **Check `dist/reports/`** for the generated HTML file
 4. **If HTML generation fails**, manually convert the JSON using the Python converter
 5. **Open the latest `.html` file** in the browser
+6. After the scan with JSON file is completed, please summarize the findings in concise few bullet points. Offer to look at all critical issues further in the code and then generate a MD report with the same filename except with .md extension to match it up
 
 The script will automatically:
 - Generate JSON output to `dist/logs/`
