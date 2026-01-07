@@ -9,11 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Critical Bug: Cron Interval Validation** - Fixed subshell variable scope issue preventing error detection
-  - **Root Cause:** Pipe into `while` loop created subshell, preventing `CRON_INTERVAL_FAIL` from persisting
-  - **Fix:** Changed from `safe_file_iterator "$CRON_FILES" | while` to `while ... < <(safe_file_iterator "$CRON_FILES")`
+  - **Root Cause:** Pipe into `while` loop created subshell, preventing `CRON_INTERVAL_FAIL` from persisting to parent shell
+  - **Fix:** Use temporary file to communicate findings from subshell (portable across all Bash versions)
+  - **Implementation:** Write "FAIL" to temp file for each finding, count lines after loop completes
   - **Impact:** Cron interval validation now correctly reports errors (was showing "✓ Passed" despite finding violations)
   - **Affected Pattern:** `unvalidated-cron-interval` (HIGH severity)
   - **Test Status:** ✅ Fixture test now passes (1 error, 0 warnings as expected)
+  - **Compatibility:** Works on macOS, Linux, and GitHub Actions (Bash 3.2+)
+
+### Removed
+- **Development Test Scripts** - Removed obsolete pattern testing scripts from repository root
+  - `test-pattern-load.sh` - Pattern loading test (now covered by fixture tests)
+  - `test-pattern-extraction.sh` - Pattern extraction test (now covered by fixture tests)
+  - **Reason:** Development artifacts no longer needed; pattern loading is production-ready and tested via `dist/tests/run-fixture-tests.sh`
 
 ### Changed
 - **Version:** Bumped to 1.0.95
