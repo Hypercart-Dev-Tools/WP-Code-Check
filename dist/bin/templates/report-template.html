@@ -271,11 +271,135 @@
     .finding.hidden {
       display: none;
     }
-    
+
+    /* Phase 2: AI Triage Section Styles */
+    .ai-triage-section {
+      background: #f0f4ff;
+      border-left: 4px solid #4a90e2;
+      padding: 20px;
+      margin: 30px 0;
+      border-radius: 4px;
+    }
+
+    .ai-triage-disclaimer {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 0.9em;
+      line-height: 1.5;
+    }
+
+    .ai-triage-content[data-status="pending"] {
+      color: #666;
+      font-style: italic;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 4px;
+    }
+
+    .ai-triage-content[data-status="complete"] {
+      color: #155724;
+    }
+
+    .ai-triage-content[data-status="error"] {
+      color: #721c24;
+      background: #f8d7da;
+      padding: 10px;
+      border-radius: 4px;
+    }
+
+    .ai-triage-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin: 15px 0;
+    }
+
+    .ai-triage-stat {
+      background: white;
+      padding: 12px;
+      border-radius: 4px;
+      text-align: center;
+      border: 1px solid #dee2e6;
+    }
+
+    .ai-triage-stat .label {
+      font-size: 0.8em;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+
+    .ai-triage-stat .value {
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #495057;
+    }
+
+    .ai-triage-verdicts {
+      margin-top: 15px;
+    }
+
+    .ai-triage-verdict {
+      background: white;
+      border-left: 3px solid #4a90e2;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    .ai-triage-verdict.confirmed {
+      border-left-color: #28a745;
+    }
+
+    .ai-triage-verdict.false-positive {
+      border-left-color: #6c757d;
+    }
+
+    .ai-triage-verdict.needs-review {
+      border-left-color: #ffc107;
+    }
+
+    .ai-triage-verdict-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .ai-triage-verdict-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.75em;
+      font-weight: bold;
+    }
+
+    .ai-triage-verdict-badge.confirmed {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .ai-triage-verdict-badge.false-positive {
+      background: #e2e3e5;
+      color: #383d41;
+    }
+
+    .ai-triage-verdict-badge.needs-review {
+      background: #fff3cd;
+      color: #856404;
+    }
+
     @media (max-width: 768px) {
       .summary { grid-template-columns: 1fr; }
       .finding-header { flex-direction: column; align-items: flex-start; }
       .badge { margin-top: 8px; }
+      .ai-triage-summary { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -362,6 +486,23 @@
       <div class="section">
         <h2>✓ Checks Summary</h2>
         {{CHECKS_HTML}}
+      </div>
+
+      <!-- Phase 2: AI-Assisted Triage (Placeholder or Completed) -->
+      <div class="section">
+        <div id="ai-triage" class="ai-triage-section" data-ai-inject="triage">
+          <h2>Phase 2 (TL;DR) - Automated AI False Positive Scan</h2>
+
+          <div class="ai-triage-disclaimer">
+            <strong>⚠️ Disclaimer:</strong> This AI-assisted analysis is provided for
+            informational purposes only and represents probabilistic pattern matching,
+            not definitive security assessment. Developers must perform manual code
+            review to verify all findings. We make no guarantees about accuracy or
+            completeness. When in doubt, treat flagged code as requiring human review.
+          </div>
+
+          {{AI_TRIAGE_HTML}}
+        </div>
       </div>
     </div>
 

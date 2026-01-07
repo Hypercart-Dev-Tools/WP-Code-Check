@@ -117,7 +117,7 @@ def main():
     fixture_status = fixture_validation.get('status', 'not_run')
     fixture_passed = fixture_validation.get('passed', 0)
     fixture_failed = fixture_validation.get('failed', 0)
-    
+
     # Set fixture status for HTML
     if fixture_status == 'passed':
         fixture_status_class = 'passed'
@@ -128,6 +128,15 @@ def main():
     else:
         fixture_status_class = 'skipped'
         fixture_status_text = '○ Fixtures Skipped'
+
+    # Extract AI triage info (Phase 2)
+    ai_triage = data.get('ai_triage', {})
+    ai_triage_performed = ai_triage.get('performed', False)
+    ai_triage_status = ai_triage.get('status', 'pending')
+    ai_triage_timestamp = ai_triage.get('timestamp', '')
+    ai_triage_summary = ai_triage.get('summary', {})
+    ai_triage_verdicts = ai_triage.get('verdicts', [])
+    ai_triage_recommendations = ai_triage.get('recommendations', [])
     
     # Extract project information
     project = data.get('project', {})
@@ -244,6 +253,99 @@ def main():
 
     checks_html = '\n'.join(checks_parts)
 
+    print(f"{Colors.BLUE}Processing AI triage data...{Colors.NC}")
+
+    # Generate AI Triage HTML
+    # Default placeholder if not performed
+    ai_triage_html = '''<div class="ai-triage-content" data-status="pending">
+        <p class="status-message">⏳ Not performed yet</p>
+        <p class="help-text">
+          Run the AI triage command to analyze findings and identify likely false positives.
+        </p>
+      </div>'''
+
+    if ai_triage_performed:
+        # Build summary stats
+        findings_reviewed = ai_triage_summary.get('findings_reviewed', 0)
+        confirmed_issues = ai_triage_summary.get('confirmed_issues', 0)
+        false_positives = ai_triage_summary.get('false_positives', 0)
+        needs_review = ai_triage_summary.get('needs_review', 0)
+        confidence_level = ai_triage_summary.get('confidence_level', 'N/A')
+
+        # Build summary stats HTML
+        summary_stats = f'''
+        <div class="ai-triage-summary">
+          <div class="ai-triage-stat">
+            <div class="label">Reviewed</div>
+            <div class="value">{findings_reviewed}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">Confirmed</div>
+            <div class="value" style="color: #28a745;">{confirmed_issues}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">False Positives</div>
+            <div class="value" style="color: #6c757d;">{false_positives}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">Needs Review</div>
+            <div class="value" style="color: #ffc107;">{needs_review}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">Confidence</div>
+            <div class="value">{confidence_level}</div>
+          </div>
+        </div>'''
+
+        # Build verdicts HTML
+        verdicts_html = ""
+        if ai_triage_verdicts:
+            verdict_parts = []
+            for verdict in ai_triage_verdicts:
+                finding_id = verdict.get('finding_id', '')
+                file_path = verdict.get('file', '')
+                line = verdict.get('line', '')
+                verdict_type = verdict.get('verdict', 'needs_review').lower()
+                reason = verdict.get('reason', '')
+                confidence = verdict.get('confidence', 'medium')
+                recommendation = verdict.get('recommendation', '')
+
+                # Map verdict type to badge class
+                badge_class = 'confirmed' if verdict_type == 'confirmed' else \
+                              'false-positive' if verdict_type == 'false_positive' else 'needs-review'
+                badge_text = verdict_type.replace('_', ' ').title()
+
+                verdict_html = f'''<div class="ai-triage-verdict {verdict_type}">
+          <div class="ai-triage-verdict-header">
+            <div>{finding_id} ({file_path}:{line})</div>
+            <span class="ai-triage-verdict-badge {badge_class}">{badge_text}</span>
+          </div>
+          <div style="color: #6c757d; font-size: 0.85em; margin-bottom: 5px;">
+            <strong>Reason:</strong> {reason}
+          </div>
+          {f'<div style="color: #6c757d; font-size: 0.85em; margin-bottom: 5px;"><strong>Confidence:</strong> {confidence}</div>' if confidence else ''}
+          {f'<div style="color: #495057; font-size: 0.85em;"><strong>Recommendation:</strong> {recommendation}</div>' if recommendation else ''}
+        </div>'''
+                verdict_parts.append(verdict_html)
+
+            verdicts_html = '\n'.join(verdict_parts)
+
+        # Build recommendations HTML
+        recommendations_html = ""
+        if ai_triage_recommendations:
+            rec_items = ''.join([f'<li style="margin-bottom: 5px;">{rec}</li>' for rec in ai_triage_recommendations])
+            recommendations_html = f'<div style="margin-top: 15px;"><strong>Recommendations:</strong><ul style="margin: 10px 0 0 20px;">{rec_items}</ul></div>'
+
+        # Combine all AI triage content
+        ai_triage_html = f'''<div class="ai-triage-content" data-status="complete">
+        <div style="margin-bottom: 15px; color: #155724;">
+          <strong>✓ AI Triage Completed</strong> - {ai_triage_timestamp}
+        </div>
+        {summary_stats}
+        {f'<div class="ai-triage-verdicts">{verdicts_html}</div>' if verdicts_html else ''}
+        {recommendations_html}
+      </div>'''
+
     print(f"{Colors.BLUE}Processing DRY violations ({dry_violations_count} total)...{Colors.NC}")
 
     # Generate Magic String violations HTML
@@ -324,6 +426,7 @@ def main():
         '{{CHECKS_HTML}}': checks_html,
         '{{FIXTURE_STATUS_CLASS}}': fixture_status_class,
         '{{FIXTURE_STATUS_TEXT}}': fixture_status_text,
+        '{{AI_TRIAGE_HTML}}': ai_triage_html,
     }
 
     for placeholder, value in replacements.items():

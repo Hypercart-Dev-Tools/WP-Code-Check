@@ -544,6 +544,137 @@ When running WP Code Check on external paths, **always use absolute paths** to t
 
 ---
 
+## Phase 2: AI-Assisted Triage (Manual, v1.1 POC)
+
+After HTML report is generated, you can perform a 2nd pass AI triage to identify false positives and confirm real issues.
+
+### When to Use
+
+- User explicitly asks: "Run AI triage on this report"
+- User wants to validate false positives before publishing
+- Part of POC validation workflow (not yet automated)
+
+### Workflow Steps
+
+**Step 1: Read the JSON log** to understand findings
+```bash
+cat dist/logs/TIMESTAMP.json | jq '.findings[] | {id, severity, file, line}'
+```
+
+**Step 2: Analyze each critical finding** for false positives
+- Check for `phpcs:ignore` comments with justification
+- Verify nonce/capability checks nearby
+- Look for adjacent sanitization functions
+- Identify string literal matches vs actual superglobal access
+
+**Step 3: Update the JSON** with verdicts and recommendations
+- Use Python to safely inject ai_triage data
+- Preserve all existing Phase 1 data
+- Set timestamp to current UTC time
+
+**Step 4: Re-generate HTML** to include AI triage section
+- Run enhanced json-to-html.py
+- Verify Phase 2 section renders correctly
+
+### JSON Injection Method
+
+Use Python to safely update JSON:
+
+```python
+import json
+from datetime import datetime
+
+# Read existing JSON
+with open('dist/logs/TIMESTAMP.json', 'r') as f:
+    data = json.load(f)
+
+# Inject ai_triage data
+data['ai_triage'] = {
+    'status': 'complete',
+    'performed': True,
+    'timestamp': datetime.utcnow().isoformat() + 'Z',
+    'version': '1.0',
+    'summary': {
+        'findings_reviewed': 10,
+        'confirmed_issues': 2,
+        'false_positives': 7,
+        'needs_review': 1,
+        'confidence_level': 'high'
+    },
+    'verdicts': [
+        {
+            'finding_id': 'hcc-008-unsafe-regexp',
+            'file': 'repeater.js',
+            'line': 126,
+            'verdict': 'confirmed',
+            'reason': 'User property in RegExp without escaping',
+            'confidence': 'high',
+            'recommendation': 'Add regex escaping for property names'
+        },
+        {
+            'finding_id': 'spo-002-superglobals',
+            'file': 'form_display.php',
+            'line': 154,
+            'verdict': 'false_positive',
+            'reason': 'Has phpcs:ignore comment + nonce check on line 96',
+            'confidence': 'high',
+            'recommendation': 'Safe to ignore - already protected'
+        },
+        # ... more verdicts
+    ],
+    'recommendations': [
+        'Priority 1: Fix unsafe RegExp in repeater.js',
+        'Priority 2: Review minified JS source'
+    ]
+}
+
+# Write updated JSON
+with open('dist/logs/TIMESTAMP.json', 'w') as f:
+    json.dump(data, f, indent=2)
+```
+
+### Re-generate HTML
+
+After updating JSON:
+
+```bash
+python3 dist/bin/json-to-html.py dist/logs/TIMESTAMP.json dist/reports/TIMESTAMP.html
+```
+
+### Verify Results
+
+Open the HTML report and verify:
+- Phase 2 section appears (not placeholder)
+- Disclaimer is visible
+- Verdicts table renders correctly
+- All findings are accounted for
+
+### Verdict Types
+
+When creating verdicts, use one of these verdict types:
+
+| Verdict | Meaning | Use When |
+|---------|---------|----------|
+| `confirmed` | Real issue, needs fixing | Code is genuinely unsafe/problematic |
+| `false_positive` | Safe to ignore | Has safeguards (nonce, sanitization, etc.) |
+| `needs_review` | Unclear, manual verification needed | Ambiguous or context-dependent |
+
+### Confidence Levels
+
+Rate your confidence in each verdict:
+
+| Level | Meaning |
+|-------|---------|
+| `high` | 90%+ confident in this verdict |
+| `medium` | 60-89% confident |
+| `low` | <60% confident, needs human review |
+
+### Future (v1.2+)
+
+This workflow will be semi-automated. For now, it's manual and human-initiated.
+
+---
+
 ## Troubleshooting: What Happened on 2025-12-31
 
 ### The Issue
