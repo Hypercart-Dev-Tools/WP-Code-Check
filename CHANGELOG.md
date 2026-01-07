@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.96] - 2026-01-07
+
+### Added
+- **Post-Scan Triage Instructions** - Comprehensive AI agent instructions for first-pass issue triage
+  - **Step 6a**: Quick summary format with scan stats and top issues
+  - **Step 6b**: Critical issue investigation workflow with false positive checklist
+  - **Step 6c**: Markdown triage report template with verdict classifications (✅ Confirmed, ⚠️ Needs Review, ❌ False Positive)
+  - **Step 6d**: Scope limits (top 10-15 findings first pass, grouping similar issues)
+  - **False Positive Reference Table**: Common patterns for `spo-002-superglobals`, `rest-no-pagination`, `get-users-no-limit`, etc.
+  - **Location**: `dist/TEMPLATES/_AI_INSTRUCTIONS.md` lines 644-791
+
+### Changed
+- **Version:** Bumped to 1.0.96
+
 ## [1.0.95] - 2026-01-07
 
 ### Fixed

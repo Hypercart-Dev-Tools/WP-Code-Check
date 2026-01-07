@@ -621,12 +621,12 @@ python3 /path/to/wp-code-check/dist/bin/json-to-html.py \
 When a user asks to "run a template and output to HTML":
 
 1. **Use JSON output** (not `--format html`)
-  - Prefer being explicit with `--format json`, because templates can override `FORMAT`.
+   - Prefer being explicit with `--format json`, because templates can override `FORMAT`.
 2. **Wait for the scan to complete** (large themes/plugins may take 1-2 minutes)
 3. **Check `dist/reports/`** for the generated HTML file
 4. **If HTML generation fails**, manually convert the JSON using the Python converter
 5. **Open the latest `.html` file** in the browser
-6. After the scan with JSON file is completed, please summarize the findings in concise few bullet points. Offer to look at all critical issues further in the code and then generate a MD report with the same filename except with .md extension to match it up
+6. **Post-Scan Triage** (see detailed instructions below)
 
 The script will automatically:
 - Generate JSON output to `dist/logs/`
@@ -638,4 +638,153 @@ The script will automatically:
 - The JSON log is still saved and valid
 - Use the standalone Python converter to generate HTML manually
 - See "Manually Converting JSON to HTML" section above for details
+
+---
+
+## Post-Scan Triage & Report Generation
+
+After a scan completes, perform a first-pass triage to identify real issues vs false positives.
+
+### Step 6a: Quick Summary
+
+Provide a concise summary to the user:
+- **Scan stats**: Files analyzed, lines of code, errors/warnings count
+- **Top 3-5 critical issue categories** with counts
+- **Fixture validation status** (passed/failed)
+
+**Example output:**
+```
+## Scan Summary: ACME Plugin v2.1.3
+- Files: 127 | LOC: 15,432 | Errors: 8 | Warnings: 3
+- Fixture validation: ✅ Passed (8/8)
+
+### Top Issues:
+1. REST endpoints without pagination (5)
+2. get_users() without limit (2)
+3. Direct superglobal access (12)
+```
+
+### Step 6b: Critical Issue Triage (First Pass)
+
+For each **CRITICAL** or **HIGH** severity finding, briefly investigate:
+
+#### Investigation Steps:
+1. **View the flagged code** using `view` tool with 10-15 lines of context
+2. **Check for false positive indicators** (see checklist below)
+3. **Classify the finding** with a verdict
+
+#### False Positive Checklist:
+
+| Indicator | What to Look For |
+|-----------|------------------|
+| **PHPCS Ignore** | `// phpcs:ignore` comment with justification on same/previous line |
+| **Adjacent Sanitization** | `sanitize_*()`, `esc_*()`, `absint()`, `wp_unslash()` within 1-3 lines |
+| **Nonce Verification** | `check_admin_referer()`, `wp_verify_nonce()` earlier in same function |
+| **Capability Check** | `current_user_can()` guard before the flagged code |
+| **Third-Party Code** | File path contains `/vendor/`, `/node_modules/`, `/libraries/` |
+| **String Literal Match** | Pattern matched "POST" in HTML/string, not actual `$_POST` access |
+| **Pagination Exists** | REST endpoint has `per_page` in `get_collection_params()` or parent class |
+| **Limit in Filter** | `get_users()` args modified by `apply_filters()` that may add limit |
+
+#### Classification Verdicts:
+
+| Verdict | Symbol | Meaning | Action |
+|---------|--------|---------|--------|
+| **Confirmed** | ✅ | Real issue, needs fixing | Add to recommendations |
+| **Needs Review** | ⚠️ | Unclear, human should verify | Flag for manual review |
+| **False Positive** | ❌ | Safe to ignore | Document reason |
+
+### Step 6c: Generate Triage Report
+
+Create a markdown report at `dist/reports/{TIMESTAMP}-triage.md` using the **same timestamp** as the JSON/HTML files for easy matching.
+
+**Report Template:**
+
+```markdown
+# Triage Report: {Plugin/Theme Name} v{Version}
+
+**Scan Date**: {YYYY-MM-DD HH:MM:SS UTC}
+**JSON Log**: `dist/logs/{timestamp}.json`
+**HTML Report**: `dist/reports/{timestamp}.html`
+**Overall Verdict**: {PASS | NEEDS ATTENTION | CRITICAL}
+
+---
+
+## Summary
+
+| Metric | Value |
+|--------|-------|
+| Files Analyzed | X |
+| Lines of Code | Y |
+| Errors | Z |
+| Warnings | W |
+| Fixture Validation | ✅ Passed |
+
+---
+
+## Critical Findings Triage
+
+| # | Rule ID | File:Line | Verdict | Reason |
+|---|---------|-----------|---------|--------|
+| 1 | rest-no-pagination | class-controller.php:43 | ⚠️ Needs Review | Pagination may be in parent class |
+| 2 | get-users-no-limit | webapi.php:400 | ✅ Confirmed | No limit param, unbounded query |
+| 3 | spo-002-superglobals | form_display.php:154 | ❌ False Positive | phpcs:ignore + nonce on L96 |
+
+---
+
+## Confirmed Issues (Requires Action)
+
+### 1. get-users-no-limit in webapi.php:400
+**Severity**: CRITICAL
+**Impact**: Could fetch 10,000+ users on large sites
+
+**Code:**
+```php
+$users = get_users( $args ); // No 'number' limit
+```
+
+**Recommendation**: Add `'number' => 100` to `$args` and implement pagination.
+
+---
+
+## False Positives (Safe to Ignore)
+
+### spo-002-superglobals in form_display.php:154
+**Reason**: Code has `// phpcs:ignore WordPress.Security.NonceVerification.Missing` with nonce check on line 96 via `check_admin_referer()`.
+
+---
+
+## Recommendations
+
+1. **Priority 1**: Fix unbounded `get_users()` calls (2 locations)
+2. **Priority 2**: Review REST endpoints for pagination (5 endpoints)
+3. **Optional**: Consider adding explicit limits to filtered queries
+
+---
+
+## Next Steps
+
+- [ ] Review ⚠️ findings with development team
+- [ ] Create tickets for ✅ confirmed issues
+- [ ] Update baseline file to suppress known false positives
+```
+
+### Step 6d: Triage Scope Limits
+
+- **First pass**: Triage top **10-15 critical findings** only
+- **Offer to continue**: "I've triaged the top 10 critical issues. There are 15 more findings. Would you like me to continue?"
+- **Group similar issues**: If 20 findings are the same rule in the same file, triage once and note "applies to X similar findings"
+
+### Common False Positive Patterns by Rule
+
+| Rule ID | Common False Positive Reason |
+|---------|------------------------------|
+| `spo-002-superglobals` | Has `phpcs:ignore` with nonce verification elsewhere in function |
+| `rest-no-pagination` | Endpoint returns single item, not collection (e.g., `/item/{id}`) |
+| `get-users-no-limit` | Args passed through `apply_filters()` hook that adds limit |
+| `direct-db-query` | Query uses `$wpdb->prepare()` on adjacent line (multi-line query) |
+| `admin-no-cap-check` | Function is only called from another function that has cap check |
+| `n-plus-1-pattern` | File has "meta" in variable name but not actual meta query in loop |
+
+---
 
