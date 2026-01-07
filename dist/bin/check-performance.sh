@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.92
+# Version: 1.0.93
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.90"
+SCRIPT_VERSION="1.0.93"
 
 # Defaults
 PATHS="."
@@ -70,7 +70,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=17  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
 
 # ============================================================
@@ -1298,6 +1298,9 @@ run_fixture_validation() {
     "MITIGATION:wp-query-unbounded-mitigated.php:new WP_Query:CRITICAL:LOW:caching,ids-only,admin-only"
     "MITIGATION:wp-query-unbounded-mitigated-1.php:new WP_Query:CRITICAL:HIGH:caching"
     "MITIGATION:wp-query-unbounded-mitigated-2.php:new WP_Query:CRITICAL:MEDIUM:caching,admin-only"
+    "MITIGATION:wp-query-unbounded-class-method-scope.php:new WP_Query:CRITICAL:CRITICAL:"
+    "MITIGATION:wp-query-unbounded-private-static-method-scope.php:new WP_Query:CRITICAL:CRITICAL:"
+    "MITIGATION:wp-query-unbounded-admin-only-class-method.php:new WP_Query:CRITICAL:HIGH:admin-only"
     "wp-user-query-meta-bloat.php:new WP_User_Query:1"
     "limit-multiplier-from-count.php:count( \$user_ids ):1"
     "array-merge-in-loop.php:array_merge:1"
@@ -2420,10 +2423,77 @@ unset OVERRIDE_GREP_INCLUDE
 text_echo ""
 
 # Direct superglobal manipulation (assignment)
-run_check "ERROR" "$(get_severity "spo-002-superglobals" "HIGH")" "Direct superglobal manipulation" "spo-002-superglobals" \
-  "-E unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[" \
-  "-E \\$_(GET|POST|REQUEST)[[:space:]]*=" \
-  "-E \\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*="
+# Enhancement v1.0.93: Add nonce verification detection to reduce false positives
+SUPERGLOBAL_SEVERITY=$(get_severity "spo-002-superglobals" "HIGH")
+SUPERGLOBAL_COLOR="${YELLOW}"
+if [ "$SUPERGLOBAL_SEVERITY" = "CRITICAL" ] || [ "$SUPERGLOBAL_SEVERITY" = "HIGH" ]; then SUPERGLOBAL_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Direct superglobal manipulation ${SUPERGLOBAL_COLOR}[$SUPERGLOBAL_SEVERITY]${NC}"
+SUPERGLOBAL_FAILED=false
+SUPERGLOBAL_FINDING_COUNT=0
+SUPERGLOBAL_VISIBLE=""
+
+# Find all superglobal manipulation patterns
+SUPERGLOBAL_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" "$PATHS" 2>/dev/null | \
+  grep -v '//.*\$_' || true)
+
+if [ -n "$SUPERGLOBAL_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    lineno=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+
+    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    # FALSE POSITIVE REDUCTION: Check for nonce verification in function scope (20 lines before)
+    start_line=$((lineno - 20))
+    [ "$start_line" -lt 1 ] && start_line=1
+    context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+
+    # If nonce verification exists, suppress this finding (it's protected)
+    if echo "$context" | grep -qE "wp_verify_nonce[[:space:]]*\\(|check_admin_referer[[:space:]]*\\(|wp_nonce_field[[:space:]]*\\("; then
+      continue
+    fi
+
+    if should_suppress_finding "spo-002-superglobals" "$file"; then
+      continue
+    fi
+
+    SUPERGLOBAL_FAILED=true
+    ((SUPERGLOBAL_FINDING_COUNT++))
+    add_json_finding "spo-002-superglobals" "error" "$SUPERGLOBAL_SEVERITY" "$file" "$lineno" "Direct superglobal manipulation" "$code"
+
+    if [ -z "$SUPERGLOBAL_VISIBLE" ]; then
+      SUPERGLOBAL_VISIBLE="$match"
+    else
+      SUPERGLOBAL_VISIBLE="${SUPERGLOBAL_VISIBLE}
+$match"
+    fi
+  done <<< "$SUPERGLOBAL_MATCHES"
+fi
+
+if [ "$SUPERGLOBAL_FAILED" = true ]; then
+  if [ "$SUPERGLOBAL_SEVERITY" = "CRITICAL" ] || [ "$SUPERGLOBAL_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$SUPERGLOBAL_VISIBLE" ]; then
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      format_finding "$match"
+    done <<< "$(echo "$SUPERGLOBAL_VISIBLE" | head -5)"
+  fi
+  add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "failed" "$SUPERGLOBAL_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "passed" 0
+fi
+text_echo ""
 
 # Unsanitized superglobal read (reading $_GET/$_POST without sanitization)
 # PATTERN LIBRARY: Load from JSON (v1.0.68 - first pattern to use JSON)
@@ -2504,12 +2574,31 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     # CONTEXT-AWARE DETECTION: Check for nonce verification in previous 10 lines
     # If nonce check found AND superglobal is sanitized, skip this finding
     # Also skip if $_POST is used WITHIN nonce verification function itself
+    # Enhancement v1.0.93: Also detect strict comparison to literals as implicit sanitization
     has_nonce_protection=false
 
     # Special case: $_POST used inside nonce verification function is SAFE
     # Example: wp_verify_nonce( $_POST['nonce'], 'action' )
     if echo "$code" | grep -qE "(check_ajax_referer|wp_verify_nonce|check_admin_referer)[[:space:]]*\([^)]*\\\$_(GET|POST|REQUEST)\["; then
       has_nonce_protection=true
+    fi
+
+    # FALSE POSITIVE REDUCTION: Detect strict comparison to literals (boolean flags)
+    # Pattern: isset( $_POST['key'] ) && $_POST['key'] === '1'
+    # This is safe for boolean flags - value is constrained to literal
+    if echo "$code" | grep -qE "\\\$_(GET|POST|REQUEST)\[[^]]*\][[:space:]]*===[[:space:]]*['\"][^'\"]*['\"]"; then
+      # Check if nonce verification exists in function scope
+      if [ "$lineno" -gt 20 ]; then
+        start_line=$((lineno - 20))
+      else
+        start_line=1
+      fi
+      context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+
+      if echo "$context" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
+        # Strict comparison to literal + nonce verification = SAFE
+        has_nonce_protection=true
+      fi
     fi
 
     if [ "$has_nonce_protection" = false ]; then
@@ -2581,6 +2670,7 @@ run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")
 # Direct database queries without $wpdb->prepare() (SQL injection risk)
 # Note: This check requires custom implementation because we need to filter out lines
 # that contain $wpdb->prepare in the same statement (grep -v after initial match)
+# Enhancement v1.0.93: Add variable tracking to detect prepared variables
 text_echo ""
 WPDB_SEVERITY=$(get_severity "wpdb-query-no-prepare" "CRITICAL")
 WPDB_COLOR="${YELLOW}"
@@ -2606,6 +2696,27 @@ if [ -n "$WPDB_MATCHES" ]; then
 
     if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
       continue
+    fi
+
+    # FALSE POSITIVE REDUCTION: Check if variable was prepared in previous lines
+    # Pattern: $sql = $wpdb->prepare(...); ... $wpdb->get_col( $sql );
+    # Extract variable name from $wpdb->get_*( $var )
+    var_name=$(echo "$code" | sed -n 's/.*\$wpdb->[a-z_]*[[:space:]]*([[:space:]]*\(\$[a-zA-Z_][a-zA-Z0-9_]*\).*/\1/p')
+
+    if [ -n "$var_name" ]; then
+      # Check if this variable was assigned from $wpdb->prepare() within previous 10 lines
+      start_line=$((lineno - 10))
+      [ "$start_line" -lt 1 ] && start_line=1
+      context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+
+      # Escape $ for grep
+      var_escaped=$(echo "$var_name" | sed 's/\$/\\$/g')
+
+      # Check for pattern: $var = $wpdb->prepare(...)
+      if echo "$context" | grep -qE "${var_escaped}[[:space:]]*=[[:space:]]*\\\$wpdb->prepare[[:space:]]*\("; then
+        # Variable was prepared - skip this finding
+        continue
+      fi
     fi
 
     if should_suppress_finding "wpdb-query-no-prepare" "$file"; then
@@ -2694,11 +2805,20 @@ if [ -n "$ADMIN_MATCHES" ]; then
       continue
     fi
 
-    # Also check for WordPress menu functions with capability parameter
+    # Enhancement v1.0.93: Parse capability parameter from add_*_page() functions
+    # add_submenu_page() 4th parameter is capability
+    # add_menu_page() 4th parameter is capability
+    # add_options_page() 3rd parameter is capability
     # Pattern: add_*_page(..., 'capability', ...)
-    if echo "$context" | grep -qE "add_(menu|submenu|options|management|theme|plugins|users|dashboard|posts|media|pages|comments|tools)_page[[:space:]]*\\(" && \
-       echo "$context" | grep -qE "'(manage_options|edit_posts|edit_pages|edit_published_posts|publish_posts|read|delete_posts|administrator|editor|author|contributor|subscriber)'"; then
-      continue
+    if echo "$context" | grep -qE "add_(menu|submenu|options|management|theme|plugins|users|dashboard|posts|media|pages|comments|tools)_page[[:space:]]*\\("; then
+      # Extract the full function call (may span multiple lines)
+      full_call=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null | tr '\n' ' ')
+
+      # Check for common WordPress capabilities in the function call
+      # This includes: manage_options, manage_woocommerce, edit_posts, etc.
+      if echo "$full_call" | grep -qE "'(manage_options|manage_woocommerce|edit_posts|edit_pages|edit_published_posts|publish_posts|read|delete_posts|edit_users|list_users|promote_users|create_users|delete_users|administrator|editor|author|contributor|subscriber)'"; then
+        continue
+      fi
     fi
 
     # Second check: If this is an add_action/add_filter with a callback, look up the callback function
@@ -3030,6 +3150,52 @@ text_echo ""
 # 4. Admin context - Query only runs in admin area (lower traffic)
 # ============================================================================
 
+# Get the start/end line range for the enclosing function/method.
+#
+# We intentionally keep this heuristic and dependency-free (no AST). It is used
+# to prevent mitigation detection from leaking across adjacent functions/methods,
+# which can cause false severity downgrades.
+#
+# Supports common PHP method declarations such as:
+# - function foo() {}
+# - public function foo() {}
+# - private static function foo() {}
+# - final protected function foo() {}
+#
+# Usage: get_function_scope_range "$file" "$lineno" [fallback_lines]
+# Output: "start:end"
+get_function_scope_range() {
+  local file="$1"
+  local lineno="$2"
+  local fallback_lines="${3:-20}"
+
+  # Match function/method declarations at the start of a line.
+  # Note: We deliberately require whitespace after the 'function' keyword.
+  local decl_regex='^[[:space:]]*([[:alnum:]_]+[[:space:]]+)*function[[:space:]]+'
+
+  local start end
+  start=$(awk -v line="$lineno" -v fallback="$fallback_lines" -v re="$decl_regex" '
+    NR <= line && $0 ~ re { s=NR }
+    END {
+      if (s) { print s; exit }
+      if (line > fallback) { print line - fallback } else { print 1 }
+    }
+  ' "$file")
+
+  end=$(awk -v line="$lineno" -v re="$decl_regex" '
+    NR > line && $0 ~ re { print NR-1; found=1; exit }
+    END { if (!found) print NR }
+  ' "$file")
+
+  # Safety: ensure numeric bounds.
+  if ! [[ "$start" =~ ^[0-9]+$ ]]; then start=1; fi
+  if ! [[ "$end" =~ ^[0-9]+$ ]]; then end="$lineno"; fi
+  if [ "$start" -lt 1 ]; then start=1; fi
+  if [ "$end" -lt "$start" ]; then end="$start"; fi
+
+  echo "${start}:${end}"
+}
+
 # Check if query results are cached (transients or object cache)
 # Usage: has_caching_mitigation "$file" "$line_number"
 # Returns: 0 if caching detected, 1 otherwise
@@ -3037,18 +3203,12 @@ has_caching_mitigation() {
   local file="$1"
   local lineno="$2"
 
-  # Find the function boundaries (look for function declaration before and after)
-  local function_start=$(awk -v line="$lineno" '
-    NR <= line && /^[[:space:]]*function[[:space:]]/ { start=NR }
-    END { print start ? start : (line > 20 ? line - 20 : 1) }
-  ' "$file")
+  local range function_start function_end
+  range=$(get_function_scope_range "$file" "$lineno" 30)
+  function_start=${range%%:*}
+  function_end=${range##*:}
 
-  local function_end=$(awk -v line="$lineno" '
-    NR > line && /^[[:space:]]*function[[:space:]]/ { print NR-1; found=1; exit }
-    END { if (!found && NR >= line) print NR }
-  ' "$file")
-
-  # Get context within the same function (or ±20 lines if function boundaries not found)
+  # Get context within the same function/method (or fallback window if boundaries not found)
   local context=$(sed -n "${function_start},${function_end}p" "$file" 2>/dev/null || true)
 
   # Check for WordPress caching patterns in the same function
@@ -3066,13 +3226,13 @@ has_caching_mitigation() {
 has_parent_scope_mitigation() {
   local file="$1"
   local lineno="$2"
-  local context_lines=10  # Look 10 lines before and after
 
-  local start_line=$((lineno - context_lines))
-  [ "$start_line" -lt 1 ] && start_line=1
-  local end_line=$((lineno + context_lines))
+  local range function_start function_end
+  range=$(get_function_scope_range "$file" "$lineno" 20)
+  function_start=${range%%:*}
+  function_end=${range##*:}
 
-  local context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
+  local context=$(sed -n "${function_start},${function_end}p" "$file" 2>/dev/null || true)
 
   # Check for parent parameter in query args
   if echo "$context" | grep -q -E "('|\")parent('|\")\s*=>"; then
@@ -3088,13 +3248,13 @@ has_parent_scope_mitigation() {
 has_ids_only_mitigation() {
   local file="$1"
   local lineno="$2"
-  local context_lines=10  # Look 10 lines before and after
 
-  local start_line=$((lineno - context_lines))
-  [ "$start_line" -lt 1 ] && start_line=1
-  local end_line=$((lineno + context_lines))
+  local range function_start function_end
+  range=$(get_function_scope_range "$file" "$lineno" 20)
+  function_start=${range%%:*}
+  function_end=${range##*:}
 
-  local context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
+  local context=$(sed -n "${function_start},${function_end}p" "$file" 2>/dev/null || true)
 
   # Check for 'return' => 'ids' or 'fields' => 'ids'
   if echo "$context" | grep -q -E "('|\")return('|\")\s*=>\s*('|\")ids('|\")"; then
@@ -3113,12 +3273,13 @@ has_ids_only_mitigation() {
 has_admin_context_mitigation() {
   local file="$1"
   local lineno="$2"
-  local context_lines=30  # Look 30 lines before
 
-  local start_line=$((lineno - context_lines))
-  [ "$start_line" -lt 1 ] && start_line=1
+  local range function_start
+  range=$(get_function_scope_range "$file" "$lineno" 30)
+  function_start=${range%%:*}
 
-  local context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+  # Admin gates should appear before the query within the same scope.
+  local context=$(sed -n "${function_start},${lineno}p" "$file" 2>/dev/null || true)
 
   # Check for admin checks before the query
   if echo "$context" | grep -q -E "(is_admin\(\)|current_user_can\(|if\s*\(\s*!\s*is_admin)"; then
@@ -3835,6 +3996,7 @@ text_echo ""
 # Heuristic: query limit multipliers derived from count()
 # Example: $candidate_limit = count( $user_ids ) * 10 * 5;
 # This can balloon result sets and trigger OOM when combined with object hydration.
+# Enhancement v1.0.93: Detect hard caps (min(..., N)) and downgrade severity
 MULT_SEVERITY=$(get_severity "limit-multiplier-from-count" "MEDIUM")
 MULT_COLOR="${YELLOW}"
 if [ "$MULT_SEVERITY" = "CRITICAL" ] || [ "$MULT_SEVERITY" = "HIGH" ]; then MULT_COLOR="${RED}"; fi
@@ -3860,9 +4022,23 @@ if [ -n "$MULT_MATCHES" ]; then
       continue
     fi
 
+    # FALSE POSITIVE REDUCTION: Check if hard cap exists (min(..., N) pattern)
+    adjusted_severity="$MULT_SEVERITY"
+    message="Potential multiplier: count(...) * N (review for runaway limits)"
+
+    if echo "$code" | grep -qE "min[[:space:]]*\("; then
+      # Extract the hard cap value from min(..., N)
+      hard_cap=$(echo "$code" | sed -n 's/.*min[[:space:]]*([^,]*,[[:space:]]*\([0-9]\{1,\}\).*/\1/p')
+      if [ -n "$hard_cap" ]; then
+        # Downgrade severity: MEDIUM → LOW when hard cap exists
+        adjusted_severity="LOW"
+        message="Potential multiplier: count(...) * N [Mitigated by: hard cap of $hard_cap]"
+      fi
+    fi
+
     MULT_FOUND=true
     ((MULT_FINDING_COUNT++))
-    add_json_finding "limit-multiplier-from-count" "warning" "$MULT_SEVERITY" "$file" "$lineno" "Potential multiplier: count(...) * N (review for runaway limits)" "$code"
+    add_json_finding "limit-multiplier-from-count" "warning" "$adjusted_severity" "$file" "$lineno" "$message" "$code"
 
     match_output="$file:$lineno:$code"
     if [ -z "$MULT_VISIBLE" ]; then

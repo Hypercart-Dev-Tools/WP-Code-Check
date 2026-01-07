@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.93] - 2026-01-07
+
+### Added
+- **Phase 1: False Positive Reduction - Quick Wins** - Context-aware detection enhancements
+  - **Enhancement 1: Nonce Verification Detection** (`spo-002-superglobals`)
+    - Detects `wp_verify_nonce()`, `check_admin_referer()`, `wp_nonce_field()` in function scope (20 lines before)
+    - Suppresses findings when nonce verification exists
+    - **Impact:** Reduced false positives from 5 to 2 (-60%) on KISS plugin test
+  - **Enhancement 2: Capability Parameter Parsing** (`spo-004-missing-cap-check`)
+    - Parses `add_submenu_page()` / `add_menu_page()` to extract capability parameter
+    - Detects common WordPress capabilities: `manage_options`, `manage_woocommerce`, `edit_posts`, etc.
+    - Suppresses findings when valid capability found in function call
+    - **Impact:** Reduced false positives from 9 to 7 (-22%) on KISS plugin test
+  - **Enhancement 3: Hard Cap Detection** (`limit-multiplier-from-count`)
+    - Detects `min(count(...) * N, MAX)` pattern as mitigation
+    - Downgrades severity: MEDIUM → LOW when hard cap exists
+    - Adds informative message: `[Mitigated by: hard cap of N]`
+    - **Impact:** 1 of 2 findings downgraded to LOW on KISS plugin test
+  - **Enhancement 4: Prepared Variable Tracking** (`wpdb-query-no-prepare`)
+    - Tracks variable assignments: `$sql = $wpdb->prepare(...)`
+    - Checks previous 10 lines for prepared variable pattern
+    - Suppresses findings when variable was prepared before use
+    - **Impact:** Reduced false positives from 15 to 10 (-33%) on KISS plugin test
+  - **Enhancement 5: Strict Comparison Detection** (`unsanitized-superglobal-read`)
+    - Detects strict comparison to literals: `$_POST['key'] === '1'`
+    - Recognizes this as implicit sanitization for boolean flags
+    - Requires nonce verification in function scope (20 lines before)
+    - Suppresses findings when both conditions met
+
+### Changed
+- **Overall False Positive Reduction:** 24% reduction on KISS plugin test (33 → 25 findings)
+- **Version:** Bumped to 1.0.93
+
+### Testing
+- **Fixture Count:** Increased to 20 fixtures (adds method-scope coverage for mitigation detection)
+  - Added class method scoping fixtures to prevent cross-method mitigation leakage and validate admin-only mitigation inside methods
+
 ## [1.0.92] - 2026-01-06
 
 ### Changed

@@ -1,5 +1,34 @@
 # Backlog - Issues to Investigate
 
+## Mini Project Plan: Enhanced Context Detection (False Positive Reduction)
+
+Goal: Improve context/scope accuracy (especially “same function”) to reduce false positives and severity inflation, while keeping the scanner fast and zero-dependency.
+
+Notes:
+- This is **not a new standalone script**. `dist/bin/check-performance.sh` already has limited “same function” scoping (used in caching mitigation); this mini-project extends/centralizes that approach.
+
+### Checklist
+- [ ] Audit where we rely on context windows today (±N lines) and where “same function” scoping would reduce false positives.
+- [ ] Add/centralize a helper to compute function/method scope boundaries (support `function foo()`, `public/protected/private static function foo()`, and common formatting).
+- [ ] Use the helper in mitigation detection (so caching/ids-only/admin-only/parent-scoped all share the same scoping rules).
+- [ ] Add 2–4 fixtures that prove: (a) cross-function false positives are prevented, (b) true positives still fire.
+- [ ] Validate on 1–2 real repos + gather feedback:
+   - [ ] Are false positives still a problem?
+   - [ ] Is baseline suppression working well?
+   - [ ] Do users want AST-level accuracy?
+
+Constraints:
+- 2–3 hours
+- No new dependencies
+- Preserve fast performance
+
+Decision gate (AST scanner only if needed):
+- [ ] Users demand higher accuracy
+- [ ] False positives remain a major pain point
+- [ ] Users accept dependencies + slower performance
+
+Status: Not started
+
 ## ✅ RESOLVED 2025-12-31: Fixture Validation Subprocess Issue
 
 **Resolution:** Refactored to use direct pattern matching instead of subprocess calls.
