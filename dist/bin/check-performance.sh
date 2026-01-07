@@ -4166,8 +4166,9 @@ CRON_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" \
 if [ -n "$CRON_FILES" ]; then
   # SAFEGUARD: Use safe_file_iterator() instead of "for file in $CRON_FILES"
   # File paths with spaces will break the loop without this helper (see common-helpers.sh)
-  # Use process substitution to avoid subshell (pipe would prevent CRON_INTERVAL_FAIL from persisting)
-  while IFS= read -r file; do
+  # Use temp file to communicate findings from subshell (pipe creates subshell that can't modify parent vars)
+  CRON_TEMP_FILE=$(mktemp)
+  safe_file_iterator "$CRON_FILES" | while IFS= read -r file; do
     # Look for 'interval' => $variable * 60 or $variable * MINUTE_IN_SECONDS patterns
     # Pattern: 'interval' => $var * (60|MINUTE_IN_SECONDS)
     # Use single quotes to avoid shell escaping issues with $ and *
@@ -4235,8 +4236,8 @@ if [ -n "$CRON_FILES" ]; then
 
         if [ "$has_validation" = false ]; then
           if ! should_suppress_finding "unvalidated-cron-interval" "$file"; then
-            CRON_INTERVAL_FAIL=true
-            ((CRON_INTERVAL_FINDING_COUNT++))
+            # Write to temp file (subshell can't modify parent vars)
+            echo "FAIL" >> "$CRON_TEMP_FILE"
 
             # Format the finding for display
             if [ "$OUTPUT_FORMAT" = "text" ]; then
@@ -4251,7 +4252,16 @@ if [ -n "$CRON_FILES" ]; then
         fi
       done <<< "$INTERVAL_MATCHES"
     fi
-  done < <(safe_file_iterator "$CRON_FILES")
+  done
+
+  # Read findings from temp file (subshell workaround)
+  if [ -f "$CRON_TEMP_FILE" ]; then
+    CRON_INTERVAL_FINDING_COUNT=$(wc -l < "$CRON_TEMP_FILE" | tr -d ' ')
+    if [ "$CRON_INTERVAL_FINDING_COUNT" -gt 0 ]; then
+      CRON_INTERVAL_FAIL=true
+    fi
+    rm -f "$CRON_TEMP_FILE"
+  fi
 fi
 
 if [ "$CRON_INTERVAL_FAIL" = true ]; then
