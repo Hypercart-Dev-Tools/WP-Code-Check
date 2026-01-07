@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.94"
+SCRIPT_VERSION="1.0.95"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -4166,7 +4166,8 @@ CRON_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" \
 if [ -n "$CRON_FILES" ]; then
   # SAFEGUARD: Use safe_file_iterator() instead of "for file in $CRON_FILES"
   # File paths with spaces will break the loop without this helper (see common-helpers.sh)
-  safe_file_iterator "$CRON_FILES" | while IFS= read -r file; do
+  # Use process substitution to avoid subshell (pipe would prevent CRON_INTERVAL_FAIL from persisting)
+  while IFS= read -r file; do
     # Look for 'interval' => $variable * 60 or $variable * MINUTE_IN_SECONDS patterns
     # Pattern: 'interval' => $var * (60|MINUTE_IN_SECONDS)
     # Use single quotes to avoid shell escaping issues with $ and *
@@ -4250,7 +4251,7 @@ if [ -n "$CRON_FILES" ]; then
         fi
       done <<< "$INTERVAL_MATCHES"
     fi
-  done
+  done < <(safe_file_iterator "$CRON_FILES")
 fi
 
 if [ "$CRON_INTERVAL_FAIL" = true ]; then
