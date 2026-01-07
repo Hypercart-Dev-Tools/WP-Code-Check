@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.0.90
+# Version: 1.0.92
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -70,7 +70,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=14  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=17  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
 
 # ============================================================
@@ -1208,6 +1208,52 @@ validate_single_fixture() {
   fi
 }
 
+# Validate mitigation-based severity adjustment for a known-bad fixture.
+# This asserts that get_adjusted_severity() returns the expected adjusted severity
+# and includes required mitigation tags.
+#
+# Format tokens are comma-separated (e.g., "caching,ids-only,admin-only").
+#
+# Usage:
+#   validate_mitigation_adjustment \
+#     "fixture_file" "line_pattern" "base_severity" "expected_severity" "required_tokens_csv"
+validate_mitigation_adjustment() {
+  local fixture_file="$1"
+  local line_pattern="$2"
+  local base_severity="$3"
+  local expected_severity="$4"
+  local required_tokens_csv="$5"
+
+  local lineno
+  lineno=$(grep -nF "$line_pattern" "$fixture_file" 2>/dev/null | head -1 | cut -d: -f1)
+  if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+    [ "${NEOCHROME_DEBUG:-}" = "1" ] && echo "[DEBUG] mitigation: unable to locate line_pattern='$line_pattern' in $fixture_file" >&2
+    return 1
+  fi
+
+  local mitigation_result adjusted_severity mitigations
+  mitigation_result=$(get_adjusted_severity "$fixture_file" "$lineno" "$base_severity")
+  adjusted_severity=$(echo "$mitigation_result" | cut -d'|' -f1)
+  mitigations=$(echo "$mitigation_result" | cut -d'|' -f2)
+
+  if [ "$adjusted_severity" != "$expected_severity" ]; then
+    [ "${NEOCHROME_DEBUG:-}" = "1" ] && echo "[DEBUG] mitigation: expected='$expected_severity' actual='$adjusted_severity' mitigations='$mitigations' file=$fixture_file:$lineno" >&2
+    return 1
+  fi
+
+  local token
+  local IFS=','
+  for token in $required_tokens_csv; do
+    # Ensure exact token match within comma-separated list.
+    if ! echo ",${mitigations}," | grep -q ",${token},"; then
+      [ "${NEOCHROME_DEBUG:-}" = "1" ] && echo "[DEBUG] mitigation: missing token='$token' mitigations='$mitigations' file=$fixture_file:$lineno" >&2
+      return 1
+    fi
+  done
+
+  return 0
+}
+
 # Run fixture validation suite
 # Uses direct pattern matching (no subprocesses) to verify detection works
 # Returns: Sets FIXTURE_VALIDATION_PASSED, FIXTURE_VALIDATION_FAILED, FIXTURE_VALIDATION_STATUS
@@ -1249,6 +1295,9 @@ run_fixture_validation() {
     "unbounded-wc-get-orders.php:wc_get_orders:1"
     "unbounded-wc-get-products.php:wc_get_products:1"
     "wp-query-unbounded.php:posts_per_page:1"
+    "MITIGATION:wp-query-unbounded-mitigated.php:new WP_Query:CRITICAL:LOW:caching,ids-only,admin-only"
+    "MITIGATION:wp-query-unbounded-mitigated-1.php:new WP_Query:CRITICAL:HIGH:caching"
+    "MITIGATION:wp-query-unbounded-mitigated-2.php:new WP_Query:CRITICAL:MEDIUM:caching,admin-only"
     "wp-user-query-meta-bloat.php:new WP_User_Query:1"
     "limit-multiplier-from-count.php:count( \$user_ids ):1"
     "array-merge-in-loop.php:array_merge:1"
@@ -1284,14 +1333,36 @@ run_fixture_validation() {
   local checks_to_run=("${checks[@]:0:${fixture_count}}")
 
   for check_spec in "${checks_to_run[@]}"; do
-    local fixture_file pattern expected_count
-    IFS=':' read -r fixture_file pattern expected_count <<< "$check_spec"
+    local field1 field2 field3 field4 field5 field6
+    IFS=':' read -r field1 field2 field3 field4 field5 field6 <<< "$check_spec"
 
-    if [ -f "$fixtures_dir/$fixture_file" ]; then
-      if validate_single_fixture "$fixtures_dir/$fixture_file" "$pattern" "$expected_count"; then
-        ((FIXTURE_VALIDATION_PASSED++))
-      else
-        ((FIXTURE_VALIDATION_FAILED++))
+    if [ "$field1" = "MITIGATION" ]; then
+      local fixture_file line_pattern base_severity expected_severity required_tokens
+      fixture_file="$field2"
+      line_pattern="$field3"
+      base_severity="$field4"
+      expected_severity="$field5"
+      required_tokens="$field6"
+
+      if [ -f "$fixtures_dir/$fixture_file" ]; then
+        if validate_mitigation_adjustment "$fixtures_dir/$fixture_file" "$line_pattern" "$base_severity" "$expected_severity" "$required_tokens"; then
+          ((FIXTURE_VALIDATION_PASSED++))
+        else
+          ((FIXTURE_VALIDATION_FAILED++))
+        fi
+      fi
+    else
+      local fixture_file pattern expected_count
+      fixture_file="$field1"
+      pattern="$field2"
+      expected_count="$field3"
+
+      if [ -f "$fixtures_dir/$fixture_file" ]; then
+        if validate_single_fixture "$fixtures_dir/$fixture_file" "$pattern" "$expected_count"; then
+          ((FIXTURE_VALIDATION_PASSED++))
+        else
+          ((FIXTURE_VALIDATION_FAILED++))
+        fi
       fi
     fi
   done
@@ -2076,12 +2147,6 @@ if [ "$PROJECT_NAME" != "Unknown" ] && [ -n "$PROJECT_NAME" ]; then
   fi
   text_echo ""
 fi
-
-# Run fixture validation (proof of detection)
-# This runs quietly in the background and sets global variables
-debug_echo "Running fixture validation..."
-run_fixture_validation
-debug_echo "Fixture validation complete"
 
 text_echo "Scanning paths: $PATHS"
 text_echo "Strict mode: $STRICT"
@@ -3122,6 +3187,12 @@ get_adjusted_severity() {
   echo "${adjusted_severity}|${mitigations}"
 }
 
+# Run fixture validation (proof of detection)
+# This runs before checks and sets global variables used by the summary.
+debug_echo "Running fixture validation..."
+run_fixture_validation
+debug_echo "Fixture validation complete"
+
 run_check "ERROR" "$(get_severity "unbounded-posts-per-page" "CRITICAL")" "Unbounded posts_per_page" "unbounded-posts-per-page" \
   "-e posts_per_page[[:space:]]*=>[[:space:]]*-1"
 
@@ -3653,8 +3724,21 @@ if [ -n "$WPQ_MATCHES" ]; then
       if ! should_suppress_finding "wp-query-unbounded" "$file"; then
         WPQ_UNBOUNDED=true
         ((WPQ_FINDING_COUNT++))
-        add_json_finding "wp-query-unbounded" "error" "$WPQ_SEVERITY" "$file" "$lineno" "WP_Query/get_posts with -1 limit or nopaging" "$code"
+
+        mitigation_result=$(get_adjusted_severity "$file" "$lineno" "$WPQ_SEVERITY")
+        adjusted_severity=$(echo "$mitigation_result" | cut -d'|' -f1)
+        mitigations=$(echo "$mitigation_result" | cut -d'|' -f2)
+
+        message="WP_Query/get_posts with -1 limit or nopaging"
+        if [ -n "$mitigations" ]; then
+          message="$message [Mitigated by: $mitigations]"
+        fi
+
+        add_json_finding "wp-query-unbounded" "error" "$adjusted_severity" "$file" "$lineno" "$message" "$code"
         match_output="$file:$lineno:$code"
+        if [ -n "$mitigations" ]; then
+          match_output="$match_output [Mitigated by: $mitigations]"
+        fi
         if [ -z "$WPQ_VISIBLE" ]; then WPQ_VISIBLE="$match_output"; else WPQ_VISIBLE="${WPQ_VISIBLE}\n$match_output"; fi
       fi
     fi
@@ -3708,8 +3792,21 @@ if [ -n "$WUQ_MATCHES" ]; then
        if ! should_suppress_finding "wp-user-query-meta-bloat" "$file"; then
          WUQ_UNBOUNDED=true
          ((WUQ_FINDING_COUNT++))
-         add_json_finding "wp-user-query-meta-bloat" "error" "$WUQ_SEVERITY" "$file" "$lineno" "WP_User_Query missing update_user_meta_cache => false" "$code"
+
+         mitigation_result=$(get_adjusted_severity "$file" "$lineno" "$WUQ_SEVERITY")
+         adjusted_severity=$(echo "$mitigation_result" | cut -d'|' -f1)
+         mitigations=$(echo "$mitigation_result" | cut -d'|' -f2)
+
+         message="WP_User_Query missing update_user_meta_cache => false"
+         if [ -n "$mitigations" ]; then
+           message="$message [Mitigated by: $mitigations]"
+         fi
+
+         add_json_finding "wp-user-query-meta-bloat" "error" "$adjusted_severity" "$file" "$lineno" "$message" "$code"
          match_output="$file:$lineno:$code"
+         if [ -n "$mitigations" ]; then
+           match_output="$match_output [Mitigated by: $mitigations]"
+         fi
          if [ -z "$WUQ_VISIBLE" ]; then WUQ_VISIBLE="$match_output"; else WUQ_VISIBLE="${WUQ_VISIBLE}\n$match_output"; fi
        fi
     fi
@@ -4945,5 +5042,19 @@ fi
 section_end
 profile_end "FUNCTION_CLONE_DETECTOR"
 profile_report
+
+# ============================================================================
+# Pattern Library Manager (Auto-Update Registry)
+# ============================================================================
+# Run pattern library manager to update canonical registry after each scan
+# This ensures PATTERN-LIBRARY.json and PATTERN-LIBRARY.md stay in sync
+
+if [ -f "$SCRIPT_DIR/pattern-library-manager.sh" ]; then
+  echo ""
+  echo "🔄 Updating pattern library registry..."
+  bash "$SCRIPT_DIR/pattern-library-manager.sh" both 2>/dev/null || {
+    echo "⚠️  Pattern library manager failed (non-fatal)"
+  }
+fi
 
 exit $EXIT_CODE

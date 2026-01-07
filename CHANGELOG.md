@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.92] - 2026-01-06
+
+### Changed
+- **Pattern Library Manager** - Enhanced to include multi-platform pattern tracking
+  - **Multi-Platform Support:** Now tracks patterns by type (PHP/WordPress, Headless WordPress, Node.js, JavaScript)
+  - **Expanded Coverage:** Detects all 26 patterns across subdirectories (`patterns/`, `patterns/headless/`, `patterns/nodejs/`, `patterns/js/`)
+  - **Updated Stats:**
+    - **Total Patterns:** 26 (up from 15)
+    - **By Platform:** PHP (15), Headless (6), Node.js (4), JavaScript (1)
+    - **By Severity:** 9 CRITICAL, 8 HIGH, 6 MEDIUM, 3 LOW
+    - **By Category:** Performance (8), Security (8), Duplication (5), Reliability (3)
+  - **Marketing Stats:** Updated one-liner to highlight multi-platform support
+  - **Bug Fix:** Fixed category counting arithmetic error when category names contained numbers
+
+## [1.0.91] - 2026-01-06
+
+### Added
+- **Pattern Library Manager** - Automated pattern registry generation and marketing stats
+  - **Auto-Generated Registry:** `dist/PATTERN-LIBRARY.json` - Canonical JSON registry of all detection patterns
+  - **Auto-Generated Documentation:** `dist/PATTERN-LIBRARY.md` - Human-readable pattern library with marketing stats
+  - **Automatic Updates:** Runs after every scan to keep registry in sync with implementation
+  - **Pattern Metadata Tracking:**
+    - Total patterns by severity (CRITICAL, HIGH, MEDIUM, LOW)
+    - Patterns by category (performance, security, duplication)
+    - Mitigation detection status (4 patterns with AI-powered mitigation)
+    - Heuristic vs definitive pattern classification (6 heuristic, 9 definitive)
+  - **Marketing Stats Generation:**
+    - One-liner stats for landing pages
+    - Feature highlights for product descriptions
+    - Comprehensive coverage metrics (15 patterns across 3 categories)
+    - False positive reduction stats (60-70% on mitigated patterns)
+  - **Bash 3+ Compatible:** Works on macOS default bash (3.2) with fallback mode
+  - **Standalone Script:** `dist/bin/pattern-library-manager.sh` can be run independently
+  - **Integration:** Automatically called at end of `check-performance.sh` (non-fatal if fails)
+
+### Changed
+- **Fixture Count:** Increased from 14 to 17 test fixtures for pattern validation (adds mitigation downgrade branch coverage)
+- **Mitigation Downgrade Fixtures:** Added fixtures to assert CRITICAL severity downgrades based on detected mitigations
+  - `dist/tests/fixtures/wp-query-unbounded-mitigated.php` (3 mitigations → CRITICAL→LOW)
+  - `dist/tests/fixtures/wp-query-unbounded-mitigated-1.php` (1 mitigation → CRITICAL→HIGH)
+  - `dist/tests/fixtures/wp-query-unbounded-mitigated-2.php` (2 mitigations → CRITICAL→MEDIUM)
+- **Main Scanner:** Now calls Pattern Library Manager after each scan completion
+
 ## [1.0.90] - 2026-01-06
 
 ### Added
@@ -44,6 +87,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses function boundaries to limit mitigation detection to the same function
   - Prevents detecting caching in adjacent functions
   - **Impact:** More accurate mitigation detection, fewer false reductions
+
+- **Mitigation Coverage** - Applied mitigation-based severity adjustment to additional OOM rules
+  - **Now Also Applies To:** `wp-query-unbounded`, `wp-user-query-meta-bloat`
+  - **Impact:** Consistent severity downgrades for cached/admin-only mitigated queries
 
 ### Testing
 - Created `dist/tests/test-mitigation-detection.php` with 7 test cases
