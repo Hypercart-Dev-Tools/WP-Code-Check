@@ -1,0 +1,22 @@
+{
+  "id": "wp-query-unbounded",
+  "version": "1.0.0",
+  "enabled": true,
+  "detection_type": "grep",
+  "category": "performance",
+  "severity": "CRITICAL",
+  "title": "Unbounded WP_Query/get_posts",
+  "description": "Detects WP_Query or get_posts with posts_per_page => -1 or nopaging => true.",
+  "rationale": "Loading unlimited posts into memory is a classic WordPress OOM cause.",
+  "detection": {
+    "type": "grep",
+    "file_patterns": ["*.php"],
+    "search_pattern": "WP_Query\\(|get_posts\\(",
+    "exclude_patterns": [],
+    "post_process": {
+      "enabled": true,
+      "type": "context_analysis",
+      "description": "Check for posts_per_page => -1 or nopaging => true in context."
+    }
+  }
+}

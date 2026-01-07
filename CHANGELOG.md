@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Informative Messages:** Shows detected mitigations (e.g., `[Mitigated by: caching,parent-scoped,ids-only]`)
   - **Impact:** Reduces false positives by 60-70% while highlighting truly critical unbounded queries
 
+- **Memory / OOM Crash Prevention Checks** - New rules based on real WooCommerce object hydration failure modes
+  - Added new pattern JSON files:
+    - `unbounded-wc-get-orders` (detects `wc_get_orders()` with `limit => -1`)
+    - `unbounded-wc-get-products` (detects `wc_get_products()` with `limit => -1`)
+    - `wp-query-unbounded` (detects `WP_Query`/`get_posts()` with `posts_per_page => -1`, `nopaging => true`, or `numberposts => -1`)
+    - `wp-user-query-meta-bloat` (detects `WP_User_Query` missing `update_user_meta_cache => false`)
+  - Integrated these checks into the main scanner output (text + JSON)
+  - **Impact:** Helps catch high-probability OOM patterns in plugins/themes before production crashes
+
 ### Fixed
 - **get_users Detection** - Fixed false positives when `'number'` parameter is defined before the function call
   - Changed context window from "next 5 lines" to "±10 lines" to catch array definitions above the call
