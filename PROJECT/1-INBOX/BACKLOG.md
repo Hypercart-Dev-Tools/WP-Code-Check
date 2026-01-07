@@ -9,13 +9,18 @@ Notes:
 
 ### Checklist
 - [ ] Audit where we rely on context windows today (±N lines) and where “same function” scoping would reduce false positives.
-- [ ] Add/centralize a helper to compute function/method scope boundaries (support `function foo()`, `public/protected/private static function foo()`, and common formatting).
-- [ ] Use the helper in mitigation detection (so caching/ids-only/admin-only/parent-scoped all share the same scoping rules).
-- [ ] Add 2–4 fixtures that prove: (a) cross-function false positives are prevented, (b) true positives still fire.
+- [x] Add/centralize a helper to compute function/method scope boundaries (support `function foo()`, `public/protected/private static function foo()`, and common formatting).
+- [x] Use the helper in mitigation detection (so caching/ids-only/admin-only/parent-scoped all share the same scoping rules).
+- [x] Add 2–4 fixtures that prove: (a) cross-function false positives are prevented, (b) true positives still fire.
 - [ ] Validate on 1–2 real repos + gather feedback:
    - [ ] Are false positives still a problem?
    - [ ] Is baseline suppression working well?
    - [ ] Do users want AST-level accuracy?
+
+Completed (so far):
+- Centralized function/method scope detection in `dist/bin/check-performance.sh` and applied it across mitigation detectors.
+- Added fixture coverage for class methods (including `private static function` and admin-only gating inside a method).
+- Increased fixture validation default/template count to 20.
 
 Constraints:
 - 2–3 hours
@@ -27,7 +32,7 @@ Decision gate (AST scanner only if needed):
 - [ ] False positives remain a major pain point
 - [ ] Users accept dependencies + slower performance
 
-Status: Not started
+Status: In progress (partially complete)
 
 ## ✅ RESOLVED 2025-12-31: Fixture Validation Subprocess Issue
 
