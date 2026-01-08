@@ -469,6 +469,23 @@
 
     <!-- Main Content -->
     <div class="content">
+      <!-- Phase 2: AI-Assisted Triage (TL;DR at Top) -->
+      <div class="section">
+        <div id="ai-triage" class="ai-triage-section" data-ai-inject="triage">
+          <h2>🤖 Phase 2 (TL;DR) - AI Triage Summary</h2>
+
+          <div class="ai-triage-disclaimer">
+            <strong>⚠️ Disclaimer:</strong> This AI-assisted analysis is provided for
+            informational purposes only and represents probabilistic pattern matching,
+            not definitive security assessment. Developers must perform manual code
+            review to verify all findings. We make no guarantees about accuracy or
+            completeness. When in doubt, treat flagged code as requiring human review.
+          </div>
+
+          {{AI_TRIAGE_HTML}}
+        </div>
+      </div>
+
       <!-- Findings Section -->
       <div class="section">
         <h2>📋 Findings ({{FINDINGS_COUNT}})</h2>
@@ -486,23 +503,6 @@
       <div class="section">
         <h2>✓ Checks Summary</h2>
         {{CHECKS_HTML}}
-      </div>
-
-      <!-- Phase 2: AI-Assisted Triage (Placeholder or Completed) -->
-      <div class="section">
-        <div id="ai-triage" class="ai-triage-section" data-ai-inject="triage">
-          <h2>Phase 2 (TL;DR) - Automated AI False Positive Scan</h2>
-
-          <div class="ai-triage-disclaimer">
-            <strong>⚠️ Disclaimer:</strong> This AI-assisted analysis is provided for
-            informational purposes only and represents probabilistic pattern matching,
-            not definitive security assessment. Developers must perform manual code
-            review to verify all findings. We make no guarantees about accuracy or
-            completeness. When in doubt, treat flagged code as requiring human review.
-          </div>
-
-          {{AI_TRIAGE_HTML}}
-        </div>
       </div>
     </div>
 

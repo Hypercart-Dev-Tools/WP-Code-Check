@@ -24,7 +24,6 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from urllib.parse import quote
 
 # ANSI color codes
 class Colors:
@@ -132,10 +131,8 @@ def main():
     # Extract AI triage info (Phase 2)
     ai_triage = data.get('ai_triage', {})
     ai_triage_performed = ai_triage.get('performed', False)
-    ai_triage_status = ai_triage.get('status', 'pending')
     ai_triage_timestamp = ai_triage.get('timestamp', '')
     ai_triage_summary = ai_triage.get('summary', {})
-    ai_triage_verdicts = ai_triage.get('verdicts', [])
     ai_triage_recommendations = ai_triage.get('recommendations', [])
     
     # Extract project information
@@ -297,44 +294,35 @@ def main():
           </div>
         </div>'''
 
-        # Build verdicts HTML
-        verdicts_html = ""
-        if ai_triage_verdicts:
-            verdict_parts = []
-            for verdict in ai_triage_verdicts:
-                finding_id = verdict.get('finding_id', '')
-                file_path = verdict.get('file', '')
-                line = verdict.get('line', '')
-                verdict_type = verdict.get('verdict', 'needs_review').lower()
-                reason = verdict.get('reason', '')
-                confidence = verdict.get('confidence', 'medium')
-                recommendation = verdict.get('recommendation', '')
+        # Build overall summary narrative (3-5 paragraphs)
+        summary_narrative = f'''<div style="margin-top: 20px; line-height: 1.6; color: #333;">'''
 
-                # Map verdict type to badge class
-                badge_class = 'confirmed' if verdict_type == 'confirmed' else \
-                              'false-positive' if verdict_type == 'false_positive' else 'needs-review'
-                badge_text = verdict_type.replace('_', ' ').title()
+        # Paragraph 1: Overview
+        summary_narrative += f'''<p><strong>Overview:</strong> AI analysis reviewed {findings_reviewed} findings with {confidence_level} confidence. '''
+        if confirmed_issues > 0:
+            summary_narrative += f'''Of these, <span style="color: #28a745; font-weight: bold;">{confirmed_issues} issues were confirmed</span> as genuine security or performance concerns requiring developer attention. '''
+        summary_narrative += f'''</p>'''
 
-                verdict_html = f'''<div class="ai-triage-verdict {verdict_type}">
-          <div class="ai-triage-verdict-header">
-            <div>{finding_id} ({file_path}:{line})</div>
-            <span class="ai-triage-verdict-badge {badge_class}">{badge_text}</span>
-          </div>
-          <div style="color: #6c757d; font-size: 0.85em; margin-bottom: 5px;">
-            <strong>Reason:</strong> {reason}
-          </div>
-          {f'<div style="color: #6c757d; font-size: 0.85em; margin-bottom: 5px;"><strong>Confidence:</strong> {confidence}</div>' if confidence else ''}
-          {f'<div style="color: #495057; font-size: 0.85em;"><strong>Recommendation:</strong> {recommendation}</div>' if recommendation else ''}
-        </div>'''
-                verdict_parts.append(verdict_html)
+        # Paragraph 2: False positives
+        if false_positives > 0:
+            fp_percent = int((false_positives / findings_reviewed * 100)) if findings_reviewed > 0 else 0
+            summary_narrative += f'''<p><strong>False Positives:</strong> <span style="color: #6c757d;">{false_positives} findings ({fp_percent}%)</span> were identified as false positives—code that appears flagged but has proper safeguards (nonce verification, sanitization, capability checks, etc.). These can be safely ignored or added to a baseline file to reduce noise in future scans.</p>'''
 
-            verdicts_html = '\n'.join(verdict_parts)
+        # Paragraph 3: Needs review
+        if needs_review > 0:
+            summary_narrative += f'''<p><strong>Needs Manual Review:</strong> <span style="color: #ffc107;">{needs_review} findings</span> require human judgment to classify. These are ambiguous cases where context matters—review the detailed findings section below to make a final determination.</p>'''
 
-        # Build recommendations HTML
-        recommendations_html = ""
+        # Paragraph 4: Recommendations
         if ai_triage_recommendations:
-            rec_items = ''.join([f'<li style="margin-bottom: 5px;">{rec}</li>' for rec in ai_triage_recommendations])
-            recommendations_html = f'<div style="margin-top: 15px;"><strong>Recommendations:</strong><ul style="margin: 10px 0 0 20px;">{rec_items}</ul></div>'
+            summary_narrative += f'''<p><strong>Recommendations:</strong></p><ul style="margin: 10px 0 0 20px;">'''
+            for rec in ai_triage_recommendations:
+                summary_narrative += f'''<li style="margin-bottom: 8px;">{rec}</li>'''
+            summary_narrative += f'''</ul>'''
+
+        # Paragraph 5: Next steps
+        summary_narrative += f'''<p><strong>Next Steps:</strong> Review the confirmed issues in the Findings section below. For false positives, consider updating your baseline file or adding phpcs:ignore comments with justification. For items needing review, consult with your security team.</p>'''
+
+        summary_narrative += f'''</div>'''
 
         # Combine all AI triage content
         ai_triage_html = f'''<div class="ai-triage-content" data-status="complete">
@@ -342,8 +330,7 @@ def main():
           <strong>✓ AI Triage Completed</strong> - {ai_triage_timestamp}
         </div>
         {summary_stats}
-        {f'<div class="ai-triage-verdicts">{verdicts_html}</div>' if verdicts_html else ''}
-        {recommendations_html}
+        {summary_narrative}
       </div>'''
 
     print(f"{Colors.BLUE}Processing DRY violations ({dry_violations_count} total)...{Colors.NC}")
