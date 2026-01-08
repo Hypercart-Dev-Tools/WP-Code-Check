@@ -356,6 +356,7 @@ def main() -> int:
             'findings_reviewed': reviewed,
         },
         'summary': {
+            'findings_reviewed': reviewed,  # Duplicated for convenience/back-compat
             'confirmed_issues': counts.get('Confirmed', 0),
             'false_positives': counts.get('False Positive', 0),
             'needs_review': counts.get('Needs Review', 0),
@@ -397,7 +398,7 @@ def main() -> int:
 
         # Check that summary exists and has expected keys
         summary = verification_data.get('ai_triage', {}).get('summary', {})
-        required_keys = ['confirmed_issues', 'false_positives', 'needs_review', 'confidence_level']
+        required_keys = ['findings_reviewed', 'confirmed_issues', 'false_positives', 'needs_review', 'confidence_level']
         missing_keys = [k for k in required_keys if k not in summary]
         if missing_keys:
             print(f"[AI Triage] ❌ VERIFICATION FAILED: Missing summary keys: {missing_keys}", file=sys.stderr)

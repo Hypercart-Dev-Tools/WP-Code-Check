@@ -263,9 +263,12 @@ def main():
 
     if ai_triage_performed:
         # Build summary stats
-        # Note: findings_reviewed is in ai_triage['scope'], not in summary
-        ai_triage_scope = ai_triage.get('scope', {})
-        findings_reviewed = ai_triage_scope.get('findings_reviewed', 0)
+        # Note: findings_reviewed is duplicated in both summary and scope for convenience
+        # Try summary first (new location), fall back to scope (old location) for back-compat
+        findings_reviewed = ai_triage_summary.get('findings_reviewed')
+        if findings_reviewed is None:
+            ai_triage_scope = ai_triage.get('scope', {})
+            findings_reviewed = ai_triage_scope.get('findings_reviewed', 0)
         confirmed_issues = ai_triage_summary.get('confirmed_issues', 0)
         false_positives = ai_triage_summary.get('false_positives', 0)
         needs_review = ai_triage_summary.get('needs_review', 0)

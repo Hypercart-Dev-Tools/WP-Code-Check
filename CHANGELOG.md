@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact:** Safe to pipe stdout without mixing log messages with data output
   - **Affected File:** `dist/bin/ai-triage.py` (all print statements now use `file=sys.stderr`)
   - **Test Status:** ✅ Verified stdout is clean when stderr redirected to /dev/null
+- **AI Triage Schema Consistency** - Duplicated `findings_reviewed` into `ai_triage.summary` for convenience
+  - **Rationale:** Prevents future schema mismatches (similar to bug fixed in 1.0.98); keeps all summary stats in one place
+  - **Schema:** Now stored in both `ai_triage.scope.findings_reviewed` (original) and `ai_triage.summary.findings_reviewed` (new)
+  - **HTML Generator:** Updated to read from summary first, with fallback to scope for backward compatibility
+  - **Impact:** More consistent schema, fewer future breakages when accessing summary statistics
+  - **Affected Files:** `dist/bin/ai-triage.py`, `dist/bin/json-to-html.py`
+  - **Test Status:** ✅ Verified both locations contain same value (5 findings reviewed)
 - **Version:** Bumped to 1.0.99
 
 ## [1.0.98] - 2026-01-08
