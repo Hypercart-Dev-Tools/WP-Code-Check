@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.96"
+SCRIPT_VERSION="1.0.98"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5254,13 +5254,24 @@ profile_report
 # ============================================================================
 # Run pattern library manager to update canonical registry after each scan
 # This ensures PATTERN-LIBRARY.json and PATTERN-LIBRARY.md stay in sync
+#
+# IMPORTANT: In JSON mode, redirect output to /dev/tty to prevent console
+# output from being appended to the JSON log file (see Issue #2 from 2026-01-08)
 
 if [ -f "$SCRIPT_DIR/pattern-library-manager.sh" ]; then
-  echo ""
-  echo "🔄 Updating pattern library registry..."
-  bash "$SCRIPT_DIR/pattern-library-manager.sh" both 2>/dev/null || {
-    echo "⚠️  Pattern library manager failed (non-fatal)"
-  }
+  if [ "$OUTPUT_FORMAT" = "json" ]; then
+    # In JSON mode, send output to terminal only (not to log file)
+    bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/tty 2>&1 || {
+      echo "⚠️  Pattern library manager failed (non-fatal)" > /dev/tty
+    }
+  else
+    # In text mode, output goes to log file normally
+    echo ""
+    echo "🔄 Updating pattern library registry..."
+    bash "$SCRIPT_DIR/pattern-library-manager.sh" both 2>/dev/null || {
+      echo "⚠️  Pattern library manager failed (non-fatal)"
+    }
+  fi
 fi
 
 exit $EXIT_CODE

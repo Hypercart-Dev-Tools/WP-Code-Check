@@ -24,7 +24,6 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from urllib.parse import quote
 
 # ANSI color codes
 class Colors:
@@ -117,7 +116,7 @@ def main():
     fixture_status = fixture_validation.get('status', 'not_run')
     fixture_passed = fixture_validation.get('passed', 0)
     fixture_failed = fixture_validation.get('failed', 0)
-    
+
     # Set fixture status for HTML
     if fixture_status == 'passed':
         fixture_status_class = 'passed'
@@ -128,6 +127,13 @@ def main():
     else:
         fixture_status_class = 'skipped'
         fixture_status_text = '○ Fixtures Skipped'
+
+    # Extract AI triage info (Phase 2)
+    ai_triage = data.get('ai_triage', {})
+    ai_triage_performed = ai_triage.get('performed', False)
+    ai_triage_timestamp = ai_triage.get('timestamp', '')
+    ai_triage_summary = ai_triage.get('summary', {})
+    ai_triage_recommendations = ai_triage.get('recommendations', [])
     
     # Extract project information
     project = data.get('project', {})
@@ -244,6 +250,91 @@ def main():
 
     checks_html = '\n'.join(checks_parts)
 
+    print(f"{Colors.BLUE}Processing AI triage data...{Colors.NC}")
+
+    # Generate AI Triage HTML
+    # Default placeholder if not performed
+    ai_triage_html = '''<div class="ai-triage-content" data-status="pending">
+        <p class="status-message">⏳ Not performed yet</p>
+        <p class="help-text">
+          Run the AI triage command to analyze findings and identify likely false positives.
+        </p>
+      </div>'''
+
+    if ai_triage_performed:
+        # Build summary stats
+        # Note: findings_reviewed is in ai_triage['scope'], not in summary
+        ai_triage_scope = ai_triage.get('scope', {})
+        findings_reviewed = ai_triage_scope.get('findings_reviewed', 0)
+        confirmed_issues = ai_triage_summary.get('confirmed_issues', 0)
+        false_positives = ai_triage_summary.get('false_positives', 0)
+        needs_review = ai_triage_summary.get('needs_review', 0)
+        confidence_level = ai_triage_summary.get('confidence_level', 'N/A')
+
+        # Build summary stats HTML
+        summary_stats = f'''
+        <div class="ai-triage-summary">
+          <div class="ai-triage-stat">
+            <div class="label">Reviewed</div>
+            <div class="value">{findings_reviewed}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">Confirmed</div>
+            <div class="value" style="color: #28a745;">{confirmed_issues}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">False Positives</div>
+            <div class="value" style="color: #6c757d;">{false_positives}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">Needs Review</div>
+            <div class="value" style="color: #ffc107;">{needs_review}</div>
+          </div>
+          <div class="ai-triage-stat">
+            <div class="label">Confidence</div>
+            <div class="value">{confidence_level}</div>
+          </div>
+        </div>'''
+
+        # Build overall summary narrative (3-5 paragraphs)
+        summary_narrative = f'''<div style="margin-top: 20px; line-height: 1.6; color: #333;">'''
+
+        # Paragraph 1: Overview
+        summary_narrative += f'''<p><strong>Overview:</strong> AI analysis reviewed {findings_reviewed} findings with {confidence_level} confidence. '''
+        if confirmed_issues > 0:
+            summary_narrative += f'''Of these, <span style="color: #28a745; font-weight: bold;">{confirmed_issues} issues were confirmed</span> as genuine security or performance concerns requiring developer attention. '''
+        summary_narrative += f'''</p>'''
+
+        # Paragraph 2: False positives
+        if false_positives > 0:
+            fp_percent = int((false_positives / findings_reviewed * 100)) if findings_reviewed > 0 else 0
+            summary_narrative += f'''<p><strong>False Positives:</strong> <span style="color: #6c757d;">{false_positives} findings ({fp_percent}%)</span> were identified as false positives—code that appears flagged but has proper safeguards (nonce verification, sanitization, capability checks, etc.). These can be safely ignored or added to a baseline file to reduce noise in future scans.</p>'''
+
+        # Paragraph 3: Needs review
+        if needs_review > 0:
+            summary_narrative += f'''<p><strong>Needs Manual Review:</strong> <span style="color: #ffc107;">{needs_review} findings</span> require human judgment to classify. These are ambiguous cases where context matters—review the detailed findings section below to make a final determination.</p>'''
+
+        # Paragraph 4: Recommendations
+        if ai_triage_recommendations:
+            summary_narrative += f'''<p><strong>Recommendations:</strong></p><ul style="margin: 10px 0 0 20px;">'''
+            for rec in ai_triage_recommendations:
+                summary_narrative += f'''<li style="margin-bottom: 8px;">{rec}</li>'''
+            summary_narrative += f'''</ul>'''
+
+        # Paragraph 5: Next steps
+        summary_narrative += f'''<p><strong>Next Steps:</strong> Review the confirmed issues in the Findings section below. For false positives, consider updating your baseline file or adding phpcs:ignore comments with justification. For items needing review, consult with your security team.</p>'''
+
+        summary_narrative += f'''</div>'''
+
+        # Combine all AI triage content
+        ai_triage_html = f'''<div class="ai-triage-content" data-status="complete">
+        <div style="margin-bottom: 15px; color: #155724;">
+          <strong>✓ AI Triage Completed</strong> - {ai_triage_timestamp}
+        </div>
+        {summary_stats}
+        {summary_narrative}
+      </div>'''
+
     print(f"{Colors.BLUE}Processing DRY violations ({dry_violations_count} total)...{Colors.NC}")
 
     # Generate Magic String violations HTML
@@ -324,6 +415,7 @@ def main():
         '{{CHECKS_HTML}}': checks_html,
         '{{FIXTURE_STATUS_CLASS}}': fixture_status_class,
         '{{FIXTURE_STATUS_TEXT}}': fixture_status_text,
+        '{{AI_TRIAGE_HTML}}': ai_triage_html,
     }
 
     for placeholder, value in replacements.items():

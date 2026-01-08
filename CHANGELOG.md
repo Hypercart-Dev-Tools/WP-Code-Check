@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.98] - 2026-01-08
+
+### Fixed
+- **Phase 2 AI Triage Report Bug** - Fixed "REVIEWED" count showing 0 in HTML reports
+  - **Root Cause:** `json-to-html.py` was looking for `findings_reviewed` in `ai_triage['summary']` but it's actually stored in `ai_triage['scope']['findings_reviewed']`
+  - **Symptom:** Phase 2 summary stats showed "REVIEWED: 0" even though findings were analyzed
+  - **Fix:** Extract `findings_reviewed` from correct location in JSON structure
+  - **Impact:** Phase 2 reports now correctly display the number of findings reviewed
+  - **Affected File:** `dist/bin/json-to-html.py` line 266-268
+  - **Test Status:** ✅ Verified with regenerated report - REVIEWED count now shows correct value
+
+### Changed
+- **Version:** Bumped to 1.0.98
+
+## [1.0.97] - 2026-01-08
+
+### Fixed
+- **Critical Bug: JSON Output Corruption** - Fixed console output being appended to JSON log files
+  - **Root Cause:** Pattern library manager was outputting to stdout after JSON was written, corrupting the JSON file with console messages
+  - **Symptom:** JSON files failed to parse with `JSONDecodeError: Extra data` error
+  - **Fix:** Redirect pattern library manager output to `/dev/tty` in JSON mode to prevent appending to log file
+  - **Implementation:** Added conditional check for `OUTPUT_FORMAT` before running pattern library manager
+  - **Impact:** JSON logs are now clean and valid, can be parsed by downstream tools
+  - **Affected File:** `dist/bin/check-performance.sh` lines 5252-5275
+  - **Test Status:** ✅ Verified with test scan - JSON parses correctly with 76 findings and 49 checks
+
+### Changed
+- **Version:** Bumped to 1.0.97
+
 ## [1.0.96] - 2026-01-07
 
 ### Added
