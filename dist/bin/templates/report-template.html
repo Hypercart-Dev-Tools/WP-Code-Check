@@ -30,15 +30,38 @@
       padding: 30px;
       text-align: center;
     }
-    
+
     .header h1 {
       font-size: 2em;
       margin-bottom: 10px;
     }
-    
+
     .header .meta {
       opacity: 0.9;
       font-size: 0.9em;
+    }
+
+    /* Links in header - high contrast for legibility */
+    .header a {
+      color: #fff;
+      text-decoration: none;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .header a:hover {
+      background: rgba(0, 0, 0, 0.4);
+      border-bottom-color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .header a:active {
+      transform: translateY(0);
     }
     
     .summary {
@@ -155,14 +178,18 @@
       font-size: 0.9em;
     }
 
-    .file-path a {
-      color: #ffffff;
+    /* File path links in findings (not in header) */
+    .finding .file-path a,
+    .content .file-path a {
+      color: #667eea;
       text-decoration: none;
-      border-bottom: 1px dotted rgba(255, 255, 255, 0.6);
+      border-bottom: 1px dotted rgba(102, 126, 234, 0.6);
       transition: all 0.2s ease;
+      font-weight: 600;
     }
 
-    .file-path a:hover {
+    .finding .file-path a:hover,
+    .content .file-path a:hover {
       color: #764ba2;
       border-bottom: 1px solid #764ba2;
       background: rgba(102, 126, 234, 0.1);

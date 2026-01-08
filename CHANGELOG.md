@@ -60,6 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Accessibility:** Includes `aria-label` and `title` attributes
   - **Impact:** Easier to clear search without manually deleting text
   - **File Modified:** `dist/bin/templates/report-template.html` (CSS + HTML + JavaScript)
+- **HTML Report Template** - Fixed link contrast/legibility in header
+  - **Problem:** Links in purple gradient header had poor contrast (white text on purple)
+  - **Solution:** Added dark semi-transparent background to all header links
+  - **Styling:**
+    - Background: `rgba(0, 0, 0, 0.25)` (dark overlay for contrast)
+    - Border bottom: 2px solid white underline
+    - Font weight: 600 (semi-bold for better readability)
+    - Hover: Darker background + shadow effect
+  - **Impact:** Links now clearly visible and readable against purple gradient
+  - **Accessibility:** Meets WCAG contrast requirements (4.5:1 minimum)
+  - **File Modified:** `dist/bin/templates/report-template.html` (CSS only)
 - **Version:** Bumped to 1.1.1 (patch version for pattern enhancement + new related pattern)
 - **Pattern Library:** Updated to 28 patterns (16 PHP, 6 Headless, 4 Node.js, 1 JS, 1 WooCommerce Performance)
 
