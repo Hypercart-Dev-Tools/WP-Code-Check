@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -271,8 +272,11 @@ def main() -> int:
     ap.add_argument('--max-findings', type=int, default=200, help='Max findings to triage (keeps report manageable).')
     args = ap.parse_args()
 
+    print(f"[AI Triage] Reading JSON log: {args.json_path}", file=sys.stderr)
     data = json.loads(args.json_path.read_text(encoding='utf-8'))
     findings: List[Dict[str, Any]] = data.get('findings') or []
+    print(f"[AI Triage] Total findings in log: {len(findings)}", file=sys.stderr)
+    print(f"[AI Triage] Max findings to review: {args.max_findings}", file=sys.stderr)
 
     triaged_items: List[Dict[str, Any]] = []
     counts = Counter()
@@ -305,6 +309,8 @@ def main() -> int:
             }
         )
 
+    print(f"[AI Triage] Findings reviewed: {reviewed}", file=sys.stderr)
+
     # Infer overall confidence from distribution.
     overall_conf = 'medium'
     if reviewed:
@@ -314,6 +320,12 @@ def main() -> int:
             overall_conf = 'high'
         elif low_ratio >= 0.4:
             overall_conf = 'low'
+
+    print(f"[AI Triage] Classification breakdown:", file=sys.stderr)
+    print(f"  - Confirmed Issues: {counts.get('Confirmed', 0)}", file=sys.stderr)
+    print(f"  - False Positives: {counts.get('False Positive', 0)}", file=sys.stderr)
+    print(f"  - Needs Review: {counts.get('Needs Review', 0)}", file=sys.stderr)
+    print(f"[AI Triage] Overall confidence: {overall_conf}", file=sys.stderr)
 
     # Minimal executive summary tailored to what we observed in the sample.
     narrative_parts = []
@@ -344,6 +356,7 @@ def main() -> int:
             'findings_reviewed': reviewed,
         },
         'summary': {
+            'findings_reviewed': reviewed,  # Duplicated for convenience/back-compat
             'confirmed_issues': counts.get('Confirmed', 0),
             'false_positives': counts.get('False Positive', 0),
             'needs_review': counts.get('Needs Review', 0),
@@ -354,7 +367,53 @@ def main() -> int:
         'triaged_findings': triaged_items,
     }
 
+    print(f"[AI Triage] Writing updated JSON to: {args.json_path}", file=sys.stderr)
     args.json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+    # Verify write was successful
+    file_size = args.json_path.stat().st_size
+    print(f"[AI Triage] ✅ Successfully wrote {file_size:,} bytes", file=sys.stderr)
+    print(f"[AI Triage] Triage data injected with {len(triaged_items)} triaged findings", file=sys.stderr)
+
+    # Post-write verification: re-open and assert ai_triage exists
+    print(f"[AI Triage] Verifying write integrity...", file=sys.stderr)
+    try:
+        verification_data = json.loads(args.json_path.read_text(encoding='utf-8'))
+
+        # Check that ai_triage key exists
+        if 'ai_triage' not in verification_data:
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: 'ai_triage' key not found in written JSON", file=sys.stderr)
+            return 1
+
+        # Check that ai_triage.performed is True
+        if not verification_data.get('ai_triage', {}).get('performed'):
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: 'ai_triage.performed' is not True", file=sys.stderr)
+            return 1
+
+        # Check that triaged_findings count matches
+        written_count = len(verification_data.get('ai_triage', {}).get('triaged_findings', []))
+        if written_count != len(triaged_items):
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: Expected {len(triaged_items)} triaged findings, found {written_count}", file=sys.stderr)
+            return 1
+
+        # Check that summary exists and has expected keys
+        summary = verification_data.get('ai_triage', {}).get('summary', {})
+        required_keys = ['findings_reviewed', 'confirmed_issues', 'false_positives', 'needs_review', 'confidence_level']
+        missing_keys = [k for k in required_keys if k not in summary]
+        if missing_keys:
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: Missing summary keys: {missing_keys}", file=sys.stderr)
+            return 1
+
+        print(f"[AI Triage] ✅ Verification passed: ai_triage data is intact", file=sys.stderr)
+        print(f"[AI Triage] ✅ Confirmed {written_count} triaged findings persisted", file=sys.stderr)
+
+    except json.JSONDecodeError as e:
+        print(f"[AI Triage] ❌ VERIFICATION FAILED: Written JSON is invalid: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"[AI Triage] ❌ VERIFICATION FAILED: Unexpected error: {e}", file=sys.stderr)
+        return 1
+
     return 0
 
 
