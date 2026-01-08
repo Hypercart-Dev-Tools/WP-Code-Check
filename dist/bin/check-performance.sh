@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.0.98"
+SCRIPT_VERSION="1.1.0"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -4622,6 +4622,156 @@ if [ "$WC_N1_FAILED" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "WooCommerce N+1 patterns (WC functions in loops)" "$WC_N1_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# WooCommerce Coupon Logic in Thank-You Page Context
+# ============================================================================
+# Pattern: wc-coupon-in-thankyou
+# Detects coupon operations (apply_coupon, remove_coupon, WC_Coupon instantiation)
+# in thank-you/order-received contexts. This is a reliability anti-pattern.
+# ============================================================================
+
+COUPON_THANKYOU_SEVERITY=$(get_severity "wc-coupon-in-thankyou" "HIGH")
+COUPON_THANKYOU_COLOR="${RED}"
+if [ "$COUPON_THANKYOU_SEVERITY" = "MEDIUM" ] || [ "$COUPON_THANKYOU_SEVERITY" = "LOW" ]; then COUPON_THANKYOU_COLOR="${YELLOW}"; fi
+
+text_echo "${BLUE}▸ WooCommerce coupon logic in thank-you context ${COUPON_THANKYOU_COLOR}[$COUPON_THANKYOU_SEVERITY]${NC}"
+
+# Step 1: Find files with thank-you/order-received context markers
+THANKYOU_CONTEXT_FILES=$(grep -rlE \
+  '(add_action|do_action|apply_filters|add_filter)\([[:space:]]*['\''"]([a-z_]*woocommerce_thankyou[a-z_]*)['\''"]|is_order_received_page\(|is_wc_endpoint_url\([[:space:]]*['\''"]order-received['\''"]|woocommerce/checkout/(thankyou|order-received)\.php' \
+  $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
+
+COUPON_THANKYOU_FINDING_COUNT=0
+COUPON_THANKYOU_ISSUES=""
+
+if [ -n "$THANKYOU_CONTEXT_FILES" ]; then
+  # Step 2: Search those files for coupon operations
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    # Search for coupon operations in this file
+    COUPON_MATCHES=$(grep -nE \
+      'apply_coupon\(|remove_coupon\(|has_coupon\(|new[[:space:]]+WC_Coupon\(|wc_get_coupon\(|wc_get_coupon_id_by_code\(|get_used_coupons\(|get_coupon_codes\(|woocommerce_coupon_is_valid|woocommerce_(applied|removed)_coupon' \
+      "$file" 2>/dev/null || true)
+
+    if [ -n "$COUPON_MATCHES" ]; then
+      while IFS= read -r match; do
+        [ -z "$match" ] && continue
+
+        line_num=$(echo "$match" | cut -d: -f1)
+        code=$(echo "$match" | cut -d: -f2-)
+
+        # Skip if it's just displaying coupon info (read-only)
+        if echo "$code" | grep -qE '(echo|esc_html|esc_attr|display|show).*coupon'; then
+          continue
+        fi
+
+        if ! should_suppress_finding "wc-coupon-in-thankyou" "$file"; then
+          COUPON_THANKYOU_ISSUES="${COUPON_THANKYOU_ISSUES}${file}:${line_num}:${code}"$'\n'
+          add_json_finding "wc-coupon-in-thankyou" "error" "$COUPON_THANKYOU_SEVERITY" "$file" "$line_num" "Coupon logic in thank-you/order-received context (should be in cart/checkout hooks)" "$code"
+          ((COUPON_THANKYOU_FINDING_COUNT++)) || true
+        fi
+      done <<< "$COUPON_MATCHES"
+    fi
+  done <<< "$THANKYOU_CONTEXT_FILES"
+fi
+
+if [ "$COUPON_THANKYOU_FINDING_COUNT" -gt 0 ]; then
+  if [ "$COUPON_THANKYOU_SEVERITY" = "CRITICAL" ] || [ "$COUPON_THANKYOU_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - Coupon operations found in thank-you context:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - Coupon operations found in thank-you context:${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ]; then
+    echo "$COUPON_THANKYOU_ISSUES" | head -5
+  fi
+  add_json_check "WooCommerce coupon logic in thank-you context" "$COUPON_THANKYOU_SEVERITY" "failed" "$COUPON_THANKYOU_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "WooCommerce coupon logic in thank-you context" "$COUPON_THANKYOU_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# WooCommerce Smart Coupons Performance Check
+# ============================================================================
+# Pattern: wc-smart-coupons-thankyou-perf
+# Detects Smart Coupons plugin with potential performance issues from
+# wc_get_coupon_id_by_code() calls that trigger slow LOWER(post_title) queries
+# ============================================================================
+
+SMART_COUPONS_PERF_SEVERITY=$(get_severity "wc-smart-coupons-thankyou-perf" "HIGH")
+SMART_COUPONS_PERF_COLOR="${RED}"
+if [ "$SMART_COUPONS_PERF_SEVERITY" = "MEDIUM" ] || [ "$SMART_COUPONS_PERF_SEVERITY" = "LOW" ]; then SMART_COUPONS_PERF_COLOR="${YELLOW}"; fi
+
+text_echo "${BLUE}▸ WooCommerce Smart Coupons performance issues ${SMART_COUPONS_PERF_COLOR}[$SMART_COUPONS_PERF_SEVERITY]${NC}"
+
+# Step 1: Detect Smart Coupons plugin
+SMART_COUPONS_FILES=$(grep -rlE \
+  'Plugin Name:[[:space:]]*WooCommerce Smart Coupons|class[[:space:]]+WC_Smart_Coupons|namespace[[:space:]]+WooCommerce\\SmartCoupons|WC_SC_|SMART_COUPONS_' \
+  $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
+
+SMART_COUPONS_PERF_FINDING_COUNT=0
+SMART_COUPONS_PERF_ISSUES=""
+SMART_COUPONS_DETECTED=false
+
+if [ -n "$SMART_COUPONS_FILES" ]; then
+  SMART_COUPONS_DETECTED=true
+
+  # Step 2: Check for performance-impacting patterns
+  PERF_RISK_FILES=$(grep -rlE \
+    'wc_get_coupon_id_by_code\(|add_action\([[:space:]]*['\''"]woocommerce_thankyou' \
+    $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
+
+  if [ -n "$PERF_RISK_FILES" ]; then
+    while IFS= read -r file; do
+      [ -z "$file" ] && continue
+
+      # Find specific problematic calls
+      PERF_MATCHES=$(grep -nE 'wc_get_coupon_id_by_code\(' "$file" 2>/dev/null || true)
+
+      if [ -n "$PERF_MATCHES" ]; then
+        while IFS= read -r match; do
+          [ -z "$match" ] && continue
+
+          line_num=$(echo "$match" | cut -d: -f1)
+          code=$(echo "$match" | cut -d: -f2-)
+
+          if ! should_suppress_finding "wc-smart-coupons-thankyou-perf" "$file"; then
+            SMART_COUPONS_PERF_ISSUES="${SMART_COUPONS_PERF_ISSUES}${file}:${line_num}:${code}"$'\n'
+            add_json_finding "wc-smart-coupons-thankyou-perf" "error" "$SMART_COUPONS_PERF_SEVERITY" "$file" "$line_num" "Smart Coupons wc_get_coupon_id_by_code() triggers slow LOWER(post_title) query - add database index" "$code"
+            ((SMART_COUPONS_PERF_FINDING_COUNT++)) || true
+          fi
+        done <<< "$PERF_MATCHES"
+      fi
+    done <<< "$PERF_RISK_FILES"
+  fi
+fi
+
+if [ "$SMART_COUPONS_PERF_FINDING_COUNT" -gt 0 ]; then
+  if [ "$SMART_COUPONS_PERF_SEVERITY" = "CRITICAL" ] || [ "$SMART_COUPONS_PERF_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED - Smart Coupons performance issues detected:${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING - Smart Coupons performance issues detected:${NC}"
+    ((WARNINGS++))
+  fi
+  if [ "$OUTPUT_FORMAT" = "text" ]; then
+    echo "$SMART_COUPONS_PERF_ISSUES" | head -5
+    text_echo "${YELLOW}  💡 Fix: ALTER TABLE wp_posts ADD INDEX idx_coupon_lookup (post_title(50), post_type, post_status);${NC}"
+  fi
+  add_json_check "WooCommerce Smart Coupons performance issues" "$SMART_COUPONS_PERF_SEVERITY" "failed" "$SMART_COUPONS_PERF_FINDING_COUNT"
+elif [ "$SMART_COUPONS_DETECTED" = true ]; then
+  text_echo "${YELLOW}  ⚠ Smart Coupons detected but no high-risk patterns found${NC}"
+  add_json_check "WooCommerce Smart Coupons performance issues" "MEDIUM" "passed" 0
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "WooCommerce Smart Coupons performance issues" "$SMART_COUPONS_PERF_SEVERITY" "passed" 0
 fi
 text_echo ""
 

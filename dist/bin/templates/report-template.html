@@ -246,9 +246,14 @@
       border-bottom: 1px solid #dee2e6;
     }
 
+    .search-input-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
     .search-box {
       width: 100%;
-      padding: 12px 20px;
+      padding: 12px 45px 12px 20px;
       font-size: 1em;
       border: 2px solid #667eea;
       border-radius: 8px;
@@ -259,6 +264,41 @@
     .search-box:focus {
       border-color: #764ba2;
       box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .search-clear-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      padding: 0;
+      font-weight: bold;
+    }
+
+    .search-clear-btn:hover {
+      background: #495057;
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .search-clear-btn:active {
+      transform: translateY(-50%) scale(0.95);
+    }
+
+    .search-clear-btn.visible {
+      display: flex;
     }
 
     .search-info {
@@ -431,13 +471,21 @@
 
     <!-- Search/Filter Box -->
     <div class="search-container">
-      <input
-        type="text"
-        id="search-box"
-        class="search-box"
-        placeholder="🔍 Search findings by keyword (file path, message, code, severity, etc.)..."
-        autocomplete="off"
-      />
+      <div class="search-input-wrapper">
+        <input
+          type="text"
+          id="search-box"
+          class="search-box"
+          placeholder="🔍 Search findings by keyword (file path, message, code, severity, etc.)..."
+          autocomplete="off"
+        />
+        <button
+          id="search-clear-btn"
+          class="search-clear-btn"
+          title="Clear search"
+          aria-label="Clear search"
+        >×</button>
+      </div>
       <div class="search-info">
         <span id="search-results-info"></span>
       </div>
@@ -669,14 +717,48 @@
       }
 
       // Add event listener for search box
+      const searchClearBtn = document.getElementById('search-clear-btn');
+
       if (searchBox) {
-        searchBox.addEventListener('input', filterFindings);
+        // Update clear button visibility on input
+        searchBox.addEventListener('input', function() {
+          filterFindings();
+
+          // Show/hide clear button based on input value
+          if (searchClearBtn) {
+            if (searchBox.value.trim().length > 0) {
+              searchClearBtn.classList.add('visible');
+            } else {
+              searchClearBtn.classList.remove('visible');
+            }
+          }
+        });
+
+        // Clear button click handler
+        if (searchClearBtn) {
+          searchClearBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            searchBox.value = '';
+            searchClearBtn.classList.remove('visible');
+            filterFindings();
+            searchBox.focus();
+          });
+        }
 
         // Add keyboard shortcut (Ctrl/Cmd + F to focus search)
         document.addEventListener('keydown', function(e) {
           if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
             e.preventDefault();
             searchBox.focus();
+          }
+
+          // ESC key to clear search
+          if (e.key === 'Escape' && searchBox.value.trim().length > 0) {
+            searchBox.value = '';
+            if (searchClearBtn) {
+              searchClearBtn.classList.remove('visible');
+            }
+            filterFindings();
           }
         });
       }
