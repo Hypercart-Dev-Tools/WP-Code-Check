@@ -373,6 +373,45 @@ def main() -> int:
     print(f"[AI Triage] ✅ Successfully wrote {file_size:,} bytes")
     print(f"[AI Triage] Triage data injected with {len(triaged_items)} triaged findings")
 
+    # Post-write verification: re-open and assert ai_triage exists
+    print(f"[AI Triage] Verifying write integrity...")
+    try:
+        verification_data = json.loads(args.json_path.read_text(encoding='utf-8'))
+
+        # Check that ai_triage key exists
+        if 'ai_triage' not in verification_data:
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: 'ai_triage' key not found in written JSON")
+            return 1
+
+        # Check that ai_triage.performed is True
+        if not verification_data.get('ai_triage', {}).get('performed'):
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: 'ai_triage.performed' is not True")
+            return 1
+
+        # Check that triaged_findings count matches
+        written_count = len(verification_data.get('ai_triage', {}).get('triaged_findings', []))
+        if written_count != len(triaged_items):
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: Expected {len(triaged_items)} triaged findings, found {written_count}")
+            return 1
+
+        # Check that summary exists and has expected keys
+        summary = verification_data.get('ai_triage', {}).get('summary', {})
+        required_keys = ['confirmed_issues', 'false_positives', 'needs_review', 'confidence_level']
+        missing_keys = [k for k in required_keys if k not in summary]
+        if missing_keys:
+            print(f"[AI Triage] ❌ VERIFICATION FAILED: Missing summary keys: {missing_keys}")
+            return 1
+
+        print(f"[AI Triage] ✅ Verification passed: ai_triage data is intact")
+        print(f"[AI Triage] ✅ Confirmed {written_count} triaged findings persisted")
+
+    except json.JSONDecodeError as e:
+        print(f"[AI Triage] ❌ VERIFICATION FAILED: Written JSON is invalid: {e}")
+        return 1
+    except Exception as e:
+        print(f"[AI Triage] ❌ VERIFICATION FAILED: Unexpected error: {e}")
+        return 1
+
     return 0
 
 
