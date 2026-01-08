@@ -97,6 +97,39 @@ Expected output:
 - **Errors**: 6+ (depending on active checks)
 - **Warnings**: 4+
 
+### End-to-End Template Testing
+
+Use the keyword **"Run template [name] end to end"** to execute a complete scan and AI triage workflow with minimal human intervention.
+
+**What this does:**
+1. Loads the template configuration from `TEMPLATES/[name].txt`
+2. Executes the full performance scan (`check-performance.sh`)
+3. Generates JSON log with all findings
+4. Runs AI-assisted triage on the findings
+5. Converts JSON to HTML report with triage data embedded
+6. Opens the final report in your browser
+
+**Example:**
+```bash
+# User request: "Run template gravityforms end to end"
+# AI will execute:
+./dist/bin/run gravityforms --format json
+python3 dist/bin/ai-triage.py dist/logs/[latest].json
+python3 dist/bin/json-to-html.py dist/logs/[latest].json dist/reports/[output].html
+```
+
+**Benefits:**
+- ✅ Complete workflow in one command
+- ✅ AI triage automatically classifies findings
+- ✅ HTML report includes triage classifications and confidence levels
+- ✅ No manual JSON/HTML conversion needed
+- ✅ Ideal for testing new checks or validating fixes
+
+**Template Requirements:**
+- Template file must exist in `TEMPLATES/[name].txt`
+- Must contain `PROJECT_PATH` pointing to a valid WordPress plugin/theme directory
+- Optional: `FORMAT=json` to enable JSON output (required for triage)
+
 ---
 
 ## 📋 Commit Message Guidelines

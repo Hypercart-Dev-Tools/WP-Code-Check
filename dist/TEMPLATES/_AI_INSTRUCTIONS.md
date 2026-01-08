@@ -8,6 +8,34 @@ Complete end-to-end workflow:
 3. **Phase 1c**: Run scan using template or direct path
 4. **Phase 2**: AI-assisted triage of findings
 
+### End-to-End Execution Mode
+
+When a user requests **"Run template [name] end to end"**, execute the complete automated pipeline:
+
+1. **Run scan** → Generate JSON log (Phase 1c)
+2. **AI triage** → Analyze findings and update JSON (Phase 2)
+3. **Generate HTML** → Create final report with AI summary
+
+**No manual intervention required** - the AI agent handles all phases automatically.
+
+**Example user requests:**
+- "Run template gravityforms end to end"
+- "Execute woocommerce end to end"
+- "Run gravityforms complete workflow"
+
+**AI Agent Actions:**
+1. Execute scan: `dist/bin/run [template-name]` (wait for completion)
+2. Locate generated JSON: `dist/logs/[TIMESTAMP].json`
+3. Perform AI triage analysis (read JSON, analyze findings)
+4. Update JSON with `ai_triage` section
+5. Regenerate HTML: `python3 dist/bin/json-to-html.py [json] [html]`
+6. Report completion with final HTML report location
+
+**Error Handling:**
+- If scan fails → stop and report error
+- If triage fails → generate basic HTML without AI summary, report issue
+- Provide progress updates as each phase completes
+
 ---
 
 ## Phase 1a: Check for Existing Templates
@@ -114,12 +142,18 @@ VERSION='2.7.1'
 
 Users can ask the AI agent to run a template in natural language:
 
-**Examples of valid requests:**
+**Examples of valid requests (scan only):**
 - "Run the gravityforms template"
 - "Scan gravityforms"
 - "Run gravityforms scan"
 - "Execute the gravityforms template"
 - "Perform a scan on gravityforms"
+
+**Examples of valid requests (end-to-end with AI triage):**
+- "Run template gravityforms end to end"
+- "Execute woocommerce end to end"
+- "Run gravityforms complete workflow"
+- "Scan and triage gravityforms"
 
 ### AI Agent: How to Run Templates
 
@@ -156,12 +190,13 @@ If the exact filename doesn't exist, try these variations:
 
 ---
 
-## Phase 2: AI-Assisted Triage (Manual, v1.1 POC)
+## Phase 2: AI-Assisted Triage
 
 After HTML report is generated, perform a 2nd pass AI triage to identify false positives and provide an overall assessment.
 
 ### When to Use
-- User explicitly asks: "Run AI triage on this report"
+- **Automatically**: When user requests "end to end" execution
+- **Manually**: User explicitly asks "Run AI triage on this report"
 - User wants to validate false positives before publishing
 - User needs an executive summary of findings
 
