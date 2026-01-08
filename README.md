@@ -120,6 +120,26 @@ Save scan configurations for frequently-checked projects:
 
 See [HOWTO-TEMPLATES.md](dist/HOWTO-TEMPLATES.md) for details.
 
+### 🤖 **Phase 2: AI-Assisted Triage (v1.1 POC)**
+
+Validate findings and identify false positives with AI assistance:
+
+```bash
+# After running a scan, use AI to triage the results
+# AI analyzes the JSON log and provides:
+# - Summary stats (reviewed, confirmed, false positives)
+# - Overall narrative assessment
+# - Recommendations for next steps
+```
+
+**Features:**
+- ✅ **False Positive Detection** - Identifies common false positives (e.g., `phpcs:ignore` comments, adjacent sanitization)
+- ✅ **Confidence Scoring** - Rates overall assessment confidence (high/medium/low)
+- ✅ **Actionable Recommendations** - Prioritized list of issues to fix
+- ✅ **Executive Summary** - 3-5 paragraph narrative for stakeholders
+
+See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for detailed triage workflow.
+
 ---
 
 ## CI/CD Integration

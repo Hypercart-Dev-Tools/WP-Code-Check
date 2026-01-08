@@ -263,7 +263,9 @@ def main():
 
     if ai_triage_performed:
         # Build summary stats
-        findings_reviewed = ai_triage_summary.get('findings_reviewed', 0)
+        # Note: findings_reviewed is in ai_triage['scope'], not in summary
+        ai_triage_scope = ai_triage.get('scope', {})
+        findings_reviewed = ai_triage_scope.get('findings_reviewed', 0)
         confirmed_issues = ai_triage_summary.get('confirmed_issues', 0)
         false_positives = ai_triage_summary.get('false_positives', 0)
         needs_review = ai_triage_summary.get('needs_review', 0)
