@@ -271,8 +271,11 @@ def main() -> int:
     ap.add_argument('--max-findings', type=int, default=200, help='Max findings to triage (keeps report manageable).')
     args = ap.parse_args()
 
+    print(f"[AI Triage] Reading JSON log: {args.json_path}")
     data = json.loads(args.json_path.read_text(encoding='utf-8'))
     findings: List[Dict[str, Any]] = data.get('findings') or []
+    print(f"[AI Triage] Total findings in log: {len(findings)}")
+    print(f"[AI Triage] Max findings to review: {args.max_findings}")
 
     triaged_items: List[Dict[str, Any]] = []
     counts = Counter()
@@ -305,6 +308,8 @@ def main() -> int:
             }
         )
 
+    print(f"[AI Triage] Findings reviewed: {reviewed}")
+
     # Infer overall confidence from distribution.
     overall_conf = 'medium'
     if reviewed:
@@ -314,6 +319,12 @@ def main() -> int:
             overall_conf = 'high'
         elif low_ratio >= 0.4:
             overall_conf = 'low'
+
+    print(f"[AI Triage] Classification breakdown:")
+    print(f"  - Confirmed Issues: {counts.get('Confirmed', 0)}")
+    print(f"  - False Positives: {counts.get('False Positive', 0)}")
+    print(f"  - Needs Review: {counts.get('Needs Review', 0)}")
+    print(f"[AI Triage] Overall confidence: {overall_conf}")
 
     # Minimal executive summary tailored to what we observed in the sample.
     narrative_parts = []
@@ -354,7 +365,14 @@ def main() -> int:
         'triaged_findings': triaged_items,
     }
 
+    print(f"[AI Triage] Writing updated JSON to: {args.json_path}")
     args.json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+    # Verify write was successful
+    file_size = args.json_path.stat().st_size
+    print(f"[AI Triage] ✅ Successfully wrote {file_size:,} bytes")
+    print(f"[AI Triage] Triage data injected with {len(triaged_items)} triaged findings")
+
     return 0
 
 
