@@ -5,6 +5,108 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-01-08
+
+### Added
+- **New Pattern: WooCommerce Smart Coupons Performance Detection** (`wc-smart-coupons-thankyou-perf`)
+  - **Category:** Performance
+  - **Severity:** HIGH
+  - **Description:** Detects WooCommerce Smart Coupons plugin and warns about potential thank-you page performance issues caused by slow `wc_get_coupon_id_by_code()` database queries
+  - **Problem:** Smart Coupons triggers expensive `LOWER(post_title)` queries that scan 300k+ rows, causing 15-30 second page load times
+  - **Detection Strategy:** Two-step approach:
+    1. Detect Smart Coupons plugin presence (plugin header, class names, namespace, constants)
+    2. Check for thank-you hooks or `wc_get_coupon_id_by_code()` usage
+  - **Risk Levels:**
+    - Step 1 only: MEDIUM (plugin installed but may not be active)
+    - Step 1 + Step 2: HIGH (plugin active with performance-impacting patterns)
+  - **Remediation Provided:**
+    - Database index SQL: `ALTER TABLE wp_posts ADD INDEX idx_coupon_lookup (post_title(50), post_type, post_status);`
+    - Expected improvement: 15-30s → <100ms
+    - Caching example with transients
+    - Query Monitor integration guidance
+  - **Files Added:**
+    - `dist/patterns/wc-smart-coupons-thankyou-perf.json` - Pattern definition with performance metrics
+    - `dist/bin/detect-wc-smart-coupons-perf.sh` - Standalone detection script with immediate fix guidance
+  - **Pattern Library:** Now 28 total patterns (was 27)
+  - **Impact:** Helps identify and fix severe thank-you page performance issues on WooCommerce sites
+  - **Test Status:** ✅ Tested against Binoid site - successfully detected Smart Coupons with `wc_get_coupon_id_by_code()` calls
+- **Main Scanner Integration** - Both coupon patterns now integrated into `check-performance.sh`
+  - **`wc-coupon-in-thankyou`** - Integrated at line 4627-4695 (after WooCommerce N+1 check)
+  - **`wc-smart-coupons-thankyou-perf`** - Integrated at line 4699-4778 (after coupon-in-thankyou check)
+  - **Impact:** Coupon issues now appear in standard scans and HTML reports
+  - **Searchable:** Findings tagged with `wc-coupon-in-thankyou` and `wc-smart-coupons-thankyou-perf` IDs
+  - **Test Status:** ✅ Verified with Binoid theme scan - 2 coupon findings detected and searchable in HTML report
+
+### Changed
+- **Pattern: `wc-coupon-in-thankyou`** - Enhanced to detect `wc_get_coupon_id_by_code()` calls
+  - Added detection for `wc_get_coupon_id_by_code()` function (triggers slow LOWER(post_title) query)
+  - Updated standalone script (`detect-wc-coupon-in-thankyou.sh`) to include new pattern
+  - Updated pattern JSON with new detection rule
+  - **Impact:** Now catches both direct coupon manipulation AND slow coupon lookup queries
+- **Main Scanner (`check-performance.sh`)** - Added WooCommerce coupon performance checks
+  - Integrated two-step detection logic for both patterns
+  - Added skip logic for read-only coupon display (reduces false positives)
+  - Added remediation hints in text output (database index SQL)
+  - **Lines Modified:** 4624-4778 (154 lines added)
+  - **Impact:** All scans now automatically check for coupon performance issues
+- **HTML Report Template** - Added clear button to search input field
+  - **Feature:** Clear "×" button appears when search field has text
+  - **Behavior:**
+    - Button shows/hides automatically based on input
+    - Click button to clear search and reset filters
+    - ESC key also clears search (new keyboard shortcut)
+    - Button styled with hover/active states for better UX
+  - **Styling:** Circular gray button positioned inside search field (right side)
+  - **Accessibility:** Includes `aria-label` and `title` attributes
+  - **Impact:** Easier to clear search without manually deleting text
+  - **File Modified:** `dist/bin/templates/report-template.html` (CSS + HTML + JavaScript)
+- **HTML Report Template** - Fixed link contrast/legibility in header
+  - **Problem:** Links in purple gradient header had poor contrast (white text on purple)
+  - **Solution:** Added dark semi-transparent background to all header links
+  - **Styling:**
+    - Background: `rgba(0, 0, 0, 0.25)` (dark overlay for contrast)
+    - Border bottom: 2px solid white underline
+    - Font weight: 600 (semi-bold for better readability)
+    - Hover: Darker background + shadow effect
+  - **Impact:** Links now clearly visible and readable against purple gradient
+  - **Accessibility:** Meets WCAG contrast requirements (4.5:1 minimum)
+  - **File Modified:** `dist/bin/templates/report-template.html` (CSS only)
+- **Version:** Bumped to 1.1.1 (patch version for pattern enhancement + new related pattern)
+- **Pattern Library:** Updated to 28 patterns (16 PHP, 6 Headless, 4 Node.js, 1 JS, 1 WooCommerce Performance)
+
+## [1.1.0] - 2026-01-08
+
+### Added
+- **New Pattern: WooCommerce Coupon-in-Thank-You Detection** (`wc-coupon-in-thankyou`)
+  - **Category:** Reliability
+  - **Severity:** HIGH
+  - **Description:** Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts
+  - **Rationale:** Running coupon logic after order completion is a reliability anti-pattern that can cause data inconsistencies and unexpected side effects
+  - **Detection Strategy:** Two-step heuristic approach:
+    1. Find files with thank-you/order-received context markers (hooks, template paths, conditional checks)
+    2. Search those files for coupon operations (apply/remove/validation)
+  - **Context Markers Detected:**
+    - Hooks: `woocommerce_thankyou`, `*_woocommerce_thankyou`, `woocommerce_thankyou_*`
+    - Conditionals: `is_order_received_page()`, `is_wc_endpoint_url('order-received')`
+    - Templates: `woocommerce/checkout/thankyou.php`, `woocommerce/checkout/order-received.php`
+  - **Coupon Operations Flagged:**
+    - `apply_coupon()`, `remove_coupon()`, `has_coupon()`
+    - `new WC_Coupon()`, `wc_get_coupon()`
+    - `get_used_coupons()`, `get_coupon_codes()`
+    - Coupon validity filters and action hooks
+  - **Files Added:**
+    - `dist/patterns/wc-coupon-in-thankyou.json` - Pattern definition with full metadata
+    - `dist/bin/detect-wc-coupon-in-thankyou.sh` - Standalone detection script with user-friendly output
+    - `dist/bin/wc-coupon-thankyou-snippet.sh` - Minimal copy-paste version for CI integration
+  - **Pattern Library:** Auto-registered via pattern-library-manager.sh (now 27 total patterns)
+  - **Impact:** Helps identify post-checkout coupon logic that should be moved to cart/checkout hooks
+  - **False Positives:** May flag read-only coupon display logic (manual review recommended)
+
+### Changed
+- **Version:** Bumped to 1.1.0 (minor version bump for new pattern addition)
+- **Pattern Library:** Updated to 27 patterns (16 PHP, 6 Headless, 4 Node.js, 1 JS)
+- **Note:** Version 1.1.1 released same day with Smart Coupons performance pattern
+
 ## [1.0.99] - 2026-01-08
 
 ### Added

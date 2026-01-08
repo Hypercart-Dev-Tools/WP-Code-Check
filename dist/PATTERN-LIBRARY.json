@@ -1,28 +1,28 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-08T03:41:27Z",
+  "generated": "2026-01-08T20:45:21Z",
   "summary": {
-    "total_patterns": 26,
-    "enabled": 26,
+    "total_patterns": 28,
+    "enabled": 28,
     "disabled": 0,
     "by_severity": {
       "CRITICAL": 9,
-      "HIGH": 8,
+      "HIGH": 10,
       "MEDIUM": 6,
       "LOW": 3
     },
     "by_category": {
-      "performance": 8,"duplication": 5,"reliability": 3,"security": 8
+      "performance": 9,"duplication": 5,"reliability": 4,"security": 8
     },
     "by_pattern_type": {
-      "php": 15,
+      "php": 17,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 4,
     "heuristic_patterns": 9,
-    "definitive_patterns": 17
+    "definitive_patterns": 19
   },
   "patterns": [
     {
@@ -346,6 +346,34 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "unsanitized-superglobal-read.json"
+},
+{
+  "id": "wc-coupon-in-thankyou",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "reliability",
+  "severity": "HIGH",
+  "title": "Coupon logic in WooCommerce thank-you/order-received context",
+  "description": "Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts. This is a reliability anti-pattern because the order is already complete and coupon operations should not be performed post-checkout.",
+  "detection_type": "direct",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "wc-coupon-in-thankyou.json"
+},
+{
+  "id": "wc-smart-coupons-thankyou-perf",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "HIGH",
+  "title": "WooCommerce Smart Coupons active with potential thank-you page performance impact",
+  "description": "Detects WooCommerce Smart Coupons plugin which is known to trigger expensive database queries (LOWER(post_title) lookups) on the thank-you/order-received page. This can cause 15-30 second page load times on sites with large wp_posts tables.",
+  "detection_type": "direct",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "wc-smart-coupons-thankyou-perf.json"
 },
 {
   "id": "wp-query-unbounded",
