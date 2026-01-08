@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.99] - 2026-01-08
+
+### Added
+- **AI Triage Logging & Verification** - Enhanced `ai-triage.py` with comprehensive logging and post-write verification
+  - Added detailed progress logging (input file, findings count, classification breakdown, confidence level)
+  - Added post-write verification to ensure `ai_triage` data persists correctly in JSON
+  - Added regression test (`test-ai-triage-simple.sh`) to verify AI triage functionality
+  - **Impact:** Easier debugging and guaranteed data integrity for AI triage operations
+  - **Affected File:** `dist/bin/ai-triage.py`
+  - **Test Status:** ✅ Verified with smoke test - 7 findings triaged successfully
+
+### Changed
+- **AI Triage Logging to stderr** - All `[AI Triage]` log messages now output to stderr instead of stdout
+  - **Rationale:** Prevents potential JSON output corruption when piping stdout (follows same pattern as main scanner)
+  - **Impact:** Safe to pipe stdout without mixing log messages with data output
+  - **Affected File:** `dist/bin/ai-triage.py` (all print statements now use `file=sys.stderr`)
+  - **Test Status:** ✅ Verified stdout is clean when stderr redirected to /dev/null
+- **Version:** Bumped to 1.0.99
+
 ## [1.0.98] - 2026-01-08
 
 ### Fixed
