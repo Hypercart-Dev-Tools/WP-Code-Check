@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.1.2"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -4772,6 +4772,71 @@ elif [ "$SMART_COUPONS_DETECTED" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "WooCommerce Smart Coupons performance issues" "$SMART_COUPONS_PERF_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# HTML-Escaping in JSON Response URL Fields (Heuristic)
+# ============================================================================
+# Pattern: wp-json-html-escape
+# Detects HTML escaping functions (esc_url, esc_attr, esc_html) used in JSON
+# response fields with URL-like names. This can cause double-encoding where
+# & becomes &#038; breaking redirects in JavaScript.
+# This is a HEURISTIC pattern - may flag intentional HTML fragments in JSON.
+# ============================================================================
+
+JSON_HTML_ESCAPE_SEVERITY=$(get_severity "wp-json-html-escape" "MEDIUM")
+JSON_HTML_ESCAPE_COLOR="${YELLOW}"
+
+text_echo "${BLUE}▸ HTML-escaping in JSON response URL fields (heuristic) ${JSON_HTML_ESCAPE_COLOR}[$JSON_HTML_ESCAPE_SEVERITY]${NC}"
+
+# Step 1: Find files with JSON response functions
+JSON_RESPONSE_FILES=$(grep -rlE \
+  'wp_send_json|WP_REST_Response|wp_json_encode' \
+  $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
+
+JSON_HTML_ESCAPE_ISSUES=""
+JSON_HTML_ESCAPE_FINDING_COUNT=0
+
+if [ -n "$JSON_RESPONSE_FILES" ]; then
+  # Step 2: Check for esc_* functions in URL-like keys
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    # Look for patterns like: 'redirect_url' => esc_url($url)
+    # Match URL-like keys with HTML escaping functions
+    ESCAPE_MATCHES=$(grep -nE \
+      "('|\")?(url|redirect|link|href|view_url|redirect_url|edit_url|delete_url|ajax_url|api_url|endpoint)('|\")?\s*(=>|:)\s*esc_(url|attr|html)\(" \
+      "$file" 2>/dev/null || true)
+
+    if [ -n "$ESCAPE_MATCHES" ]; then
+      while IFS= read -r match; do
+        [ -z "$match" ] && continue
+
+        line_num=$(echo "$match" | cut -d: -f1)
+        code=$(echo "$match" | cut -d: -f2-)
+
+        if ! should_suppress_finding "wp-json-html-escape" "$file"; then
+          JSON_HTML_ESCAPE_ISSUES="${JSON_HTML_ESCAPE_ISSUES}${file}:${line_num}:${code}"$'\n'
+          add_json_finding "wp-json-html-escape" "warning" "$JSON_HTML_ESCAPE_SEVERITY" "$file" "$line_num" "Potential HTML-escaping in JSON response. esc_url() encodes & → &#038; which can break redirects in JS. Prefer raw URL in JSON; escape when rendering into HTML." "$code"
+          ((JSON_HTML_ESCAPE_FINDING_COUNT++)) || true
+        fi
+      done <<< "$ESCAPE_MATCHES"
+    fi
+  done <<< "$JSON_RESPONSE_FILES"
+fi
+
+if [ "$JSON_HTML_ESCAPE_FINDING_COUNT" -gt 0 ]; then
+  text_echo "${JSON_HTML_ESCAPE_COLOR}  ⚠ NEEDS REVIEW - HTML-escaping in JSON URL fields (heuristic):${NC}"
+  ((WARNINGS++))
+  if [ "$OUTPUT_FORMAT" = "text" ]; then
+    echo "$JSON_HTML_ESCAPE_ISSUES" | head -5
+    text_echo "${YELLOW}  💡 Fix: Remove esc_url/esc_attr/esc_html from JSON URL fields. Use raw URLs; escape in JS when rendering to HTML.${NC}"
+  fi
+  add_json_check "HTML-escaping in JSON response URL fields (heuristic)" "$JSON_HTML_ESCAPE_SEVERITY" "failed" "$JSON_HTML_ESCAPE_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "HTML-escaping in JSON response URL fields (heuristic)" "$JSON_HTML_ESCAPE_SEVERITY" "passed" 0
 fi
 text_echo ""
 
