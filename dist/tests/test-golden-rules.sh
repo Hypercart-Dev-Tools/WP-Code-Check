@@ -25,7 +25,7 @@ TESTS_FAILED=0
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ANALYZER="${SCRIPT_DIR}/../bin/golden-rules-analyzer.php"
+ANALYZER="${SCRIPT_DIR}/../bin/experimental/golden-rules-analyzer.php"
 TEMP_DIR="${SCRIPT_DIR}/temp-golden-rules-test"
 
 # Check if PHP is available

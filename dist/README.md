@@ -408,9 +408,13 @@ JSON structure:
 
 ---
 
-## 🔬 Deep Analysis: Golden Rules Analyzer
+## 🧪 Experimental: Golden Rules Analyzer
 
-For projects that need **semantic analysis beyond pattern matching**, WP Code Check includes the Golden Rules Analyzer — a PHP-based static analysis tool that catches architectural antipatterns.
+**Status:** Experimental | **Location:** `dist/bin/experimental/` | **Requires:** PHP 7.4+
+
+For projects that need **semantic analysis beyond pattern matching**, WP Code Check includes the Golden Rules Analyzer — an experimental PHP-based static analysis tool that catches architectural antipatterns.
+
+> ⚠️ **Experimental Status:** This tool is functional but may have false positives and breaking changes in future releases. Use for code reviews and learning, not production CI/CD pipelines yet. [See experimental README](bin/experimental/README.md) for details.
 
 ### What It Catches
 
@@ -429,19 +433,19 @@ The Golden Rules Analyzer enforces **6 core architectural principles** that prev
 
 ```bash
 # Basic analysis
-php dist/bin/golden-rules-analyzer.php /path/to/plugin
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin
 
 # Analyze specific rule
-php dist/bin/golden-rules-analyzer.php /path/to/plugin --rule=query-boundaries
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --rule=query-boundaries
 
 # JSON output for CI/CD
-php dist/bin/golden-rules-analyzer.php /path/to/plugin --format=json
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --format=json
 
 # GitHub Actions format
-php dist/bin/golden-rules-analyzer.php /path/to/plugin --format=github
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --format=github
 
 # Fail on specific severity
-php dist/bin/golden-rules-analyzer.php /path/to/plugin --fail-on=error
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --fail-on=error
 ```
 
 ### Configuration
@@ -489,8 +493,8 @@ Summary: 2 errors, 1 warning, 0 info
 |----------|---------------|
 | **Quick CI/CD checks** | `check-performance.sh` (bash scanner) |
 | **Pre-commit hooks** | `check-performance.sh` (fast, zero dependencies) |
-| **Deep code review** | `golden-rules-analyzer.php` (semantic analysis) |
-| **Refactoring audit** | `golden-rules-analyzer.php` (finds duplication) |
+| **Deep code review** | `experimental/golden-rules-analyzer.php` (semantic analysis) |
+| **Refactoring audit** | `experimental/golden-rules-analyzer.php` (finds duplication) |
 | **Combined workflow** | Run both for complete coverage |
 
 ### Combined Workflow Example
@@ -499,8 +503,8 @@ Summary: 2 errors, 1 warning, 0 info
 # 1. Quick scan (30+ checks in <5s)
 ./dist/bin/check-performance.sh --paths ~/my-plugin --format json > quick-scan.json
 
-# 2. Deep analysis (6 architectural rules)
-php ./dist/bin/golden-rules-analyzer.php ~/my-plugin --format json > deep-analysis.json
+# 2. Deep analysis (6 architectural rules - experimental)
+php ./dist/bin/experimental/golden-rules-analyzer.php ~/my-plugin --format json > deep-analysis.json
 
 # 3. Review both reports
 cat quick-scan.json deep-analysis.json
@@ -513,15 +517,15 @@ cat quick-scan.json deep-analysis.json
 - name: Quick Scan
   run: ./dist/bin/check-performance.sh --paths . --strict
 
-- name: Deep Analysis
-  run: php ./dist/bin/golden-rules-analyzer.php . --fail-on=error
+- name: Deep Analysis (Experimental)
+  run: php ./dist/bin/experimental/golden-rules-analyzer.php . --fail-on=error
 ```
 
-**Pre-commit Hook:**
+**Pre-commit Hook (Experimental):**
 ```bash
 #!/bin/bash
 # .git/hooks/pre-commit
-php ./dist/bin/golden-rules-analyzer.php . --fail-on=error
+php ./dist/bin/experimental/golden-rules-analyzer.php . --fail-on=error
 ```
 
 ---
@@ -555,10 +559,18 @@ $data = file_get_contents( 'https://api.example.com/data' );
 | File | Purpose |
 |------|---------|
 | `dist/bin/check-performance.sh` | **Quick Scanner** - Bash-based, detects 30+ antipatterns in <5s |
-| `dist/bin/golden-rules-analyzer.php` | **Deep Analyzer** - PHP-based semantic analysis, 6 architectural rules |
 | `dist/bin/json-to-html.py` | Convert JSON scan results to beautiful HTML reports |
+| `dist/bin/wp-audit` | **Unified CLI** - Orchestrates quick scan, deep analysis, and reporting |
 | `dist/tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
 | `dist/tests/run-fixture-tests.sh` | Validation test suite (number of tests may grow over time) |
+
+### Experimental Tools
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `dist/bin/experimental/golden-rules-analyzer.php` | **Deep Analyzer** - PHP-based semantic analysis, 6 architectural rules | 🧪 Experimental |
+
+> See [experimental/README.md](bin/experimental/README.md) for detailed usage guide and end-to-end workflow examples.
 
 ### Integration Tools
 

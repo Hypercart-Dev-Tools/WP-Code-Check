@@ -85,7 +85,7 @@ WP Code Check provides **two complementary analysis tools** for complete coverag
 
 See [full check list](dist/README.md#what-it-detects).
 
-#### **Golden Rules Analyzer** (PHP - Semantic Analysis)
+#### **Golden Rules Analyzer** (PHP - Semantic Analysis) 🧪 **Experimental**
 - **6 architectural rules** that catch design-level antipatterns
 - **Duplication detection**: Find duplicate functions across files
 - **State management**: Catch direct state mutations bypassing handlers
@@ -94,7 +94,9 @@ See [full check list](dist/README.md#what-it-detects).
 - **Error handling**: Ensure graceful failure for HTTP/file operations
 - **Production readiness**: Flag debug code and TODO comments
 
-See [Golden Rules documentation](dist/README.md#deep-analysis-golden-rules-analyzer).
+> ⚠️ **Experimental:** Functional but may have false positives. Best for code reviews and learning. [See experimental README](dist/bin/experimental/README.md) for complete usage guide.
+
+See [Golden Rules documentation](dist/README.md#experimental-golden-rules-analyzer).
 
 ### 📊 **Multiple Output Formats**
 
@@ -161,19 +163,26 @@ See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for deta
 
 WP Code Check is a **complete code quality suite** with multiple specialized tools:
 
+### Core Tools (Stable)
+
 | Tool | Type | Purpose | Speed |
 |------|------|---------|-------|
 | **Quick Scanner** | Bash | 30+ WordPress antipatterns | <5s |
-| **Golden Rules Analyzer** | PHP | 6 architectural rules with semantic analysis | ~10-30s |
 | **JSON to HTML Converter** | Python | Beautiful HTML reports from scan logs | <1s |
 | **Slack Integration** | Bash | CI/CD notifications | Instant |
 | **Baseline Manager** | Built-in | Track technical debt over time | N/A |
 | **Project Templates** | Built-in | Save scan configurations | N/A |
 
+### Experimental Tools 🧪
+
+| Tool | Type | Purpose | Speed | Status |
+|------|------|---------|-------|--------|
+| **Golden Rules Analyzer** | PHP | 6 architectural rules with semantic analysis | ~10-30s | Experimental - may have false positives |
+
 **Choose your workflow:**
-- **Fast CI/CD**: Quick Scanner only (zero dependencies)
-- **Deep Review**: Both scanners for complete coverage
-- **Legacy Audit**: Quick Scanner + Baseline + Golden Rules
+- **Fast CI/CD**: Quick Scanner only (zero dependencies, stable)
+- **Deep Review**: Quick Scanner + Golden Rules (experimental)
+- **Legacy Audit**: Quick Scanner + Baseline + Golden Rules (experimental)
 
 ---
 
@@ -202,10 +211,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Golden Rules Analysis
+      - name: Golden Rules Analysis (Experimental)
         run: |
           git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
-          php ./WP-Code-Check/dist/bin/golden-rules-analyzer.php . --fail-on=error
+          php ./WP-Code-Check/dist/bin/experimental/golden-rules-analyzer.php . --fail-on=error
 ```
 
 ### GitLab CI

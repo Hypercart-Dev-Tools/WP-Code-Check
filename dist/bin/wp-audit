@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Tool paths
 QUICK_SCANNER="${SCRIPT_DIR}/check-performance.sh"
-GOLDEN_RULES="${SCRIPT_DIR}/golden-rules-analyzer.php"
+GOLDEN_RULES="${SCRIPT_DIR}/experimental/golden-rules-analyzer.php"
 JSON_TO_HTML="${SCRIPT_DIR}/json-to-html.py"
 
 # Usage

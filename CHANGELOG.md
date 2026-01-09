@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-01-09
 
 ### Added
-- **Golden Rules Analyzer** - PHP-based semantic analysis tool for architectural antipatterns
+- **Golden Rules Analyzer (Experimental)** - PHP-based semantic analysis tool for architectural antipatterns
+  - **Location:** `dist/bin/experimental/` (experimental status - may have false positives)
+  - **Status:** Functional but experimental - best for code reviews and learning, not production CI/CD yet
   - **6 Core Rules:**
     1. **Search before you create** - Detects duplicate function implementations across files
     2. **State flows through gates** - Catches direct state property mutations bypassing handlers
@@ -25,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Configurable via `.golden-rules.json` in project root
   - **Output Formats:** Console (colored), JSON, GitHub Actions annotations
   - **CLI Options:** `--rule=<name>`, `--format=<type>`, `--fail-on=<level>`
-  - **File:** `dist/bin/golden-rules-analyzer.php` (executable, 1226 lines)
+  - **File:** `dist/bin/experimental/golden-rules-analyzer.php` (executable, 1226 lines)
   - **Namespace:** `Hypercart\WPCodeCheck\GoldenRules`
   - **License:** Apache-2.0
   - **Integration:** Complements existing bash scanner with semantic analysis
