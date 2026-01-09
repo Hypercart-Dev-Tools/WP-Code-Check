@@ -6,6 +6,21 @@ This folder contains **experimental tools** that extend WP Code Check with advan
 
 ---
 
+## 📑 Table of Contents
+
+1. [What's Inside](#-whats-inside)
+2. [End-to-End User Story](#-end-to-end-user-story-complete-code-quality-workflow)
+3. [Real-World Example](#-real-world-example-complete-workflow)
+4. [**AI-Assisted Triage Workflow**](#-ai-assisted-triage-workflow) ⭐ **Phase 2**
+5. [Tool Comparison](#-tool-comparison-when-to-use-what)
+6. [Quick Start](#-quick-start)
+7. [The 6 Golden Rules Explained](#-the-6-golden-rules-explained)
+8. [Configuration](#-configuration)
+9. [Troubleshooting](#-troubleshooting)
+10. [Roadmap](#️-roadmap)
+
+---
+
 ## 🔬 What's Inside
 
 ### Golden Rules Analyzer
@@ -209,13 +224,17 @@ php ./dist/bin/experimental/golden-rules-analyzer.php ~/my-plugin
 # Document decisions in ADRs
 ```
 
-### Day 7: Pre-Release
+### Day 7: Pre-Release (with AI Triage)
 ```bash
 # Final comprehensive check
 ./dist/bin/wp-audit full ~/my-plugin --format json > final-audit.json
 
-# Generate HTML report for stakeholders
-./dist/bin/wp-audit report final-audit.json release-report.html
+# Generate HTML report
+python3 ../../json-to-html.py final-audit.json release-report.html
+
+# AI Triage Phase (optional but recommended)
+# Let AI analyze findings for false positives and provide executive summary
+# See "AI-Assisted Triage Workflow" section below
 ```
 
 ### CI/CD Pipeline
@@ -223,12 +242,351 @@ php ./dist/bin/experimental/golden-rules-analyzer.php ~/my-plugin
 # .github/workflows/code-quality.yml
 - name: Quick Scan (Fast)
   run: ./dist/bin/check-performance.sh --paths . --strict
-  
+
 # Optional: Deep analysis on main branch only
 - name: Deep Analysis (Slow)
   if: github.ref == 'refs/heads/main'
   run: php ./dist/bin/experimental/golden-rules-analyzer.php .
 ```
+
+---
+
+## 🤖 AI-Assisted Triage Workflow
+
+**Phase 2 of the complete analysis pipeline** - Let AI analyze findings to identify false positives and provide an executive summary.
+
+### Visual Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    COMPLETE ANALYSIS PIPELINE                   │
+└─────────────────────────────────────────────────────────────────┘
+
+PHASE 1: SCANNING
+┌──────────────────┐
+│  Quick Scanner   │  30+ checks, <5s, zero dependencies
+│  (Bash)          │  Pattern matching for common issues
+└────────┬─────────┘
+         │
+         ├─────────► findings.json (raw data)
+         │
+┌────────▼─────────┐
+│  Golden Rules    │  6 architectural rules, ~10-30s, PHP
+│  Analyzer (PHP)  │  Semantic analysis for design issues
+└────────┬─────────┘
+         │
+         └─────────► findings.json (combined)
+                              │
+                              │
+PHASE 2: AI TRIAGE (OPTIONAL)
+                              │
+                    ┌─────────▼──────────┐
+                    │   AI Agent         │  Analyzes findings
+                    │   (Augment/Cursor) │  Identifies false positives
+                    └─────────┬──────────┘
+                              │
+                              ├─► Confirmed Issues (26%)
+                              ├─► False Positives (60%)
+                              └─► Needs Review (14%)
+                              │
+                    ┌─────────▼──────────┐
+                    │  Updated JSON      │  + ai_triage section
+                    │  with AI Summary   │  + executive narrative
+                    └─────────┬──────────┘
+                              │
+                              │
+PHASE 3: REPORTING
+                              │
+                    ┌─────────▼──────────┐
+                    │  json-to-html.py   │  Generates HTML report
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │  HTML Report       │  📊 AI Summary at top
+                    │  (final.html)      │  📋 Detailed findings below
+                    └────────────────────┘
+```
+
+### Overview
+
+After running scans (Quick Scanner + Golden Rules), you can use **AI-assisted triage** to:
+- ✅ **Identify false positives** - AI reviews findings for safeguards (nonces, sanitization, etc.)
+- ✅ **Confirm real issues** - Separate signal from noise
+- ✅ **Generate executive summary** - 3-5 paragraph narrative for stakeholders
+- ✅ **Prioritize fixes** - Recommendations ranked by severity and impact
+
+### When to Use AI Triage
+
+| Scenario | Use AI Triage? | Why |
+|----------|----------------|-----|
+| **Pre-release audit** | ✅ Yes | Validate findings before stakeholder review |
+| **Legacy codebase scan** | ✅ Yes | High false positive rate, need filtering |
+| **Client deliverable** | ✅ Yes | Executive summary required |
+| **Daily development** | ❌ No | Overkill for quick feedback loops |
+| **CI/CD pipeline** | ❌ No | Too slow, use quick scanner only |
+
+---
+
+### Complete End-to-End Workflow
+
+#### Step 1: Run Combined Analysis
+```bash
+# Run both quick scan and deep analysis
+./dist/bin/wp-audit full ~/my-plugin --format json > scan-results.json
+```
+
+**Output:** `scan-results.json` with all findings from both tools
+
+---
+
+#### Step 2: Generate Initial HTML Report
+```bash
+# Convert JSON to HTML
+python3 dist/bin/json-to-html.py scan-results.json initial-report.html
+```
+
+**Output:** `initial-report.html` with raw findings (no AI analysis yet)
+
+---
+
+#### Step 3: AI Triage Analysis
+
+**Option A: Automated (Recommended)**
+
+If you have an AI agent (like Augment, Cursor, or GitHub Copilot):
+
+```
+User: "Run AI triage on scan-results.json and update the HTML report"
+```
+
+**AI Agent will:**
+1. Read `scan-results.json`
+2. Analyze each finding for false positives
+3. Add `ai_triage` section to JSON with:
+   - Confirmed issues count
+   - False positives count
+   - Needs review count
+   - Confidence level
+   - Executive summary (3-5 paragraphs)
+   - Prioritized recommendations
+4. Regenerate HTML with AI summary at the top
+
+**Option B: Manual Analysis**
+
+If no AI agent available, manually review findings:
+
+```bash
+# Read findings
+cat scan-results.json | jq '.findings[] | {id, severity, file, line, message}'
+
+# Look for false positive patterns:
+# - phpcs:ignore comments with justification
+# - Nonce/capability checks nearby
+# - Sanitization functions adjacent
+# - String literals vs actual superglobal access
+```
+
+---
+
+#### Step 4: Review AI-Enhanced Report
+
+Open the updated HTML report. **AI summary appears at the TOP** (TL;DR format):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🤖 AI-Assisted Triage Summary                           │
+├─────────────────────────────────────────────────────────┤
+│ Reviewed: 47 findings                                   │
+│ Confirmed Issues: 12 (26%)                              │
+│ False Positives: 28 (60%)                               │
+│ Needs Review: 7 (14%)                                   │
+│ Confidence: High (92%)                                  │
+├─────────────────────────────────────────────────────────┤
+│ Executive Summary:                                      │
+│                                                         │
+│ Analysis of 47 findings across quick scan and deep     │
+│ analysis revealed 12 confirmed issues requiring        │
+│ immediate attention. The majority (60%) are false      │
+│ positives with proper safeguards in place...           │
+│                                                         │
+│ [3-5 paragraph narrative continues...]                 │
+│                                                         │
+│ Recommendations:                                        │
+│ 1. Priority 1: Fix unbounded query in products.php     │
+│ 2. Priority 2: Add error handling to API calls         │
+│ 3. Consider: Create baseline for known false positives │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### AI Triage JSON Structure
+
+The AI adds this section to your JSON log:
+
+```json
+{
+  "scan_metadata": { /* existing metadata */ },
+  "findings": [ /* existing findings */ ],
+  "ai_triage": {
+    "summary": {
+      "total_reviewed": 47,
+      "confirmed_issues": 12,
+      "false_positives": 28,
+      "needs_review": 7,
+      "confidence_level": "high"
+    },
+    "narrative": "Analysis of 47 findings across quick scan and deep analysis revealed...",
+    "recommendations": [
+      "Priority 1: Fix unbounded query in products.php (line 156)",
+      "Priority 2: Add error handling to wp_remote_get in api.php (line 89)",
+      "Consider adding baseline file to suppress known false positives"
+    ],
+    "false_positive_breakdown": {
+      "spo-002-superglobals": "Has phpcs:ignore with nonce verification",
+      "direct-db-query": "Uses $wpdb->prepare() on adjacent line"
+    }
+  }
+}
+```
+
+---
+
+### Common False Positive Patterns
+
+AI looks for these patterns when analyzing findings:
+
+#### Quick Scanner False Positives
+
+| Rule ID | Common False Positive Reason |
+|---------|------------------------------|
+| `spo-002-superglobals` | Has `phpcs:ignore` with nonce verification elsewhere in function |
+| `rest-no-pagination` | Endpoint returns single item, not collection (e.g., `/item/{id}`) |
+| `get-users-no-limit` | Args passed through `apply_filters()` hook that adds limit |
+| `direct-db-query` | Query uses `$wpdb->prepare()` on adjacent line (multi-line query) |
+
+#### Golden Rules False Positives
+
+| Rule | Common False Positive Reason |
+|------|------------------------------|
+| **State Gates** | Mutation inside state handler method (allowed) |
+| **Single Truth** | Option key used in different contexts (not duplication) |
+| **Query Boundaries** | `posts_per_page` set via filter hook |
+| **Graceful Failure** | Error handling on next line (multi-line pattern) |
+
+---
+
+### AI Confidence Levels
+
+| Level | Percentage | Meaning |
+|-------|------------|---------|
+| **High** | 90-100% | Very confident in analysis, safe to act on |
+| **Medium** | 60-89% | Mostly confident, spot-check recommended |
+| **Low** | <60% | Needs human review, ambiguous patterns |
+
+**When confidence is LOW:**
+- Review "Needs Review" findings manually
+- Check for edge cases AI might have missed
+- Consider running targeted scans on specific files
+
+---
+
+### Example: Complete Workflow with AI Triage
+
+```bash
+# Day 1-6: Development with quick scans
+./dist/bin/check-performance.sh --paths ~/my-plugin
+# Fix issues as you go
+
+# Day 7: Pre-release comprehensive analysis
+./dist/bin/wp-audit full ~/my-plugin --format json > final-scan.json
+
+# Generate initial HTML
+python3 dist/bin/json-to-html.py final-scan.json final-report.html
+
+# AI Triage (via AI agent)
+# User: "Run AI triage on final-scan.json"
+# AI: Analyzes findings, updates JSON, regenerates HTML
+
+# Review AI-enhanced report
+open final-report.html
+# See executive summary at top, prioritized recommendations
+
+# Share with stakeholders
+# Email final-report.html to team lead or client
+# Summary at top = no scrolling needed for TL;DR
+```
+
+---
+
+### Integration with Project Templates
+
+If you're using **Project Templates** (see `dist/TEMPLATES/_AI_INSTRUCTIONS.md`):
+
+```bash
+# Run template end-to-end (includes AI triage automatically)
+dist/bin/run gravityforms end-to-end
+
+# This executes:
+# 1. Scan using template configuration
+# 2. Generate JSON log
+# 3. AI triage analysis (automatic)
+# 4. Generate HTML with AI summary
+# 5. Open report in browser
+```
+
+**No manual intervention required** - AI triage is built into the "end-to-end" workflow.
+
+---
+
+### Benefits of AI Triage
+
+#### For Developers
+- ✅ **Save time** - Don't manually review 100+ findings
+- ✅ **Focus on real issues** - AI filters false positives
+- ✅ **Learn patterns** - AI explains why something is/isn't an issue
+
+#### For Managers
+- ✅ **Executive summary** - 3-5 paragraph TL;DR at top of report
+- ✅ **Prioritized recommendations** - Know what to fix first
+- ✅ **Confidence metrics** - Understand reliability of analysis
+
+#### For Clients
+- ✅ **Professional deliverable** - Polished report with narrative
+- ✅ **Clear next steps** - Actionable recommendations
+- ✅ **Transparency** - See both raw findings and AI analysis
+
+---
+
+### Limitations & Caveats
+
+⚠️ **AI triage is not perfect:**
+- May miss context-specific safeguards
+- Can't understand business logic
+- Requires human review for "Needs Review" items
+- Confidence level indicates reliability
+
+✅ **Best practices:**
+- Always review "Needs Review" findings manually
+- Spot-check "False Positives" if confidence is <90%
+- Use AI triage as a **filter**, not a replacement for human judgment
+- Update baseline files for recurring false positives
+
+---
+
+### When NOT to Use AI Triage
+
+❌ **Skip AI triage if:**
+- Quick feedback loop during active development (use quick scanner only)
+- CI/CD pipeline (too slow, use automated checks only)
+- Findings count is <10 (manual review is faster)
+- No AI agent available and manual analysis is impractical
+
+✅ **Use AI triage when:**
+- Pre-release audit with 50+ findings
+- Client deliverable requiring executive summary
+- Legacy codebase with high false positive rate
+- Stakeholder review requiring narrative explanation
 
 ---
 
@@ -602,6 +960,68 @@ We welcome contributions! Areas where you can help:
 
 ---
 
+## 📋 Quick Reference: 3-Phase Workflow
+
+### Phase 1: Scanning (Required)
+```bash
+# Option A: Quick scan only (fast, CI/CD)
+./dist/bin/check-performance.sh --paths ~/my-plugin
+
+# Option B: Deep analysis only (code review)
+php ./dist/bin/experimental/golden-rules-analyzer.php ~/my-plugin
+
+# Option C: Both (recommended for pre-release)
+./dist/bin/wp-audit full ~/my-plugin --format json > scan.json
+```
+
+### Phase 2: AI Triage (Optional - Recommended for 50+ findings)
+```bash
+# Generate initial HTML
+python3 dist/bin/json-to-html.py scan.json report.html
+
+# AI triage (via AI agent)
+# User: "Run AI triage on scan.json"
+# AI: Analyzes findings, updates JSON with ai_triage section
+
+# Regenerate HTML with AI summary
+python3 dist/bin/json-to-html.py scan.json final-report.html
+```
+
+### Phase 3: Reporting (Required)
+```bash
+# Open final report
+open final-report.html
+
+# Share with stakeholders
+# AI summary appears at top (TL;DR)
+# Detailed findings below
+```
+
+### When to Use Each Phase
+
+| Phase | Use When | Skip When |
+|-------|----------|-----------|
+| **Phase 1: Scanning** | Always | Never (required) |
+| **Phase 2: AI Triage** | 50+ findings, pre-release, client deliverable | <10 findings, active development |
+| **Phase 3: Reporting** | Stakeholder review, documentation | Quick feedback loops |
+
+### Integration with Templates
+
+```bash
+# Automated end-to-end (all 3 phases)
+dist/bin/run gravityforms end-to-end
+
+# Executes:
+# 1. Scan using template
+# 2. AI triage (automatic)
+# 3. Generate HTML report
+# 4. Open in browser
+```
+
+See [TEMPLATES/_AI_INSTRUCTIONS.md](../../TEMPLATES/_AI_INSTRUCTIONS.md) for template workflow details.
+
+---
+
 ## 📄 License
 
 Apache-2.0 License - See main repository LICENSE file
@@ -616,5 +1036,19 @@ Apache-2.0 License - See main repository LICENSE file
 
 ---
 
-**Remember:** This is an **experimental tool**. Use it to learn, improve your code, and catch architectural issues early. But always review its suggestions with critical thinking - you're the expert on your codebase! 🚀
+## 💡 Final Thoughts
+
+**Remember:** This is an **experimental tool**. Use it to learn, improve your code, and catch architectural issues early. But always review its suggestions with critical thinking - you're the expert on your codebase!
+
+**The 3-Phase Workflow:**
+1. 🔍 **Scan** - Catch issues (quick + deep)
+2. 🤖 **Triage** - Filter false positives (AI-assisted)
+3. 📊 **Report** - Share findings (stakeholder-ready)
+
+**Start simple, scale up:**
+- Day 1-6: Quick scans only (fast feedback)
+- Day 7: Full analysis + AI triage (pre-release)
+- Ongoing: Templates + end-to-end (automated)
+
+🚀 **Happy coding!**
 

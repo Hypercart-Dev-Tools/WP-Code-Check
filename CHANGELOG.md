@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Usage Examples:**
     ```bash
     wp-audit quick ~/my-plugin --strict
-    wp-audit deep ~/my-plugin --rule=duplication
+    wp-audit deep ~/my-plugin --rule=duplication  # Uses experimental analyzer
     wp-audit full ~/my-plugin --format json
     wp-audit report scan-results.json output.html
     ```
@@ -62,9 +62,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Clean code validation (no false positives)
   - **Features:** Colored output, violation counting, temp file cleanup
 
+- **Experimental README** (`dist/bin/experimental/README.md`) - **912 lines**
+  - **Table of Contents** with quick navigation
+  - **End-to-end user story** showing complete workflow (quick scan → deep analysis → AI triage)
+  - **AI-Assisted Triage Workflow** (Phase 2) - **300+ lines of documentation**
+    - Visual workflow diagram showing 3-phase pipeline
+    - Complete step-by-step guide (scan → triage → report)
+    - AI triage JSON structure and examples
+    - Common false positive patterns for both tools
+    - Confidence levels and when to use AI triage
+    - Integration with Project Templates end-to-end workflow
+  - **Real-world examples** of fixing issues found by both tools
+  - **6 Golden Rules explained** with before/after code examples
+  - **Configuration guide** for `.golden-rules.json`
+  - **Troubleshooting section** for common issues
+  - **Roadmap** and graduation criteria for moving to stable
+
 ### Changed
 - **Documentation Updates:**
-  - `dist/README.md` - Added comprehensive Golden Rules Analyzer section with:
+  - `dist/README.md` - Added comprehensive Golden Rules Analyzer section (marked as experimental) with:
     - Feature comparison table (6 rules explained)
     - Quick start guide with CLI examples
     - Configuration instructions (.golden-rules.json)
@@ -75,12 +91,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - CI/CD integration examples
   - `README.md` - Updated Features section:
     - Renamed "30+ Performance & Security Checks" to "Multi-Layered Code Quality Analysis"
-    - Added Quick Scanner vs Golden Rules Analyzer comparison
-    - Added "Tools Included" section with 6-tool comparison table
+    - Added Quick Scanner vs Golden Rules Analyzer comparison (marked as experimental)
+    - Split "Tools Included" into Core Tools (stable) and Experimental Tools sections
     - Updated GitHub Actions example to show both quick-scan and deep-analysis jobs
+    - Added experimental status warnings and links to experimental README
   - `dist/README.md` - Updated "What's Included" section:
-    - Added golden-rules-analyzer.php to Core Tools table
-    - Added json-to-html.py reference
+    - Moved golden-rules-analyzer.php to Experimental Tools section
+    - Added experimental status badge and warnings
+    - Updated all file paths to `dist/bin/experimental/`
     - Clarified tool purposes (Quick Scanner vs Deep Analyzer)
 
 ### Technical Details
