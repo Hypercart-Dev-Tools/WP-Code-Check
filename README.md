@@ -72,14 +72,29 @@ cd WP-Code-Check
 
 ## Features
 
-### 🔍 **30+ Performance & Security Checks**
+### 🔍 **Multi-Layered Code Quality Analysis**
 
+WP Code Check provides **two complementary analysis tools** for complete coverage:
+
+#### **Quick Scanner** (Bash - Zero Dependencies)
+- **30+ WordPress-specific checks** in under 5 seconds
 - **Critical**: Unbounded queries, insecure deserialization, localStorage sensitive data, client-side serialization, **direct database queries without $wpdb->prepare()**
 - **High**: Direct superglobal manipulation, **unsanitized superglobal read**, **admin functions without capability checks**, **WooCommerce N+1 patterns**, AJAX without nonce validation, unbounded SQL, expensive WP functions in polling
 - **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout, unsafe RegExp construction, PHP short tags, **WooCommerce Subscriptions queries without limits**
 - **Low**: Timezone-sensitive patterns
 
 See [full check list](dist/README.md#what-it-detects).
+
+#### **Golden Rules Analyzer** (PHP - Semantic Analysis)
+- **6 architectural rules** that catch design-level antipatterns
+- **Duplication detection**: Find duplicate functions across files
+- **State management**: Catch direct state mutations bypassing handlers
+- **Configuration centralization**: Eliminate magic strings and hardcoded values
+- **Query optimization**: Context-aware N+1 detection in loops
+- **Error handling**: Ensure graceful failure for HTTP/file operations
+- **Production readiness**: Flag debug code and TODO comments
+
+See [Golden Rules documentation](dist/README.md#deep-analysis-golden-rules-analyzer).
 
 ### 📊 **Multiple Output Formats**
 
@@ -142,6 +157,26 @@ See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for deta
 
 ---
 
+## 🛠️ Tools Included
+
+WP Code Check is a **complete code quality suite** with multiple specialized tools:
+
+| Tool | Type | Purpose | Speed |
+|------|------|---------|-------|
+| **Quick Scanner** | Bash | 30+ WordPress antipatterns | <5s |
+| **Golden Rules Analyzer** | PHP | 6 architectural rules with semantic analysis | ~10-30s |
+| **JSON to HTML Converter** | Python | Beautiful HTML reports from scan logs | <1s |
+| **Slack Integration** | Bash | CI/CD notifications | Instant |
+| **Baseline Manager** | Built-in | Track technical debt over time | N/A |
+| **Project Templates** | Built-in | Save scan configurations | N/A |
+
+**Choose your workflow:**
+- **Fast CI/CD**: Quick Scanner only (zero dependencies)
+- **Deep Review**: Both scanners for complete coverage
+- **Legacy Audit**: Quick Scanner + Baseline + Golden Rules
+
+---
+
 ## CI/CD Integration
 
 ### GitHub Actions
@@ -151,15 +186,26 @@ name: WP Code Check
 on: [push, pull_request]
 
 jobs:
-  performance:
+  quick-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Run WP Code Check
+
+      - name: Quick Scan
         run: |
           git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
-          ./WP-Code-Check/dist/bin/check-performance.sh --paths . --format json
+          ./WP-Code-Check/dist/bin/check-performance.sh --paths . --format json --strict
+
+  deep-analysis:
+    runs-on: ubuntu-latest
+    needs: quick-scan
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Golden Rules Analysis
+        run: |
+          git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+          php ./WP-Code-Check/dist/bin/golden-rules-analyzer.php . --fail-on=error
 ```
 
 ### GitLab CI
