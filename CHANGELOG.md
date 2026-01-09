@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-01-09
+
+### Added
+- **New Pattern: HTML-Escaping in JSON Response URL Fields** (`wp-json-html-escape`) - **HEURISTIC**
+  - **Category:** Reliability / Correctness
+  - **Severity:** MEDIUM (warning)
+  - **Type:** Heuristic (needs review)
+  - **Description:** Detects HTML escaping functions (`esc_url`, `esc_attr`, `esc_html`) used in JSON response fields with URL-like names, which can cause double-encoding issues
+  - **Problem:** Using `esc_url()` in JSON responses encodes `&` → `&#038;`, breaking redirects in JavaScript
+  - **Detection Strategy:** Two-step approach:
+    1. Find files with JSON response functions (`wp_send_json_*`, `WP_REST_Response`, `wp_json_encode`)
+    2. Check for `esc_url/esc_attr/esc_html` in array keys matching URL patterns (`url`, `redirect`, `link`, `href`, `view_url`, `redirect_url`, `edit_url`, `delete_url`, `ajax_url`, `api_url`, `endpoint`)
+  - **Why Heuristic:**
+    - Sometimes developers intentionally send HTML fragments in JSON (e.g., `html_content` field)
+    - Escaping may be correct for non-URL fields (e.g., `message` field)
+    - Context matters - pattern flags suspicious cases for review
+  - **Remediation:**
+    - Remove HTML escaping from JSON URL fields
+    - Use raw URLs in JSON responses
+    - Escape only when rendering into HTML context in JavaScript
+  - **Example:**
+    ```php
+    // ❌ Bad - Double-encoding
+    wp_send_json_success(array(
+        'redirect_url' => esc_url($url)  // & becomes &#038;
+    ));
+
+    // ✅ Good - Raw URL
+    wp_send_json_success(array(
+        'redirect_url' => $url  // Escape in JS when needed
+    ));
+    ```
+  - **Files Added:**
+    - `dist/bin/patterns/wp-json-html-escape.json` - Pattern definition with heuristic flag
+    - `dist/bin/fixtures/wp-json-html-escape.php` - Test fixture with 11 test cases (8 true positives, 3 edge cases)
+  - **Pattern Library:** Now 29 total patterns (18 PHP, 6 Headless, 4 Node.js, 1 JS)
+  - **Heuristic Patterns:** Now 10 total (was 9)
+  - **Impact:** Helps prevent hard-to-debug redirect failures and double-encoding issues in AJAX/REST API responses
+  - **Test Status:** ✅ Tested with fixture - detected 11/11 expected cases (8 true positives + 3 edge cases)
+  - **Main Scanner Integration:** Integrated at lines 4778-4844 (after Smart Coupons check, before Transient check)
+
 ## [1.1.1] - 2026-01-08
 
 ### Added
