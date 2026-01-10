@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes "command not found" errors when running tests in CI environment
   - **Impact:** CI tests now run successfully on pull requests
 
+- **Test Suite** - Fixed output format parsing to work across macOS and Ubuntu
+  - Changed `run_test()` function to explicitly request `--format text` for consistent parsing
+  - Removed `jq` dependency from text output parsing (was causing failures in CI)
+  - Simplified parsing logic to use only text format for fixture validation tests
+  - JSON format tests already explicitly use `--format json` (no changes needed)
+  - **Root Cause:** Script was getting JSON output by default but trying to parse as text
+  - **Impact:** Tests now pass consistently in both local (macOS) and CI (Ubuntu) environments
+
 ### Changed
 - **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
   - Added "What Are Templates?" section explaining the concept and purpose
