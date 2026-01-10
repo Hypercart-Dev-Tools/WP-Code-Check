@@ -25,13 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes "command not found" errors when running tests in CI environment
   - **Impact:** CI tests now run successfully on pull requests
 
-- **Test Suite** - Fixed output format parsing to work across macOS and Ubuntu
-  - Changed `run_test()` function to explicitly request `--format text` for consistent parsing
-  - Removed `jq` dependency from text output parsing (was causing failures in CI)
-  - Simplified parsing logic to use only text format for fixture validation tests
-  - JSON format tests already explicitly use `--format json` (no changes needed)
-  - **Root Cause:** Script was getting JSON output by default but trying to parse as text
-  - **Impact:** Tests now pass consistently in both local (macOS) and CI (Ubuntu) environments
+- **GitHub Actions** - Fixed test suite JSON parsing by installing `jq` dependency
+  - Added `jq` installation step to CI workflow: `sudo apt-get install -y jq`
+  - Test script uses JSON parsing as primary method (with text fallback)
+  - **Root Cause:** `jq` was missing in Ubuntu CI environment, causing JSON parsing to fail
+  - **Architecture:** Script defaults to JSON output → parses with `jq` → falls back to text if `jq` unavailable
+  - **Impact:** Tests now parse JSON correctly in CI environment (9/10 tests passing)
 
 ### Changed
 - **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background

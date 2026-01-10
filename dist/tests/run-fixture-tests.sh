@@ -123,10 +123,9 @@ run_test() {
   tmp_output=$(mktemp)
 
   # Debug: Show command being run
-  echo -e "  ${BLUE}[DEBUG] Running: $BIN_DIR/check-performance.sh --format text --paths \"$fixture_file\" --no-log${NC}"
+  echo -e "  ${BLUE}[DEBUG] Running: $BIN_DIR/check-performance.sh --paths \"$fixture_file\" --no-log${NC}"
 
-  # Explicitly request text format for consistent parsing across all environments
-  "$BIN_DIR/check-performance.sh" --format text --paths "$fixture_file" --no-log > "$tmp_output" 2>&1 || true
+  "$BIN_DIR/check-performance.sh" --paths "$fixture_file" --no-log > "$tmp_output" 2>&1 || true
 
   # Strip ANSI color codes for parsing (using perl for reliability)
   local clean_output
@@ -137,14 +136,23 @@ run_test() {
   tail -20 "$tmp_output" | perl -pe 's/\e\[[0-9;]*m//g' | sed 's/^/    /'
   echo ""
 
-  # Extract counts from text output (no jq dependency)
+  # Extract counts from JSON output using jq
+  # Note: check-performance.sh defaults to JSON format, so we parse JSON
   local actual_errors
   local actual_warnings
 
-  # Parse text format output
-  actual_errors=$(echo "$clean_output" | grep -E "^[[:space:]]*Errors:" | grep -oE '[0-9]+' | head -1)
-  actual_warnings=$(echo "$clean_output" | grep -E "^[[:space:]]*Warnings:" | grep -oE '[0-9]+' | head -1)
-  echo -e "  ${BLUE}[DEBUG] Parsed text output${NC}"
+  # Try to parse as JSON first (default format)
+  if echo "$clean_output" | jq empty 2>/dev/null; then
+    # Valid JSON - extract from summary
+    actual_errors=$(echo "$clean_output" | jq -r '.summary.total_errors // 0' 2>/dev/null)
+    actual_warnings=$(echo "$clean_output" | jq -r '.summary.total_warnings // 0' 2>/dev/null)
+    echo -e "  ${BLUE}[DEBUG] Parsed JSON output${NC}"
+  else
+    # Fallback to text format parsing (legacy)
+    actual_errors=$(echo "$clean_output" | grep -E "^[[:space:]]*Errors:" | grep -oE '[0-9]+' | head -1)
+    actual_warnings=$(echo "$clean_output" | grep -E "^[[:space:]]*Warnings:" | grep -oE '[0-9]+' | head -1)
+    echo -e "  ${BLUE}[DEBUG] Parsed text output (fallback)${NC}"
+  fi
 
   # Default to 0 if not found
   actual_errors=${actual_errors:-0}
