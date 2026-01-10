@@ -136,7 +136,7 @@ jobs:
       - name: Run automated fixture tests
         run: |
           echo "Running automated fixture validation..."
-          ./dist/tests/run-fixture-tests.sh
+          cd dist && ./tests/run-fixture-tests.sh
 
       - name: Test antipatterns detection (legacy check)
         run: |

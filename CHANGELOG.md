@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `http-no-timeout.php`: 0 errors, 1 warning (was 4 warnings)
   - **Impact:** Test suite now accurately validates pattern detection and prevents regressions
 
+- **GitHub Actions** - Fixed CI workflow to run tests from correct directory
+  - Changed test execution to run from `dist/` directory: `cd dist && ./tests/run-fixture-tests.sh`
+  - Fixes "command not found" errors when running tests in CI environment
+  - **Impact:** CI tests now run successfully on pull requests
+
 ### Changed
 - **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
   - Added "What Are Templates?" section explaining the concept and purpose
@@ -27,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added "How Templates Work" 4-step overview for quick understanding
   - Added location context at the top (`dist/TEMPLATES/` in your WP Code Check installation)
   - **Impact:** New users can now understand templates immediately without reading the entire guide
+
+### Removed
+- **GitHub Workflows** - Removed `.github/workflows/example-caller.yml` template file
+  - This was a documentation-only template file that never ran automatically
+  - Example usage is already documented in README and other documentation
+  - **Impact:** Cleaner workflows directory with only active files (`ci.yml` and `wp-performance.yml`)
 
 ## [1.2.0] - 2026-01-09
 
