@@ -5476,9 +5476,15 @@ profile_report
 if [ -f "$SCRIPT_DIR/pattern-library-manager.sh" ]; then
   if [ "$OUTPUT_FORMAT" = "json" ]; then
     # In JSON mode, send output to terminal only (not to log file)
-    bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/tty 2>&1 || {
-      echo "⚠️  Pattern library manager failed (non-fatal)" > /dev/tty
-    }
+    # Check if /dev/tty is available (not available in CI environments)
+    if [ -w /dev/tty ] 2>/dev/null; then
+      bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/tty 2>&1 || {
+        echo "⚠️  Pattern library manager failed (non-fatal)" > /dev/tty
+      }
+    else
+      # No TTY available (CI environment) - suppress output to avoid corrupting JSON
+      bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/null 2>&1 || true
+    fi
   else
     # In text mode, output goes to log file normally
     echo ""

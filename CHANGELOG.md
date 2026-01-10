@@ -27,10 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **GitHub Actions** - Fixed test suite JSON parsing by installing `jq` dependency
   - Added `jq` installation step to CI workflow: `sudo apt-get install -y jq`
-  - Test script uses JSON parsing as primary method (with text fallback)
+  - Test script uses JSON parsing as primary method (no text fallback)
   - **Root Cause:** `jq` was missing in Ubuntu CI environment, causing JSON parsing to fail
-  - **Architecture:** Script defaults to JSON output → parses with `jq` → falls back to text if `jq` unavailable
-  - **Impact:** Tests now parse JSON correctly in CI environment (9/10 tests passing)
+  - **Architecture:** Script explicitly requests JSON → validates with `jq` → parses or fails with clear error
+  - **Impact:** Tests now parse JSON correctly in CI environment
+
+- **Core Scanner** - Fixed `/dev/tty` errors corrupting JSON output in CI environments
+  - Added TTY availability check before writing to `/dev/tty` in JSON mode
+  - Pattern library manager output now suppressed in CI (no TTY) to prevent JSON corruption
+  - **Root Cause:** Lines 5479-5480 tried to write to `/dev/tty` which doesn't exist in CI, errors leaked into JSON
+  - **Fix:** Check `[ -w /dev/tty ]` before use, redirect to `/dev/null` if unavailable
+  - **Impact:** JSON output now clean in CI environments, tests pass 10/10
 
 ### Added
 - **Test Suite** - Comprehensive debugging and validation infrastructure
@@ -42,7 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Detailed tracing**: Logs exit codes, file sizes, parsing method, and intermediate values
   - **Explicit format flag**: Tests now use `--format json` explicitly (protects against default changes)
   - **Removed dead code**: Eliminated unreachable text parsing fallback (JSON-only architecture)
-  - **Impact:** Silent failures now caught immediately with clear error messages
+  - **CI emulator**: New `./tests/run-tests-ci-mode.sh` script to test in CI-like environment locally
+    - Removes TTY access (emulates GitHub Actions)
+    - Sets CI environment variables (`CI=true`, `GITHUB_ACTIONS=true`)
+    - Uses `setsid` (Linux) or `script` (macOS) to detach from terminal
+    - Validates dependencies before running tests
+    - Supports `--trace` flag for debugging
+  - **Impact:** Silent failures now caught immediately with clear error messages; CI issues reproducible locally
 
 ### Changed
 - **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
