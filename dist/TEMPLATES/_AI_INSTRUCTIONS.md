@@ -7,6 +7,9 @@ Complete end-to-end workflow:
 2. **Phase 1b**: Complete template if needed (extract metadata)
 3. **Phase 1c**: Run scan using template or direct path
 4. **Phase 2**: AI-assisted triage of findings
+   
+IN PROGRESS - NOT READY YET:
+5. **Phase 3**: Send AI confirmed issues into GitHub issues via GitHub CLI
 
 ### End-to-End Execution Mode
 
