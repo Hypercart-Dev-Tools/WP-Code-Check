@@ -58,7 +58,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.1.2"
+SCRIPT_VERSION="1.2.2"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -4161,7 +4161,7 @@ CRON_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" \
   -e "cron_schedules" \
   -e "wp_schedule_event" \
   -e "wp_schedule_single_event" \
-  $PATHS 2>/dev/null || true)
+  "$PATHS" 2>/dev/null || true)
 
 if [ -n "$CRON_FILES" ]; then
   # SAFEGUARD: Use safe_file_iterator() instead of "for file in $CRON_FILES"
@@ -4937,12 +4937,12 @@ if [ "$FILE_GET_CONTENTS_SEVERITY" = "CRITICAL" ] || [ "$FILE_GET_CONTENTS_SEVER
 text_echo "${BLUE}▸ file_get_contents() with external URLs ${FILE_GET_CONTENTS_COLOR}[$FILE_GET_CONTENTS_SEVERITY]${NC}"
 FILE_GET_CONTENTS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "file_get_contents[[:space:]]*\([[:space:]]*['\"]https?://" \
-  $PATHS 2>/dev/null || true)
+  "$PATHS" 2>/dev/null || true)
 
 # Also check for file_get_contents with variables (potential URLs)
 FILE_GET_CONTENTS_VAR=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "file_get_contents[[:space:]]*\([[:space:]]*\\\$" \
-  $PATHS 2>/dev/null || true)
+  "$PATHS" 2>/dev/null || true)
 
 FILE_GET_CONTENTS_ISSUES=""
 FILE_GET_CONTENTS_FINDING_COUNT=0
@@ -5006,7 +5006,7 @@ if [ "$HTTP_TIMEOUT_SEVERITY" = "CRITICAL" ] || [ "$HTTP_TIMEOUT_SEVERITY" = "HI
 text_echo "${BLUE}▸ HTTP requests without timeout ${HTTP_TIMEOUT_COLOR}[$HTTP_TIMEOUT_SEVERITY]${NC}"
 HTTP_NO_TIMEOUT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "wp_remote_(get|post|request|head)[[:space:]]*\(" \
-  $PATHS 2>/dev/null || true)
+  "$PATHS" 2>/dev/null || true)
 
 HTTP_NO_TIMEOUT_ISSUES=""
 HTTP_NO_TIMEOUT_FINDING_COUNT=0

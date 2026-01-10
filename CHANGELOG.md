@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-01-10
+
+### Fixed
+- **Critical Bug** - Fixed pattern detection failure with absolute paths
+  - **Root Cause:** Three pattern checks had unquoted `$PATHS` variables in grep commands
+  - **Impact:** When scanning files with absolute paths containing spaces (e.g., `/Users/name/Documents/GH Repos/project/file.php`), bash would split the path into multiple arguments, breaking grep and causing false negatives
+  - **Affected Patterns:**
+    - `file_get_contents()` with URLs (security risk) - now detects correctly
+    - HTTP requests without timeout (performance/reliability) - now detects correctly
+    - Unvalidated cron intervals (security/stability) - now detects correctly
+  - **Fix:** Added quotes around `$PATHS` in 4 locations (lines 4164, 4940, 4945, 5009)
+  - **Testing:** All three patterns now detect issues consistently with both relative and absolute paths
+  - **User Impact:** HIGH - Fixes false negatives in CI/CD pipelines, automated tools, and template-based scans that use absolute paths
+  - **Files Modified:**
+    - `dist/bin/check-performance.sh` - Added quotes to `$PATHS` in grep commands
+    - `dist/tests/expected/fixture-expectations.json` - Updated expectations to require detection (not accept false negatives)
+
+### Changed
+- **Test Expectations** - Updated fixture expectations to reflect bug fix
+  - `file-get-contents-url.php`: Now expects 1 error (was 0)
+  - `http-no-timeout.php`: Now expects 1 warning (was 0)
+  - `cron-interval-validation.php`: Now expects 1 error (was 0)
+  - Test suite version bumped to 2.1.0
+
 ## [1.2.1] - 2026-01-10
 
 ### Added
@@ -31,16 +55,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Updated Counts (with absolute paths):**
     - `antipatterns.php`: 9 errors, 2 warnings (was 4 warnings with relative paths)
     - `ajax-antipatterns.php`: 1 error, 0 warnings (was 1 warning)
-    - `file-get-contents-url.php`: 0 errors, 0 warnings (was 1 error)
-    - `http-no-timeout.php`: 0 errors, 0 warnings (was 1 warning)
-    - `cron-interval-validation.php`: 0 errors, 0 warnings (was 1 error)
+    - `file-get-contents-url.php`: 0 errors, 0 warnings (was 1 error) - **FIXED in v1.2.2**
+    - `http-no-timeout.php`: 0 errors, 0 warnings (was 1 warning) - **FIXED in v1.2.2**
+    - `cron-interval-validation.php`: 0 errors, 0 warnings (was 1 error) - **FIXED in v1.2.2**
   - **Impact:** Test suite now accurately validates pattern detection with absolute paths
 
 ### Known Issues
-- **Scanner Bug** - Scanner produces different results with relative vs absolute paths
-  - Some patterns (file_get_contents, http timeout, cron validation) not detected with absolute paths
-  - Test suite updated to use absolute paths (matches real-world usage)
-  - Scanner fix needed in future release
+- **Scanner Bug** - Scanner produces different results with relative vs absolute paths - **FIXED in v1.2.2**
+  - ~~Some patterns (file_get_contents, http timeout, cron validation) not detected with absolute paths~~
+  - ~~Test suite updated to use absolute paths (matches real-world usage)~~
+  - ~~Scanner fix needed in future release~~
   - **TODO:** Re-enable after fixing Docker-based testing and identifying CI hang cause
   - **Workaround:** Use local testing (`./tests/run-fixture-tests.sh`) or Docker (`./tests/run-tests-docker.sh`)
   - **Impact:** CI now only runs performance checks, not fixture validation
