@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
+  - Added "What Are Templates?" section explaining the concept and purpose
+  - Added "What This Directory Contains" section listing all files and their purposes
+  - Added "How Templates Work" 4-step overview for quick understanding
+  - Added location context at the top (`dist/TEMPLATES/` in your WP Code Check installation)
+  - **Impact:** New users can now understand templates immediately without reading the entire guide
+
 ## [1.2.0] - 2026-01-09
 
 ### Added

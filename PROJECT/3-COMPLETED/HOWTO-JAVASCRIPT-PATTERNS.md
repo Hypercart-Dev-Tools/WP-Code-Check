@@ -1,7 +1,8 @@
 # HOWTO: JavaScript & TypeScript Pattern Detection
 
-> **Version:** 1.0.81
-> **Last Updated:** 2026-01-05
+**Version:** 1.0.81
+**Last Updated:** 2026-01-05
+**Status:** Completed
 
 This guide covers JavaScript and TypeScript pattern detection in WP Code Check, including headless WordPress architectures (Next.js, Nuxt, Gatsby) and Node.js security patterns.
 

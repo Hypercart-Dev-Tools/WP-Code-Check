@@ -21,9 +21,16 @@ WordPress sites fail in production because of **performance antipatterns** that 
 
 **WP Code Check catches these issues in seconds** — before they reach production.
 
+## The Fastest Way to Get Started (Using AI Agents)
+If you're using an AI coding assistant (Cursor, GitHub Copilot, Augment, etc.):
+
+1. Open `dist/TEMPLATES/_AI_INSTRUCTIONS.md` in your editor
+2. Ask your AI: **"What can I do with this tool?"**
+
+Your AI will guide you through scanning WordPress plugins and themes, creating templates, and interpreting results.
 ---
 
-## What Makes It Different?
+## What Makes WP Code Check Better?
 
 | Feature | WP Code Check | WPCS | PHPStan-WP |
 |---------|---------------|------|------------|
@@ -32,6 +39,7 @@ WordPress sites fail in production because of **performance antipatterns** that 
 | **WordPress-specific** | ✅ WP performance focus | ⚠️ Generic PHP standards | ⚠️ Type safety focus |
 | **Speed** | ✅ Scans 10K files in <5s | ⚠️ Slower on large codebases | ⚠️ Slower on large codebases |
 | **Production-tested** | ✅ Real-world patterns | ✅ Industry standard | ✅ Type-focused |
+| **AI Supercharged** | ✅ Built-in AI-assisted triage | ❌ No AI support | ❌ No AI support |
 
 ---
 
