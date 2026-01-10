@@ -25,9 +25,9 @@ WordPress sites fail in production because of **performance antipatterns** that 
 If you're using an AI coding assistant (Cursor, GitHub Copilot, Augment, etc.):
 
 1. Open `dist/TEMPLATES/_AI_INSTRUCTIONS.md` in your editor
-2. Ask your AI: **"What can I do with this tool?"**
+2. Ask your AI: **"Please review this document and what can I do with this tool?"**
 
-Your AI will guide you through scanning WordPress plugins and themes, creating templates, and interpreting results.
+Your VS Code Agent will guide you through scanning WordPress plugins and themes, creating templates, and interpreting results.
 ---
 
 ## What Makes WP Code Check Better?
