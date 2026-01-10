@@ -16,10 +16,16 @@ This directory contains the test suite for WP Code Check, including fixture-base
 ./tests/run-tests-ci-mode.sh
 ```
 
+### Run Tests in Docker (True Ubuntu CI Environment) 🐳
+```bash
+./tests/run-tests-docker.sh
+```
+
 ### Run Tests with Trace Mode (detailed debugging)
 ```bash
 ./tests/run-fixture-tests.sh --trace
 ./tests/run-tests-ci-mode.sh --trace
+./tests/run-tests-docker.sh --trace
 ```
 
 ---
@@ -97,6 +103,81 @@ CI environment emulator for testing without TTY access (simulates GitHub Actions
 - Reproduce CI failures on your machine
 - Verify `/dev/tty` handling works correctly
 - Ensure JSON output isn't corrupted by TTY errors
+
+---
+
+### `run-tests-docker.sh` 🐳
+Docker-based test runner using true Ubuntu container (identical to GitHub Actions).
+
+**Features:**
+- ✅ **True CI environment** - Ubuntu 22.04 container
+- ✅ **No TTY** - Exactly like GitHub Actions
+- ✅ **Isolated** - Clean environment every run
+- ✅ **Reproducible** - Identical to CI
+- ✅ **Interactive shell** - Debug inside container
+
+**Usage:**
+```bash
+# Normal mode (build and run tests)
+./tests/run-tests-docker.sh
+
+# Trace mode
+./tests/run-tests-docker.sh --trace
+
+# Force rebuild image
+./tests/run-tests-docker.sh --build
+
+# Interactive shell (for debugging)
+./tests/run-tests-docker.sh --shell
+```
+
+**Requirements:**
+- Docker installed and running
+- macOS: [Docker Desktop](https://docs.docker.com/desktop/install/mac-install/)
+- Linux: [Docker Engine](https://docs.docker.com/engine/install/)
+
+**What It Does:**
+1. Checks if Docker is installed and running
+2. Builds Ubuntu 22.04 image with dependencies (`jq`, `perl`, `bash`)
+3. Copies entire `dist/` directory into container
+4. Sets CI environment variables (`CI=true`, `GITHUB_ACTIONS=true`)
+5. Runs tests in container (no TTY available)
+6. Reports results
+
+**Why Use This:**
+- **Most accurate** - Identical to GitHub Actions environment
+- **True Linux** - Not emulated, actual Ubuntu container
+- **Reproducible** - Same results every time
+- **Debugging** - Use `--shell` to explore container
+- **Last resort** - When CI emulation isn't enough
+
+**Example Output:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  WP Code Check - Docker CI Test Runner
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Docker is installed: Docker version 24.0.6
+✓ Docker daemon is running
+✓ Docker image exists: wp-code-check-test
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[DOCKER] Running tests in Ubuntu container...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Test Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Tests Run:    10
+  Passed:       10
+  Failed:       0
+
+✓ All fixture tests passed!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Docker Test Complete
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Tests passed in Ubuntu Docker container
+```
 
 ---
 

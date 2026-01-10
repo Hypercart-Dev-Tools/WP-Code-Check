@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Uses `setsid` (Linux) or `script` (macOS) to detach from terminal
     - Validates dependencies before running tests
     - Supports `--trace` flag for debugging
+  - **Docker testing**: New `./tests/run-tests-docker.sh` for true Ubuntu CI environment (last resort)
+    - Runs tests in Ubuntu 22.04 container (identical to GitHub Actions)
+    - Includes Dockerfile for reproducible CI environment
+    - Supports `--trace`, `--build`, and `--shell` flags
+    - Most accurate CI testing method available
   - **Impact:** Silent failures now caught immediately with clear error messages; CI issues reproducible locally
 
 ### Changed

@@ -169,7 +169,44 @@ $ ./tests/run-tests-ci-mode.sh
 - Validates dependencies before running tests
 - Supports `--trace` flag for debugging
 
-### CI Tests (Ubuntu without TTY)
+### Docker Tests (True Ubuntu CI Environment) 🐳
+```bash
+$ ./tests/run-tests-docker.sh
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  WP Code Check - Docker CI Test Runner
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Docker is installed: Docker version 24.0.6
+✓ Docker daemon is running
+✓ Docker image exists: wp-code-check-test
+
+[DOCKER] Running tests in Ubuntu container...
+
+  Test Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Tests Run:    10
+  Passed:       10
+  Failed:       0
+
+✓ All fixture tests passed!
+
+✓ Tests passed in Ubuntu Docker container
+```
+
+**Docker Testing Features:**
+- True Ubuntu 22.04 container (identical to GitHub Actions)
+- No TTY available (exactly like CI)
+- Isolated environment (clean every run)
+- Supports `--trace`, `--build`, `--shell` flags
+- Most accurate CI testing method
+
+**When to Use Docker:**
+- CI emulation isn't enough
+- Need exact GitHub Actions environment
+- Debugging Linux-specific issues
+- Final verification before pushing
+
+### CI Tests (GitHub Actions - Ubuntu without TTY)
 Expected result after fix:
 - `jq` installed successfully
 - No `/dev/tty` errors in output
@@ -186,6 +223,9 @@ Expected result after fix:
 | `dist/bin/check-performance.sh` | Added TTY availability check (lines 5476-5491) |
 | `dist/tests/run-fixture-tests.sh` | Improved error handling, trace mode, explicit `--format json` |
 | `dist/tests/run-tests-ci-mode.sh` | **NEW** - CI environment emulator for local testing |
+| `dist/tests/run-tests-docker.sh` | **NEW** - Docker-based Ubuntu CI testing (last resort) |
+| `dist/tests/Dockerfile` | **NEW** - Ubuntu 22.04 container definition for CI testing |
+| `dist/tests/README.md` | **NEW** - Comprehensive test suite documentation |
 | `CHANGELOG.md` | Documented fixes and test improvements |
 | `PROJECT/3-COMPLETED/CI-JSON-PARSING-FIX.md` | This documentation |
 
