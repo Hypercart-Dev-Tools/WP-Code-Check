@@ -131,6 +131,16 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Environment snapshot
+        run: |
+          echo "=== CI Environment Diagnostic ==="
+          echo "OS: $(uname -a)"
+          echo "Shell: $SHELL ($BASH_VERSION)"
+          echo "jq: $(command -v jq && jq --version || echo 'NOT INSTALLED')"
+          echo "perl: $(perl -v | head -2)"
+          echo "grep: $(grep --version | head -1)"
+          echo "================================="
+
       - name: Make scripts executable
         run: |
           chmod +x ./dist/bin/check-performance.sh

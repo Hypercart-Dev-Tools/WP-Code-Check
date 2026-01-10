@@ -32,6 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Architecture:** Script defaults to JSON output → parses with `jq` → falls back to text if `jq` unavailable
   - **Impact:** Tests now parse JSON correctly in CI environment (9/10 tests passing)
 
+### Added
+- **Test Suite** - Comprehensive debugging and validation infrastructure
+  - **Dependency checks**: Fail-fast validation for `jq` and `perl` with installation instructions
+  - **Trace mode**: `./tests/run-fixture-tests.sh --trace` for detailed debugging output
+  - **JSON parsing helper**: `parse_json_output()` function with explicit error handling
+  - **Numeric validation**: Validates parsed error/warning counts are numeric before comparison
+  - **Environment snapshot**: Shows OS, shell, tool versions at test start (useful for CI debugging)
+  - **Detailed tracing**: Logs exit codes, file sizes, parsing method, and intermediate values
+  - **Explicit format flag**: Tests now use `--format json` explicitly (protects against default changes)
+  - **Removed dead code**: Eliminated unreachable text parsing fallback (JSON-only architecture)
+  - **Impact:** Silent failures now caught immediately with clear error messages
+
 ### Changed
 - **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
   - Added "What Are Templates?" section explaining the concept and purpose
@@ -39,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added "How Templates Work" 4-step overview for quick understanding
   - Added location context at the top (`dist/TEMPLATES/` in your WP Code Check installation)
   - **Impact:** New users can now understand templates immediately without reading the entire guide
+
+- **Test Suite** - Incremented version to 1.0.81 (from 1.0.80)
+  - Reflects addition of debugging infrastructure and validation improvements
 
 ### Removed
 - **GitHub Workflows** - Removed `.github/workflows/example-caller.yml` template file

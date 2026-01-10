@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 #
-# Neochrome WP Toolkit - Fixture Validation Tests
-# Version: 1.0.80
+# WP Code Check - Fixture Validation Tests
+# Version: 1.0.81
 #
 # Runs check-performance.sh against test fixtures and validates expected counts.
 # This prevents regressions when modifying detection patterns.
 #
 # Usage:
-#   ./tests/run-fixture-tests.sh
+#   ./tests/run-fixture-tests.sh [--trace]
+#
+# Options:
+#   --trace    Enable detailed debugging output
 #
 # Exit codes:
 #   0 = All tests passed
@@ -23,6 +26,43 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Trace mode
+TRACE_MODE=false
+[[ "$*" == *"--trace"* ]] && TRACE_MODE=true
+
+# Trace function for debugging
+trace() {
+  if [ "$TRACE_MODE" = true ]; then
+    echo -e "${BLUE}[TRACE $(date +%H:%M:%S)] $*${NC}" >&2
+  fi
+}
+
+# ============================================================
+# Dependency Checks (fail fast with clear message)
+# ============================================================
+
+check_dependencies() {
+  local missing=()
+
+  command -v jq >/dev/null 2>&1 || missing+=("jq")
+  command -v perl >/dev/null 2>&1 || missing+=("perl")
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${RED}  MISSING DEPENDENCIES: ${missing[*]}${NC}"
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Install on Ubuntu:  sudo apt-get install -y ${missing[*]}"
+    echo "  Install on macOS:   brew install ${missing[*]}"
+    echo ""
+    exit 1
+  fi
+
+  trace "Dependencies OK: jq=$(command -v jq), perl=$(command -v perl)"
+}
+
+check_dependencies
+
 # Get script directory (tests folder) and change to dist root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$(dirname "$SCRIPT_DIR")"
@@ -34,10 +74,46 @@ cd "$DIST_DIR"
 BIN_DIR="./bin"
 FIXTURES_DIR="./tests/fixtures"
 
+trace "SCRIPT_DIR=$SCRIPT_DIR"
+trace "DIST_DIR=$DIST_DIR"
+trace "PWD=$(pwd)"
+
 # Test counters
 TESTS_RUN=0
 TESTS_PASSED=0
 TESTS_FAILED=0
+
+# ============================================================
+# JSON Parsing Helper (with validation)
+# ============================================================
+
+parse_json_output() {
+  local json_input="$1"
+  local field="$2"
+  local result
+
+  trace "Parsing JSON field: $field"
+
+  result=$(echo "$json_input" | jq -r "$field" 2>&1)
+  local jq_exit=$?
+
+  if [ $jq_exit -ne 0 ]; then
+    echo -e "${RED}[ERROR] jq parse failed (exit=$jq_exit): $result${NC}" >&2
+    trace "jq failed on field: $field"
+    trace "First 200 chars of input: ${json_input:0:200}"
+    echo "0"
+    return 1
+  fi
+
+  if [ "$result" = "null" ] || [ -z "$result" ]; then
+    trace "jq returned null/empty for field: $field (defaulting to 0)"
+    echo "0"
+    return 0
+  fi
+
+  trace "Parsed $field = $result"
+  echo "$result"
+}
 
 # ============================================================
 # Expected Counts (update when adding new patterns/fixtures)
@@ -123,13 +199,21 @@ run_test() {
   tmp_output=$(mktemp)
 
   # Debug: Show command being run
-  echo -e "  ${BLUE}[DEBUG] Running: $BIN_DIR/check-performance.sh --paths \"$fixture_file\" --no-log${NC}"
+  echo -e "  ${BLUE}[DEBUG] Running: $BIN_DIR/check-performance.sh --format json --paths \"$fixture_file\" --no-log${NC}"
+  trace "Executing check-performance.sh for: $fixture_file"
 
-  "$BIN_DIR/check-performance.sh" --paths "$fixture_file" --no-log > "$tmp_output" 2>&1 || true
+  # Explicitly request JSON format (makes contract clear and protects against default changes)
+  "$BIN_DIR/check-performance.sh" --format json --paths "$fixture_file" --no-log > "$tmp_output" 2>&1 || true
+  local check_exit=$?
+
+  trace "check-performance.sh exit code: $check_exit"
+  trace "Output file size: $(wc -c < "$tmp_output") bytes"
 
   # Strip ANSI color codes for parsing (using perl for reliability)
   local clean_output
   clean_output=$(perl -pe 's/\e\[[0-9;]*m//g' < "$tmp_output")
+
+  trace "First 100 chars of clean output: ${clean_output:0:100}"
 
   # Debug: Show last 20 lines of output (the summary section)
   echo -e "  ${BLUE}[DEBUG] Raw output (last 20 lines):${NC}"
@@ -137,26 +221,42 @@ run_test() {
   echo ""
 
   # Extract counts from JSON output using jq
-  # Note: check-performance.sh defaults to JSON format, so we parse JSON
+  # Note: We explicitly request JSON format, so output should always be valid JSON
   local actual_errors
   local actual_warnings
 
-  # Try to parse as JSON first (default format)
-  if echo "$clean_output" | jq empty 2>/dev/null; then
-    # Valid JSON - extract from summary
-    actual_errors=$(echo "$clean_output" | jq -r '.summary.total_errors // 0' 2>/dev/null)
-    actual_warnings=$(echo "$clean_output" | jq -r '.summary.total_warnings // 0' 2>/dev/null)
-    echo -e "  ${BLUE}[DEBUG] Parsed JSON output${NC}"
-  else
-    # Fallback to text format parsing (legacy)
-    actual_errors=$(echo "$clean_output" | grep -E "^[[:space:]]*Errors:" | grep -oE '[0-9]+' | head -1)
-    actual_warnings=$(echo "$clean_output" | grep -E "^[[:space:]]*Warnings:" | grep -oE '[0-9]+' | head -1)
-    echo -e "  ${BLUE}[DEBUG] Parsed text output (fallback)${NC}"
+  # Validate JSON output (jq is a validated dependency)
+  if ! echo "$clean_output" | jq empty 2>/dev/null; then
+    echo -e "  ${RED}[ERROR] Output is not valid JSON - cannot parse${NC}"
+    trace "Invalid JSON output, first 200 chars: ${clean_output:0:200}"
+    echo -e "  ${RED}[ERROR] This indicates check-performance.sh failed or returned unexpected format${NC}"
+    ((TESTS_FAILED++))
+    rm -f "$tmp_output"
+    return 1
   fi
+
+  trace "Output is valid JSON, parsing with jq"
+  # Valid JSON - extract from summary using helper function
+  actual_errors=$(parse_json_output "$clean_output" '.summary.total_errors // 0')
+  actual_warnings=$(parse_json_output "$clean_output" '.summary.total_warnings // 0')
+  echo -e "  ${BLUE}[DEBUG] Parsed JSON output${NC}"
 
   # Default to 0 if not found
   actual_errors=${actual_errors:-0}
   actual_warnings=${actual_warnings:-0}
+
+  # Validate parsed values are numeric
+  if ! [[ "$actual_errors" =~ ^[0-9]+$ ]]; then
+    echo -e "  ${RED}[ERROR] Parsed errors is not numeric: '$actual_errors'${NC}"
+    trace "Non-numeric errors value detected, defaulting to 0"
+    actual_errors=0
+  fi
+
+  if ! [[ "$actual_warnings" =~ ^[0-9]+$ ]]; then
+    echo -e "  ${RED}[ERROR] Parsed warnings is not numeric: '$actual_warnings'${NC}"
+    trace "Non-numeric warnings value detected, defaulting to 0"
+    actual_warnings=0
+  fi
 
   # Debug: Show parsed values
   echo -e "  ${BLUE}[DEBUG] Parsed errors: '$actual_errors', warnings: '$actual_warnings'${NC}"
@@ -165,6 +265,8 @@ run_test() {
   rm -f "$tmp_output"
 
   echo "  Actual:   $actual_errors errors, $actual_warnings warnings"
+
+  trace "Final validated counts: errors=$actual_errors, warnings=$actual_warnings"
 
   # Validate errors exactly, warnings within range
   local errors_ok=false
@@ -197,8 +299,21 @@ run_test() {
 echo_header "Neochrome WP Toolkit - Fixture Validation"
 echo "Testing detection patterns against known fixtures..."
 
-# Debug: Show environment
+# Environment snapshot (especially useful for CI debugging)
 echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}  Environment Snapshot${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "  OS:         $(uname -s) $(uname -r)"
+echo "  Shell:      $SHELL (Bash $BASH_VERSION)"
+echo "  jq:         $(command -v jq && jq --version 2>&1 || echo 'NOT INSTALLED')"
+echo "  perl:       $(perl -v 2>&1 | head -2 | tail -1 | sed 's/^[[:space:]]*//')"
+echo "  grep:       $(grep --version 2>&1 | head -1)"
+echo "  Trace Mode: $TRACE_MODE"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Debug: Show environment
 echo -e "${BLUE}[DEBUG] Environment:${NC}"
 echo "  SCRIPT_DIR: $SCRIPT_DIR"
 echo "  DIST_DIR:   $DIST_DIR"
@@ -235,17 +350,17 @@ if [ ! -f "$FIXTURES_DIR/ajax-antipatterns.js" ]; then
   exit 1
 fi
 
-	if [ ! -f "$FIXTURES_DIR/ajax-safe.php" ]; then
-	  echo -e "${RED}Error: ajax-safe.php fixture not found${NC}"
-	  exit 1
-	fi
+if [ ! -f "$FIXTURES_DIR/ajax-safe.php" ]; then
+  echo -e "${RED}Error: ajax-safe.php fixture not found${NC}"
+  exit 1
+fi
 
 # Run tests (passing: errors, warnings_min, warnings_max)
-	run_test "$FIXTURES_DIR/antipatterns.php" "$ANTIPATTERNS_EXPECTED_ERRORS" "$ANTIPATTERNS_EXPECTED_WARNINGS_MIN" "$ANTIPATTERNS_EXPECTED_WARNINGS_MAX" || true
-	run_test "$FIXTURES_DIR/clean-code.php" "$CLEAN_CODE_EXPECTED_ERRORS" "$CLEAN_CODE_EXPECTED_WARNINGS_MIN" "$CLEAN_CODE_EXPECTED_WARNINGS_MAX" || true
-	run_test "$FIXTURES_DIR/ajax-antipatterns.php" "$AJAX_PHP_EXPECTED_ERRORS" "$AJAX_PHP_EXPECTED_WARNINGS_MIN" "$AJAX_PHP_EXPECTED_WARNINGS_MAX" || true
-	run_test "$FIXTURES_DIR/ajax-antipatterns.js" "$AJAX_JS_EXPECTED_ERRORS" "$AJAX_JS_EXPECTED_WARNINGS_MIN" "$AJAX_JS_EXPECTED_WARNINGS_MAX" || true
-	run_test "$FIXTURES_DIR/ajax-safe.php" "$AJAX_SAFE_EXPECTED_ERRORS" "$AJAX_SAFE_EXPECTED_WARNINGS_MIN" "$AJAX_SAFE_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/antipatterns.php" "$ANTIPATTERNS_EXPECTED_ERRORS" "$ANTIPATTERNS_EXPECTED_WARNINGS_MIN" "$ANTIPATTERNS_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/clean-code.php" "$CLEAN_CODE_EXPECTED_ERRORS" "$CLEAN_CODE_EXPECTED_WARNINGS_MIN" "$CLEAN_CODE_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/ajax-antipatterns.php" "$AJAX_PHP_EXPECTED_ERRORS" "$AJAX_PHP_EXPECTED_WARNINGS_MIN" "$AJAX_PHP_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/ajax-antipatterns.js" "$AJAX_JS_EXPECTED_ERRORS" "$AJAX_JS_EXPECTED_WARNINGS_MIN" "$AJAX_JS_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/ajax-safe.php" "$AJAX_SAFE_EXPECTED_ERRORS" "$AJAX_SAFE_EXPECTED_WARNINGS_MIN" "$AJAX_SAFE_EXPECTED_WARNINGS_MAX" || true
 
 # ============================================================
 # JSON Output Format Test
