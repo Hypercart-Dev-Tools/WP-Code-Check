@@ -5,6 +5,126 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
+  - Added "What Are Templates?" section explaining the concept and purpose
+  - Added "What This Directory Contains" section listing all files and their purposes
+  - Added "How Templates Work" 4-step overview for quick understanding
+  - Added location context at the top (`dist/TEMPLATES/` in your WP Code Check installation)
+  - **Impact:** New users can now understand templates immediately without reading the entire guide
+
+## [1.2.0] - 2026-01-09
+
+### Added
+- **Golden Rules Analyzer (Experimental)** - PHP-based semantic analysis tool for architectural antipatterns
+  - **Location:** `dist/bin/experimental/` (experimental status - may have false positives)
+  - **Status:** Functional but experimental - best for code reviews and learning, not production CI/CD yet
+  - **6 Core Rules:**
+    1. **Search before you create** - Detects duplicate function implementations across files
+    2. **State flows through gates** - Catches direct state property mutations bypassing handlers
+    3. **One truth, one place** - Finds hardcoded option names and duplicated capability checks
+    4. **Queries have boundaries** - Detects unbounded queries and N+1 patterns in loops
+    5. **Fail gracefully** - Identifies missing error handling for HTTP requests and file operations
+    6. **Ship clean** - Flags debug code (var_dump, print_r) and TODO/FIXME comments
+  - **Features:**
+    - Cross-file duplication detection using function name similarity analysis
+    - Context-aware state mutation detection (allows mutations inside state handler methods)
+    - Magic string tracking across multiple files
+    - N+1 query pattern detection in loops (foreach, for, while)
+    - Error handling validation for wp_remote_*, file_get_contents, json_decode
+    - Configurable via `.golden-rules.json` in project root
+  - **Output Formats:** Console (colored), JSON, GitHub Actions annotations
+  - **CLI Options:** `--rule=<name>`, `--format=<type>`, `--fail-on=<level>`
+  - **File:** `dist/bin/experimental/golden-rules-analyzer.php` (executable, 1226 lines)
+  - **Namespace:** `Hypercart\WPCodeCheck\GoldenRules`
+  - **License:** Apache-2.0
+  - **Integration:** Complements existing bash scanner with semantic analysis
+
+- **Unified CLI Wrapper** (`wp-audit`) - Orchestrates multiple analysis tools
+  - **Commands:**
+    - `quick` - Fast scan using check-performance.sh (30+ checks, <5s)
+    - `deep` - Semantic analysis using golden-rules-analyzer.php (6 rules)
+    - `full` - Run both quick + deep analysis sequentially
+    - `report` - Generate HTML report from JSON logs
+  - **Features:**
+    - Colored output with progress indicators
+    - Automatic PHP availability detection
+    - Pass-through of all tool-specific options
+    - Combined exit code handling for full analysis
+  - **File:** `dist/bin/wp-audit` (executable, 180 lines)
+  - **Usage Examples:**
+    ```bash
+    wp-audit quick ~/my-plugin --strict
+    wp-audit deep ~/my-plugin --rule=duplication  # Uses experimental analyzer
+    wp-audit full ~/my-plugin --format json
+    wp-audit report scan-results.json output.html
+    ```
+
+- **Integration Tests** for Golden Rules Analyzer
+  - **File:** `dist/tests/test-golden-rules.sh`
+  - **Test Cases:**
+    - Unbounded WP_Query detection
+    - Direct state mutation detection
+    - Debug code detection (var_dump, print_r)
+    - Missing error handling detection
+    - Clean code validation (no false positives)
+  - **Features:** Colored output, violation counting, temp file cleanup
+
+- **Experimental README** (`dist/bin/experimental/README.md`) - **912 lines**
+  - **Table of Contents** with quick navigation
+  - **End-to-end user story** showing complete workflow (quick scan → deep analysis → AI triage)
+  - **AI-Assisted Triage Workflow** (Phase 2) - **300+ lines of documentation**
+    - Visual workflow diagram showing 3-phase pipeline
+    - Complete step-by-step guide (scan → triage → report)
+    - AI triage JSON structure and examples
+    - Common false positive patterns for both tools
+    - Confidence levels and when to use AI triage
+    - Integration with Project Templates end-to-end workflow
+  - **Real-world examples** of fixing issues found by both tools
+  - **6 Golden Rules explained** with before/after code examples
+  - **Configuration guide** for `.golden-rules.json`
+  - **Troubleshooting section** for common issues
+  - **Roadmap** and graduation criteria for moving to stable
+
+### Changed
+- **Documentation Updates:**
+  - `dist/README.md` - Added comprehensive Golden Rules Analyzer section (marked as experimental) with:
+    - Feature comparison table (6 rules explained)
+    - Quick start guide with CLI examples
+    - Configuration instructions (.golden-rules.json)
+    - Available rules reference
+    - Example output
+    - When to use each tool (decision matrix)
+    - Combined workflow examples
+    - CI/CD integration examples
+  - `README.md` - Updated Features section:
+    - Renamed "30+ Performance & Security Checks" to "Multi-Layered Code Quality Analysis"
+    - Added Quick Scanner vs Golden Rules Analyzer comparison (marked as experimental)
+    - Split "Tools Included" into Core Tools (stable) and Experimental Tools sections
+    - Updated GitHub Actions example to show both quick-scan and deep-analysis jobs
+    - Added experimental status warnings and links to experimental README
+  - `dist/README.md` - Updated "What's Included" section:
+    - Moved golden-rules-analyzer.php to Experimental Tools section
+    - Added experimental status badge and warnings
+    - Updated all file paths to `dist/bin/experimental/`
+    - Clarified tool purposes (Quick Scanner vs Deep Analyzer)
+
+### Technical Details
+- **Branding:** All references updated from "Neochrome" to "Hypercart" in Golden Rules code
+- **Copyright:** © 2025 Hypercart (a DBA of Neochrome, Inc.)
+- **Architecture:** Golden Rules uses PHP tokenization for semantic analysis vs bash grep for pattern matching
+- **Performance:** Golden Rules ~10-30s for deep analysis vs <5s for quick scan
+- **Dependencies:** Golden Rules requires PHP CLI, Quick Scanner remains zero-dependency
+- **Compatibility:** Both tools support JSON output for CI/CD integration
+
+### Impact
+- **Complete Coverage:** Pattern matching (bash) + semantic analysis (PHP) = comprehensive code quality
+- **Flexible Workflows:** Choose quick scans for CI/CD or deep analysis for code review
+- **Architectural Enforcement:** Catch design-level antipatterns that generic linters miss
+- **Developer Experience:** Unified CLI (`wp-audit`) simplifies tool selection
+
 ## [1.1.2] - 2026-01-09
 
 ### Added

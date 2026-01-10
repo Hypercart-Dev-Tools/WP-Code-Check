@@ -1,6 +1,31 @@
 # Project Templates
 
-Save scan configurations for frequently-checked WordPress plugins and themes.
+**Location:** `dist/TEMPLATES/` in your WP Code Check installation
+
+---
+
+## 📖 What Are Templates?
+
+Templates are **saved scan configurations** that let you run WP Code Check on your WordPress plugins and themes with a single command—no need to remember long file paths or command-line options.
+
+Think of templates as **bookmarks for your projects**. Instead of typing the full path to your plugin every time you want to scan it, you create a template once and reuse it forever.
+
+### What This Directory Contains
+
+- **`_TEMPLATE.txt`** - Reference template with all available options (copy this to create new templates)
+- **`_AI_INSTRUCTIONS.md`** - Guide for AI coding assistants to auto-complete templates. Ask your AI to review this doc and it will then helpguide you.
+- **`_AI_FAQS.md`** - Troubleshooting guide for AI agents
+- **`README.md`** - This file (user guide)
+- **Your templates** - `.txt` files you create (e.g., `my-plugin.txt`, `my-theme.txt`)
+
+### How Templates Work
+
+1. **Create** a `.txt` file in this directory (e.g., `my-plugin.txt`)
+2. **Add** the path to your WordPress plugin/theme
+3. **Run** with: `./dist/bin/run my-plugin`
+4. **Reuse** anytime you need to scan that project
+
+Templates are **not committed to Git** by default (your local paths stay private).
 
 ---
 
