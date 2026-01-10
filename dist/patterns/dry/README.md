@@ -226,6 +226,7 @@ Magic string 'my_plugin_api_key' appears in 5 files (12 times)
 - [DRY Principle (Wikipedia)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 - [WordPress Options API](https://developer.wordpress.org/apis/options/)
 - [WordPress Transients API](https://developer.wordpress.org/apis/transients/)
+- [WP Code Check Disclosure Policy](../../../DISCLOSURE-POLICY.md)
 
 ---
 

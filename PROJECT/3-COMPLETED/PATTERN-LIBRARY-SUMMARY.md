@@ -1,8 +1,8 @@
 # Pattern Library - JSON Files Summary
 
-**Date:** 2026-01-01  
-**Version:** 1.0.69  
-**Status:** ✅ 4 Pattern JSON Files Created
+**Date:** 2026-01-06  
+**Version:** 1.0.90  
+**Status:** ✅ 10 Pattern JSON Files Created
 
 ---
 
@@ -18,7 +18,7 @@ The pattern library separates pattern definitions from scanner logic, enabling:
 
 ---
 
-## 📁 Pattern JSON Files (4 Total)
+## 📁 Pattern JSON Files (10 Total)
 
 ### 1. unsanitized-superglobal-isset-bypass.json
 **ID:** `unsanitized-superglobal-isset-bypass`  
@@ -180,6 +180,138 @@ $users = get_users( array(
 
 ---
 
+### 5. unbounded-wc-get-orders.json ⭐ NEW
+**ID:** `unbounded-wc-get-orders`  
+**Severity:** CRITICAL  
+**Category:** Performance  
+**Added:** v1.0.90
+
+**Description:**  
+Detects `wc_get_orders()` calls with explicit `'limit' => -1` (unbounded), which hydrates full `WC_Order` objects and can cause OOM on large stores.
+
+**Detection Logic:**
+- Search: `wc_get_orders(`
+- Post-process: Check context for `'limit' => -1`
+
+**Test Fixture:**
+- Path: None yet
+- Expected violations: TBD
+- Expected valid: TBD
+
+**IRL Examples:** TBD
+
+---
+
+### 6. unbounded-wc-get-products.json ⭐ NEW
+**ID:** `unbounded-wc-get-products`  
+**Severity:** CRITICAL  
+**Category:** Performance  
+**Added:** v1.0.90
+
+**Description:**  
+Detects `wc_get_products()` calls with explicit `'limit' => -1` (unbounded).
+
+**Detection Logic:**
+- Search: `wc_get_products(`
+- Post-process: Check context for `'limit' => -1`
+
+**Test Fixture:**
+- Path: None yet
+- Expected violations: TBD
+- Expected valid: TBD
+
+**IRL Examples:** TBD
+
+---
+
+### 7. wp-query-unbounded.json ⭐ NEW
+**ID:** `wp-query-unbounded`  
+**Severity:** CRITICAL  
+**Category:** Performance  
+**Added:** v1.0.90
+
+**Description:**  
+Detects `WP_Query`/`get_posts()` patterns that force unbounded post hydration (`posts_per_page => -1`, `nopaging => true`, or `numberposts => -1`).
+
+**Detection Logic:**
+- Search: `WP_Query(` or `get_posts(`
+- Post-process: Check context for `posts_per_page => -1` / `nopaging => true` / `numberposts => -1`
+
+**Test Fixture:**
+- Path: None yet
+- Expected violations: TBD
+- Expected valid: TBD
+
+**IRL Examples:** TBD
+
+---
+
+### 8. wp-user-query-meta-bloat.json ⭐ NEW
+**ID:** `wp-user-query-meta-bloat`  
+**Severity:** CRITICAL  
+**Category:** Performance  
+**Added:** v1.0.90
+
+**Description:**  
+Detects `WP_User_Query` usage where `update_user_meta_cache => false` is missing, which can load large usermeta sets into memory.
+
+**Detection Logic:**
+- Search: `new WP_User_Query(`
+- Post-process: Flag if `update_user_meta_cache => false` is NOT present in context
+
+**Test Fixture:**
+- Path: None yet
+- Expected violations: TBD
+- Expected valid: TBD
+
+**IRL Examples:** TBD
+
+---
+
+### 9. limit-multiplier-from-count.json ⭐ NEW
+**ID:** `limit-multiplier-from-count`  
+**Severity:** MEDIUM  
+**Category:** Performance  
+**Added:** v1.0.90
+
+**Description:**  
+Detects patterns like `count( $ids ) * N` used to derive query limits/candidate limits. This can multiply unexpectedly and contribute to OOM when combined with object hydration.
+
+**Detection Logic:**
+- Search: `count(`
+- Post-process: Flag `count(...) * <number>` (heuristic)
+
+**Test Fixture:**
+- Path: None yet
+- Expected violations: TBD
+- Expected valid: TBD
+
+**IRL Examples:** TBD
+
+---
+
+### 10. array-merge-in-loop.json ⭐ NEW
+**ID:** `array-merge-in-loop`  
+**Severity:** LOW  
+**Category:** Performance  
+**Added:** v1.0.90
+
+**Description:**  
+Detects `$arr = array_merge( $arr, ... )` patterns inside loops, which can cause quadratic memory usage.
+
+**Detection Logic:**
+- Search: `array_merge(`
+- Post-process: Flag `$x = array_merge($x, ...)` when a loop keyword appears nearby (heuristic)
+
+**Test Fixture:**
+- Path: None yet
+- Expected violations: TBD
+- Expected valid: TBD
+
+**IRL Examples:** TBD
+
+---
+
 ## 📊 Pattern Statistics
 
 | Pattern | Severity | Category | Fixtures | IRL Examples | Status |
@@ -188,8 +320,14 @@ $users = get_users( array(
 | unsanitized-superglobal-read | HIGH | Security | ✅ | 3 | ✅ Complete |
 | wpdb-query-no-prepare | CRITICAL | Security | ✅ | 1 | ✅ Complete |
 | get-users-no-limit | CRITICAL | Performance | ❌ | 2 | ⚠️ Needs fixture |
+| unbounded-wc-get-orders | CRITICAL | Performance | ✅ | TBD | ✅ Fixture added |
+| unbounded-wc-get-products | CRITICAL | Performance | ✅ | TBD | ✅ Fixture added |
+| wp-query-unbounded | CRITICAL | Performance | ✅ | TBD | ✅ Fixture added |
+| wp-user-query-meta-bloat | CRITICAL | Performance | ✅ | TBD | ✅ Fixture added |
+| limit-multiplier-from-count | MEDIUM | Performance | ✅ | TBD | ✅ Fixture added |
+| array-merge-in-loop | LOW | Performance | ✅ | TBD | ✅ Fixture added |
 
-**Total:** 4 patterns, 9 IRL examples, 3 test fixtures
+**Total:** 10 patterns, 9 IRL examples, 3 test fixtures
 
 ---
 
@@ -215,6 +353,12 @@ $users = get_users( array(
 - `dist/patterns/unsanitized-superglobal-read.json`
 - `dist/patterns/wpdb-query-no-prepare.json`
 - `dist/patterns/get-users-no-limit.json`
+- `dist/patterns/unbounded-wc-get-orders.json`
+- `dist/patterns/unbounded-wc-get-products.json`
+- `dist/patterns/wp-query-unbounded.json`
+- `dist/patterns/wp-user-query-meta-bloat.json`
+- `dist/patterns/limit-multiplier-from-count.json`
+- `dist/patterns/array-merge-in-loop.json`
 
 **Test Fixtures:**
 - `dist/tests/fixtures/unsanitized-superglobal-isset-bypass.php`
@@ -229,5 +373,5 @@ $users = get_users( array(
 ---
 
 **Pattern library is growing!** 🎉  
-4 patterns documented, 29 more to go.
+10 patterns documented, 23 more to go.
 

@@ -21,9 +21,16 @@ WordPress sites fail in production because of **performance antipatterns** that 
 
 **WP Code Check catches these issues in seconds** — before they reach production.
 
+## The Fastest Way to Get Started (Using AI Agents)
+If you're using an AI coding assistant (Cursor, GitHub Copilot, Augment, etc.):
+
+1. Open `dist/TEMPLATES/_AI_INSTRUCTIONS.md` in your editor
+2. Ask your AI: **"Please review this document and what can I do with this tool?"**
+
+Your VS Code Agent will guide you through scanning WordPress plugins and themes, creating templates, and interpreting results.
 ---
 
-## What Makes It Different?
+## What Makes WP Code Check Better?
 
 | Feature | WP Code Check | WPCS | PHPStan-WP |
 |---------|---------------|------|------------|
@@ -32,6 +39,7 @@ WordPress sites fail in production because of **performance antipatterns** that 
 | **WordPress-specific** | ✅ WP performance focus | ⚠️ Generic PHP standards | ⚠️ Type safety focus |
 | **Speed** | ✅ Scans 10K files in <5s | ⚠️ Slower on large codebases | ⚠️ Slower on large codebases |
 | **Production-tested** | ✅ Real-world patterns | ✅ Industry standard | ✅ Type-focused |
+| **AI Supercharged** | ✅ Built-in AI-assisted triage | ❌ No AI support | ❌ No AI support |
 
 ---
 
@@ -72,14 +80,31 @@ cd WP-Code-Check
 
 ## Features
 
-### 🔍 **30+ Performance & Security Checks**
+### 🔍 **Multi-Layered Code Quality Analysis**
 
+WP Code Check provides **two complementary analysis tools** for complete coverage:
+
+#### **Quick Scanner** (Bash - Zero Dependencies)
+- **30+ WordPress-specific checks** in under 5 seconds
 - **Critical**: Unbounded queries, insecure deserialization, localStorage sensitive data, client-side serialization, **direct database queries without $wpdb->prepare()**
 - **High**: Direct superglobal manipulation, **unsanitized superglobal read**, **admin functions without capability checks**, **WooCommerce N+1 patterns**, AJAX without nonce validation, unbounded SQL, expensive WP functions in polling
 - **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout, unsafe RegExp construction, PHP short tags, **WooCommerce Subscriptions queries without limits**
 - **Low**: Timezone-sensitive patterns
 
 See [full check list](dist/README.md#what-it-detects).
+
+#### **Golden Rules Analyzer** (PHP - Semantic Analysis) 🧪 **Experimental**
+- **6 architectural rules** that catch design-level antipatterns
+- **Duplication detection**: Find duplicate functions across files
+- **State management**: Catch direct state mutations bypassing handlers
+- **Configuration centralization**: Eliminate magic strings and hardcoded values
+- **Query optimization**: Context-aware N+1 detection in loops
+- **Error handling**: Ensure graceful failure for HTTP/file operations
+- **Production readiness**: Flag debug code and TODO comments
+
+> ⚠️ **Experimental:** Functional but may have false positives. Best for code reviews and learning. [See experimental README](dist/bin/experimental/README.md) for complete usage guide.
+
+See [Golden Rules documentation](dist/README.md#experimental-golden-rules-analyzer).
 
 ### 📊 **Multiple Output Formats**
 
@@ -120,6 +145,53 @@ Save scan configurations for frequently-checked projects:
 
 See [HOWTO-TEMPLATES.md](dist/HOWTO-TEMPLATES.md) for details.
 
+### 🤖 **Phase 2: AI-Assisted Triage (v1.1 POC)**
+
+Validate findings and identify false positives with AI assistance:
+
+```bash
+# After running a scan, use AI to triage the results
+# AI analyzes the JSON log and provides:
+# - Summary stats (reviewed, confirmed, false positives)
+# - Overall narrative assessment
+# - Recommendations for next steps
+```
+
+**Features:**
+- ✅ **False Positive Detection** - Identifies common false positives (e.g., `phpcs:ignore` comments, adjacent sanitization)
+- ✅ **Confidence Scoring** - Rates overall assessment confidence (high/medium/low)
+- ✅ **Actionable Recommendations** - Prioritized list of issues to fix
+- ✅ **Executive Summary** - 3-5 paragraph narrative for stakeholders
+
+See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for detailed triage workflow.
+
+---
+
+## 🛠️ Tools Included
+
+WP Code Check is a **complete code quality suite** with multiple specialized tools:
+
+### Core Tools (Stable)
+
+| Tool | Type | Purpose | Speed |
+|------|------|---------|-------|
+| **Quick Scanner** | Bash | 30+ WordPress antipatterns | <5s |
+| **JSON to HTML Converter** | Python | Beautiful HTML reports from scan logs | <1s |
+| **Slack Integration** | Bash | CI/CD notifications | Instant |
+| **Baseline Manager** | Built-in | Track technical debt over time | N/A |
+| **Project Templates** | Built-in | Save scan configurations | N/A |
+
+### Experimental Tools 🧪
+
+| Tool | Type | Purpose | Speed | Status |
+|------|------|---------|-------|--------|
+| **Golden Rules Analyzer** | PHP | 6 architectural rules with semantic analysis | ~10-30s | Experimental - may have false positives |
+
+**Choose your workflow:**
+- **Fast CI/CD**: Quick Scanner only (zero dependencies, stable)
+- **Deep Review**: Quick Scanner + Golden Rules (experimental)
+- **Legacy Audit**: Quick Scanner + Baseline + Golden Rules (experimental)
+
 ---
 
 ## CI/CD Integration
@@ -131,15 +203,26 @@ name: WP Code Check
 on: [push, pull_request]
 
 jobs:
-  performance:
+  quick-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Run WP Code Check
+
+      - name: Quick Scan
         run: |
           git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
-          ./WP-Code-Check/dist/bin/check-performance.sh --paths . --format json
+          ./WP-Code-Check/dist/bin/check-performance.sh --paths . --format json --strict
+
+  deep-analysis:
+    runs-on: ubuntu-latest
+    needs: quick-scan
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Golden Rules Analysis (Experimental)
+        run: |
+          git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+          php ./WP-Code-Check/dist/bin/experimental/golden-rules-analyzer.php . --fail-on=error
 ```
 
 ### GitLab CI
@@ -159,6 +242,7 @@ wp-code-check:
 - **[Template Guide](dist/HOWTO-TEMPLATES.md)** - Project template system
 - **[Changelog](CHANGELOG.md)** - Version history and development progress
 - **[AI Agent Guide](AGENTS.md)** - WordPress development guidelines for AI assistants
+- **[Disclosure Policy](DISCLOSURE-POLICY.md)** - Responsible disclosure and public report publication policy
 
 ---
 

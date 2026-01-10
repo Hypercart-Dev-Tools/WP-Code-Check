@@ -30,15 +30,38 @@
       padding: 30px;
       text-align: center;
     }
-    
+
     .header h1 {
       font-size: 2em;
       margin-bottom: 10px;
     }
-    
+
     .header .meta {
       opacity: 0.9;
       font-size: 0.9em;
+    }
+
+    /* Links in header - high contrast for legibility */
+    .header a {
+      color: #fff;
+      text-decoration: none;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .header a:hover {
+      background: rgba(0, 0, 0, 0.4);
+      border-bottom-color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .header a:active {
+      transform: translateY(0);
     }
     
     .summary {
@@ -155,14 +178,18 @@
       font-size: 0.9em;
     }
 
-    .file-path a {
+    /* File path links in findings (not in header) */
+    .finding .file-path a,
+    .content .file-path a {
       color: #667eea;
       text-decoration: none;
-      border-bottom: 1px dotted #667eea;
+      border-bottom: 1px dotted rgba(102, 126, 234, 0.6);
       transition: all 0.2s ease;
+      font-weight: 600;
     }
 
-    .file-path a:hover {
+    .finding .file-path a:hover,
+    .content .file-path a:hover {
       color: #764ba2;
       border-bottom: 1px solid #764ba2;
       background: rgba(102, 126, 234, 0.1);
@@ -246,9 +273,14 @@
       border-bottom: 1px solid #dee2e6;
     }
 
+    .search-input-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
     .search-box {
       width: 100%;
-      padding: 12px 20px;
+      padding: 12px 45px 12px 20px;
       font-size: 1em;
       border: 2px solid #667eea;
       border-radius: 8px;
@@ -261,6 +293,41 @@
       box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
+    .search-clear-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      padding: 0;
+      font-weight: bold;
+    }
+
+    .search-clear-btn:hover {
+      background: #495057;
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .search-clear-btn:active {
+      transform: translateY(-50%) scale(0.95);
+    }
+
+    .search-clear-btn.visible {
+      display: flex;
+    }
+
     .search-info {
       margin-top: 10px;
       font-size: 0.9em;
@@ -271,11 +338,135 @@
     .finding.hidden {
       display: none;
     }
-    
+
+    /* Phase 2: AI Triage Section Styles */
+    .ai-triage-section {
+      background: #f0f4ff;
+      border-left: 4px solid #4a90e2;
+      padding: 20px;
+      margin: 30px 0;
+      border-radius: 4px;
+    }
+
+    .ai-triage-disclaimer {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 0.9em;
+      line-height: 1.5;
+    }
+
+    .ai-triage-content[data-status="pending"] {
+      color: #666;
+      font-style: italic;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 4px;
+    }
+
+    .ai-triage-content[data-status="complete"] {
+      color: #155724;
+    }
+
+    .ai-triage-content[data-status="error"] {
+      color: #721c24;
+      background: #f8d7da;
+      padding: 10px;
+      border-radius: 4px;
+    }
+
+    .ai-triage-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin: 15px 0;
+    }
+
+    .ai-triage-stat {
+      background: white;
+      padding: 12px;
+      border-radius: 4px;
+      text-align: center;
+      border: 1px solid #dee2e6;
+    }
+
+    .ai-triage-stat .label {
+      font-size: 0.8em;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+
+    .ai-triage-stat .value {
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #495057;
+    }
+
+    .ai-triage-verdicts {
+      margin-top: 15px;
+    }
+
+    .ai-triage-verdict {
+      background: white;
+      border-left: 3px solid #4a90e2;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    .ai-triage-verdict.confirmed {
+      border-left-color: #28a745;
+    }
+
+    .ai-triage-verdict.false-positive {
+      border-left-color: #6c757d;
+    }
+
+    .ai-triage-verdict.needs-review {
+      border-left-color: #ffc107;
+    }
+
+    .ai-triage-verdict-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .ai-triage-verdict-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.75em;
+      font-weight: bold;
+    }
+
+    .ai-triage-verdict-badge.confirmed {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .ai-triage-verdict-badge.false-positive {
+      background: #e2e3e5;
+      color: #383d41;
+    }
+
+    .ai-triage-verdict-badge.needs-review {
+      background: #fff3cd;
+      color: #856404;
+    }
+
     @media (max-width: 768px) {
       .summary { grid-template-columns: 1fr; }
       .finding-header { flex-direction: column; align-items: flex-start; }
       .badge { margin-top: 8px; }
+      .ai-triage-summary { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -307,13 +498,21 @@
 
     <!-- Search/Filter Box -->
     <div class="search-container">
-      <input
-        type="text"
-        id="search-box"
-        class="search-box"
-        placeholder="🔍 Search findings by keyword (file path, message, code, severity, etc.)..."
-        autocomplete="off"
-      />
+      <div class="search-input-wrapper">
+        <input
+          type="text"
+          id="search-box"
+          class="search-box"
+          placeholder="🔍 Search findings by keyword (file path, message, code, severity, etc.)..."
+          autocomplete="off"
+        />
+        <button
+          id="search-clear-btn"
+          class="search-clear-btn"
+          title="Clear search"
+          aria-label="Clear search"
+        >×</button>
+      </div>
       <div class="search-info">
         <span id="search-results-info"></span>
       </div>
@@ -345,6 +544,23 @@
 
     <!-- Main Content -->
     <div class="content">
+      <!-- Phase 2: AI-Assisted Triage (TL;DR at Top) -->
+      <div class="section">
+        <div id="ai-triage" class="ai-triage-section" data-ai-inject="triage">
+          <h2>🤖 Phase 2 (TL;DR) - AI Triage Summary</h2>
+
+          <div class="ai-triage-disclaimer">
+            <strong>⚠️ Disclaimer:</strong> This AI-assisted analysis is provided for
+            informational purposes only and represents probabilistic pattern matching,
+            not definitive security assessment. Developers must perform manual code
+            review to verify all findings. We make no guarantees about accuracy or
+            completeness. When in doubt, treat flagged code as requiring human review.
+          </div>
+
+          {{AI_TRIAGE_HTML}}
+        </div>
+      </div>
+
       <!-- Findings Section -->
       <div class="section">
         <h2>📋 Findings ({{FINDINGS_COUNT}})</h2>
@@ -528,14 +744,48 @@
       }
 
       // Add event listener for search box
+      const searchClearBtn = document.getElementById('search-clear-btn');
+
       if (searchBox) {
-        searchBox.addEventListener('input', filterFindings);
+        // Update clear button visibility on input
+        searchBox.addEventListener('input', function() {
+          filterFindings();
+
+          // Show/hide clear button based on input value
+          if (searchClearBtn) {
+            if (searchBox.value.trim().length > 0) {
+              searchClearBtn.classList.add('visible');
+            } else {
+              searchClearBtn.classList.remove('visible');
+            }
+          }
+        });
+
+        // Clear button click handler
+        if (searchClearBtn) {
+          searchClearBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            searchBox.value = '';
+            searchClearBtn.classList.remove('visible');
+            filterFindings();
+            searchBox.focus();
+          });
+        }
 
         // Add keyboard shortcut (Ctrl/Cmd + F to focus search)
         document.addEventListener('keydown', function(e) {
           if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
             e.preventDefault();
             searchBox.focus();
+          }
+
+          // ESC key to clear search
+          if (e.key === 'Escape' && searchBox.value.trim().length > 0) {
+            searchBox.value = '';
+            if (searchClearBtn) {
+              searchClearBtn.classList.remove('visible');
+            }
+            filterFindings();
           }
         });
       }

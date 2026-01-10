@@ -139,4 +139,5 @@ export HCC_SEVERITY_CONFIG=".hcc-severity.json"
 - **`severity-levels.example.json`** - Full example with comments
 - **`../CHANGELOG.md`** - Version history
 - **`../README.md`** - Main documentation
+- **`../../DISCLOSURE-POLICY.md`** - Responsible disclosure and public report publication policy
 

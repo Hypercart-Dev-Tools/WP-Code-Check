@@ -1,0 +1,29 @@
+{
+  "id": "array-merge-in-loop",
+  "version": "1.0.0",
+  "enabled": true,
+  "detection_type": "grep",
+  "category": "performance",
+  "severity": "LOW",
+  "title": "array_merge() inside loops (potential OOM)",
+  "description": "Detects patterns like $arr = array_merge($arr, $new) inside loops, which can cause quadratic memory/time growth.",
+  "rationale": "Repeated array_merge in a loop reallocates arrays and can balloon memory usage quickly, especially when aggregating large result sets.",
+  "detection": {
+    "type": "grep",
+    "file_patterns": ["*.php"],
+    "search_pattern": "array_merge\\(",
+    "exclude_patterns": [
+      "//.*array_merge\\("
+    ],
+    "post_process": {
+      "enabled": true,
+      "type": "context_analysis",
+      "description": "Heuristic: flag $x = array_merge($x, ...) when a loop keyword appears nearby."
+    }
+  },
+  "test_fixture": {
+    "path": null,
+    "expected_violations": null,
+    "expected_valid": null
+  }
+}

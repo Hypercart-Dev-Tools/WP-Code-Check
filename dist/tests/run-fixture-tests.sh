@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Neochrome WP Toolkit - Fixture Validation Tests
-# Version: 1.0.63
+# Version: 1.0.80
 #
 # Runs check-performance.sh against test fixtures and validates expected counts.
 # This prevents regressions when modifying detection patterns.
@@ -73,7 +73,8 @@ AJAX_SAFE_EXPECTED_WARNINGS_MIN=0
 AJAX_SAFE_EXPECTED_WARNINGS_MAX=0
 
 # file-get-contents-url.php - file_get_contents() with URLs (v1.0.46)
-FILE_GET_CONTENTS_EXPECTED_ERRORS=4  # 2 direct URLs + 2 URL variables
+# Note: Scanner groups findings by check type, so 4 findings = 1 error
+FILE_GET_CONTENTS_EXPECTED_ERRORS=1  # 1 error with 4 findings (lines 13, 16, 20, 24)
 FILE_GET_CONTENTS_EXPECTED_WARNINGS_MIN=0
 FILE_GET_CONTENTS_EXPECTED_WARNINGS_MAX=0
 

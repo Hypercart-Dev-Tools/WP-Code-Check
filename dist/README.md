@@ -408,6 +408,128 @@ JSON structure:
 
 ---
 
+## 🧪 Experimental: Golden Rules Analyzer
+
+**Status:** Experimental | **Location:** `dist/bin/experimental/` | **Requires:** PHP 7.4+
+
+For projects that need **semantic analysis beyond pattern matching**, WP Code Check includes the Golden Rules Analyzer — an experimental PHP-based static analysis tool that catches architectural antipatterns.
+
+> ⚠️ **Experimental Status:** This tool is functional but may have false positives and breaking changes in future releases. Use for code reviews and learning, not production CI/CD pipelines yet. [See experimental README](bin/experimental/README.md) for details.
+
+### What It Catches
+
+The Golden Rules Analyzer enforces **6 core architectural principles** that prevent "vibe coding drift":
+
+| Rule | What It Detects | Why It Matters |
+|------|----------------|----------------|
+| **1. Search before you create** | Duplicate function implementations across files | Prevents code bloat and maintenance nightmares |
+| **2. State flows through gates** | Direct state property mutations bypassing handlers | Ensures state changes are validated and auditable |
+| **3. One truth, one place** | Hardcoded option names, duplicated capability checks | Eliminates magic strings and centralized configuration |
+| **4. Queries have boundaries** | Unbounded queries, N+1 patterns in loops | Catches context-aware performance issues |
+| **5. Fail gracefully** | Missing error handling for HTTP requests, file operations | Prevents silent failures and site hangs |
+| **6. Ship clean** | Debug code, TODO/FIXME comments in production | Ensures production-ready code quality |
+
+### Quick Start
+
+```bash
+# Basic analysis
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin
+
+# Analyze specific rule
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --rule=query-boundaries
+
+# JSON output for CI/CD
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --format=json
+
+# GitHub Actions format
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --format=github
+
+# Fail on specific severity
+php dist/bin/experimental/golden-rules-analyzer.php /path/to/plugin --fail-on=error
+```
+
+### Configuration
+
+Create `.golden-rules.json` in your project root to customize detection:
+
+```json
+{
+  "state_handlers": ["set_state", "transition_to", "update_status"],
+  "state_properties": ["$this->state", "$this->status", "$this->current_state"],
+  "helper_classes": ["Helper", "Utils", "Utilities"],
+  "ignore_paths": ["vendor/", "node_modules/", "tests/"],
+  "severity_threshold": "warning"
+}
+```
+
+### Available Rules
+
+Run specific rules with `--rule=<name>`:
+
+- `duplication` - Detect duplicate function implementations
+- `state-gates` - Catch direct state mutations
+- `single-truth` - Find magic strings and duplicated configuration
+- `query-boundaries` - Detect unbounded queries and N+1 patterns
+- `graceful-failure` - Find missing error handling
+- `ship-clean` - Catch debug code and TODO comments
+
+### Example Output
+
+```
+/path/to/plugin/includes/query-helpers.php
+
+  ERROR Line 45: WP_Query without posts_per_page — will load ALL posts
+    → Add "posts_per_page" => 100 (or appropriate limit)
+
+  WARNING Line 78: Function "get_user_display_name" may duplicate existing functionality
+    → Check these similar functions: get_display_name (helpers.php)
+
+Summary: 2 errors, 1 warning, 0 info
+```
+
+### When to Use Each Tool
+
+| Scenario | Use This Tool |
+|----------|---------------|
+| **Quick CI/CD checks** | `check-performance.sh` (bash scanner) |
+| **Pre-commit hooks** | `check-performance.sh` (fast, zero dependencies) |
+| **Deep code review** | `experimental/golden-rules-analyzer.php` (semantic analysis) |
+| **Refactoring audit** | `experimental/golden-rules-analyzer.php` (finds duplication) |
+| **Combined workflow** | Run both for complete coverage |
+
+### Combined Workflow Example
+
+```bash
+# 1. Quick scan (30+ checks in <5s)
+./dist/bin/check-performance.sh --paths ~/my-plugin --format json > quick-scan.json
+
+# 2. Deep analysis (6 architectural rules - experimental)
+php ./dist/bin/experimental/golden-rules-analyzer.php ~/my-plugin --format json > deep-analysis.json
+
+# 3. Review both reports
+cat quick-scan.json deep-analysis.json
+```
+
+### CI/CD Integration
+
+**GitHub Actions:**
+```yaml
+- name: Quick Scan
+  run: ./dist/bin/check-performance.sh --paths . --strict
+
+- name: Deep Analysis (Experimental)
+  run: php ./dist/bin/experimental/golden-rules-analyzer.php . --fail-on=error
+```
+
+**Pre-commit Hook (Experimental):**
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+php ./dist/bin/experimental/golden-rules-analyzer.php . --fail-on=error
+```
+
+---
+
 ## 🛠️ Suppressing False Positives
 
 Sometimes a pattern is intentional (e.g., admin-only query, cached result). Suppress with `phpcs:ignore`:
@@ -436,9 +558,19 @@ $data = file_get_contents( 'https://api.example.com/data' );
 
 | File | Purpose |
 |------|---------|
-| `dist/bin/check-performance.sh` | Main analyzer - detects 30+ antipatterns |
+| `dist/bin/check-performance.sh` | **Quick Scanner** - Bash-based, detects 30+ antipatterns in <5s |
+| `dist/bin/json-to-html.py` | Convert JSON scan results to beautiful HTML reports |
+| `dist/bin/wp-audit` | **Unified CLI** - Orchestrates quick scan, deep analysis, and reporting |
 | `dist/tests/fixtures/*.php` | Test fixtures (antipatterns + clean code) |
 | `dist/tests/run-fixture-tests.sh` | Validation test suite (number of tests may grow over time) |
+
+### Experimental Tools
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `dist/bin/experimental/golden-rules-analyzer.php` | **Deep Analyzer** - PHP-based semantic analysis, 6 architectural rules | 🧪 Experimental |
+
+> See [experimental/README.md](bin/experimental/README.md) for detailed usage guide and end-to-end workflow examples.
 
 ### Integration Tools
 
@@ -531,6 +663,7 @@ echo "dist/logs/" >> .gitignore
 - **Repository:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check
 - **Issues:** https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues
 - **Documentation:** See `PROJECT/` directory for detailed guides
+- **Disclosure Policy:** See `../DISCLOSURE-POLICY.md`
 - **Contact:** noel@hypercart.io
 
 ---

@@ -5,6 +5,762 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Documentation** - Enhanced `dist/TEMPLATES/README.md` with context and background
+  - Added "What Are Templates?" section explaining the concept and purpose
+  - Added "What This Directory Contains" section listing all files and their purposes
+  - Added "How Templates Work" 4-step overview for quick understanding
+  - Added location context at the top (`dist/TEMPLATES/` in your WP Code Check installation)
+  - **Impact:** New users can now understand templates immediately without reading the entire guide
+
+## [1.2.0] - 2026-01-09
+
+### Added
+- **Golden Rules Analyzer (Experimental)** - PHP-based semantic analysis tool for architectural antipatterns
+  - **Location:** `dist/bin/experimental/` (experimental status - may have false positives)
+  - **Status:** Functional but experimental - best for code reviews and learning, not production CI/CD yet
+  - **6 Core Rules:**
+    1. **Search before you create** - Detects duplicate function implementations across files
+    2. **State flows through gates** - Catches direct state property mutations bypassing handlers
+    3. **One truth, one place** - Finds hardcoded option names and duplicated capability checks
+    4. **Queries have boundaries** - Detects unbounded queries and N+1 patterns in loops
+    5. **Fail gracefully** - Identifies missing error handling for HTTP requests and file operations
+    6. **Ship clean** - Flags debug code (var_dump, print_r) and TODO/FIXME comments
+  - **Features:**
+    - Cross-file duplication detection using function name similarity analysis
+    - Context-aware state mutation detection (allows mutations inside state handler methods)
+    - Magic string tracking across multiple files
+    - N+1 query pattern detection in loops (foreach, for, while)
+    - Error handling validation for wp_remote_*, file_get_contents, json_decode
+    - Configurable via `.golden-rules.json` in project root
+  - **Output Formats:** Console (colored), JSON, GitHub Actions annotations
+  - **CLI Options:** `--rule=<name>`, `--format=<type>`, `--fail-on=<level>`
+  - **File:** `dist/bin/experimental/golden-rules-analyzer.php` (executable, 1226 lines)
+  - **Namespace:** `Hypercart\WPCodeCheck\GoldenRules`
+  - **License:** Apache-2.0
+  - **Integration:** Complements existing bash scanner with semantic analysis
+
+- **Unified CLI Wrapper** (`wp-audit`) - Orchestrates multiple analysis tools
+  - **Commands:**
+    - `quick` - Fast scan using check-performance.sh (30+ checks, <5s)
+    - `deep` - Semantic analysis using golden-rules-analyzer.php (6 rules)
+    - `full` - Run both quick + deep analysis sequentially
+    - `report` - Generate HTML report from JSON logs
+  - **Features:**
+    - Colored output with progress indicators
+    - Automatic PHP availability detection
+    - Pass-through of all tool-specific options
+    - Combined exit code handling for full analysis
+  - **File:** `dist/bin/wp-audit` (executable, 180 lines)
+  - **Usage Examples:**
+    ```bash
+    wp-audit quick ~/my-plugin --strict
+    wp-audit deep ~/my-plugin --rule=duplication  # Uses experimental analyzer
+    wp-audit full ~/my-plugin --format json
+    wp-audit report scan-results.json output.html
+    ```
+
+- **Integration Tests** for Golden Rules Analyzer
+  - **File:** `dist/tests/test-golden-rules.sh`
+  - **Test Cases:**
+    - Unbounded WP_Query detection
+    - Direct state mutation detection
+    - Debug code detection (var_dump, print_r)
+    - Missing error handling detection
+    - Clean code validation (no false positives)
+  - **Features:** Colored output, violation counting, temp file cleanup
+
+- **Experimental README** (`dist/bin/experimental/README.md`) - **912 lines**
+  - **Table of Contents** with quick navigation
+  - **End-to-end user story** showing complete workflow (quick scan → deep analysis → AI triage)
+  - **AI-Assisted Triage Workflow** (Phase 2) - **300+ lines of documentation**
+    - Visual workflow diagram showing 3-phase pipeline
+    - Complete step-by-step guide (scan → triage → report)
+    - AI triage JSON structure and examples
+    - Common false positive patterns for both tools
+    - Confidence levels and when to use AI triage
+    - Integration with Project Templates end-to-end workflow
+  - **Real-world examples** of fixing issues found by both tools
+  - **6 Golden Rules explained** with before/after code examples
+  - **Configuration guide** for `.golden-rules.json`
+  - **Troubleshooting section** for common issues
+  - **Roadmap** and graduation criteria for moving to stable
+
+### Changed
+- **Documentation Updates:**
+  - `dist/README.md` - Added comprehensive Golden Rules Analyzer section (marked as experimental) with:
+    - Feature comparison table (6 rules explained)
+    - Quick start guide with CLI examples
+    - Configuration instructions (.golden-rules.json)
+    - Available rules reference
+    - Example output
+    - When to use each tool (decision matrix)
+    - Combined workflow examples
+    - CI/CD integration examples
+  - `README.md` - Updated Features section:
+    - Renamed "30+ Performance & Security Checks" to "Multi-Layered Code Quality Analysis"
+    - Added Quick Scanner vs Golden Rules Analyzer comparison (marked as experimental)
+    - Split "Tools Included" into Core Tools (stable) and Experimental Tools sections
+    - Updated GitHub Actions example to show both quick-scan and deep-analysis jobs
+    - Added experimental status warnings and links to experimental README
+  - `dist/README.md` - Updated "What's Included" section:
+    - Moved golden-rules-analyzer.php to Experimental Tools section
+    - Added experimental status badge and warnings
+    - Updated all file paths to `dist/bin/experimental/`
+    - Clarified tool purposes (Quick Scanner vs Deep Analyzer)
+
+### Technical Details
+- **Branding:** All references updated from "Neochrome" to "Hypercart" in Golden Rules code
+- **Copyright:** © 2025 Hypercart (a DBA of Neochrome, Inc.)
+- **Architecture:** Golden Rules uses PHP tokenization for semantic analysis vs bash grep for pattern matching
+- **Performance:** Golden Rules ~10-30s for deep analysis vs <5s for quick scan
+- **Dependencies:** Golden Rules requires PHP CLI, Quick Scanner remains zero-dependency
+- **Compatibility:** Both tools support JSON output for CI/CD integration
+
+### Impact
+- **Complete Coverage:** Pattern matching (bash) + semantic analysis (PHP) = comprehensive code quality
+- **Flexible Workflows:** Choose quick scans for CI/CD or deep analysis for code review
+- **Architectural Enforcement:** Catch design-level antipatterns that generic linters miss
+- **Developer Experience:** Unified CLI (`wp-audit`) simplifies tool selection
+
+## [1.1.2] - 2026-01-09
+
+### Added
+- **New Pattern: HTML-Escaping in JSON Response URL Fields** (`wp-json-html-escape`) - **HEURISTIC**
+  - **Category:** Reliability / Correctness
+  - **Severity:** MEDIUM (warning)
+  - **Type:** Heuristic (needs review)
+  - **Description:** Detects HTML escaping functions (`esc_url`, `esc_attr`, `esc_html`) used in JSON response fields with URL-like names, which can cause double-encoding issues
+  - **Problem:** Using `esc_url()` in JSON responses encodes `&` → `&#038;`, breaking redirects in JavaScript
+  - **Detection Strategy:** Two-step approach:
+    1. Find files with JSON response functions (`wp_send_json_*`, `WP_REST_Response`, `wp_json_encode`)
+    2. Check for `esc_url/esc_attr/esc_html` in array keys matching URL patterns (`url`, `redirect`, `link`, `href`, `view_url`, `redirect_url`, `edit_url`, `delete_url`, `ajax_url`, `api_url`, `endpoint`)
+  - **Why Heuristic:**
+    - Sometimes developers intentionally send HTML fragments in JSON (e.g., `html_content` field)
+    - Escaping may be correct for non-URL fields (e.g., `message` field)
+    - Context matters - pattern flags suspicious cases for review
+  - **Remediation:**
+    - Remove HTML escaping from JSON URL fields
+    - Use raw URLs in JSON responses
+    - Escape only when rendering into HTML context in JavaScript
+  - **Example:**
+    ```php
+    // ❌ Bad - Double-encoding
+    wp_send_json_success(array(
+        'redirect_url' => esc_url($url)  // & becomes &#038;
+    ));
+
+    // ✅ Good - Raw URL
+    wp_send_json_success(array(
+        'redirect_url' => $url  // Escape in JS when needed
+    ));
+    ```
+  - **Files Added:**
+    - `dist/bin/patterns/wp-json-html-escape.json` - Pattern definition with heuristic flag
+    - `dist/bin/fixtures/wp-json-html-escape.php` - Test fixture with 11 test cases (8 true positives, 3 edge cases)
+  - **Pattern Library:** Now 29 total patterns (18 PHP, 6 Headless, 4 Node.js, 1 JS)
+  - **Heuristic Patterns:** Now 10 total (was 9)
+  - **Impact:** Helps prevent hard-to-debug redirect failures and double-encoding issues in AJAX/REST API responses
+  - **Test Status:** ✅ Tested with fixture - detected 11/11 expected cases (8 true positives + 3 edge cases)
+  - **Main Scanner Integration:** Integrated at lines 4778-4844 (after Smart Coupons check, before Transient check)
+
+## [1.1.1] - 2026-01-08
+
+### Added
+- **New Pattern: WooCommerce Smart Coupons Performance Detection** (`wc-smart-coupons-thankyou-perf`)
+  - **Category:** Performance
+  - **Severity:** HIGH
+  - **Description:** Detects WooCommerce Smart Coupons plugin and warns about potential thank-you page performance issues caused by slow `wc_get_coupon_id_by_code()` database queries
+  - **Problem:** Smart Coupons triggers expensive `LOWER(post_title)` queries that scan 300k+ rows, causing 15-30 second page load times
+  - **Detection Strategy:** Two-step approach:
+    1. Detect Smart Coupons plugin presence (plugin header, class names, namespace, constants)
+    2. Check for thank-you hooks or `wc_get_coupon_id_by_code()` usage
+  - **Risk Levels:**
+    - Step 1 only: MEDIUM (plugin installed but may not be active)
+    - Step 1 + Step 2: HIGH (plugin active with performance-impacting patterns)
+  - **Remediation Provided:**
+    - Database index SQL: `ALTER TABLE wp_posts ADD INDEX idx_coupon_lookup (post_title(50), post_type, post_status);`
+    - Expected improvement: 15-30s → <100ms
+    - Caching example with transients
+    - Query Monitor integration guidance
+  - **Files Added:**
+    - `dist/patterns/wc-smart-coupons-thankyou-perf.json` - Pattern definition with performance metrics
+    - `dist/bin/detect-wc-smart-coupons-perf.sh` - Standalone detection script with immediate fix guidance
+  - **Pattern Library:** Now 28 total patterns (was 27)
+  - **Impact:** Helps identify and fix severe thank-you page performance issues on WooCommerce sites
+  - **Test Status:** ✅ Tested against Binoid site - successfully detected Smart Coupons with `wc_get_coupon_id_by_code()` calls
+- **Main Scanner Integration** - Both coupon patterns now integrated into `check-performance.sh`
+  - **`wc-coupon-in-thankyou`** - Integrated at line 4627-4695 (after WooCommerce N+1 check)
+  - **`wc-smart-coupons-thankyou-perf`** - Integrated at line 4699-4778 (after coupon-in-thankyou check)
+  - **Impact:** Coupon issues now appear in standard scans and HTML reports
+  - **Searchable:** Findings tagged with `wc-coupon-in-thankyou` and `wc-smart-coupons-thankyou-perf` IDs
+  - **Test Status:** ✅ Verified with Binoid theme scan - 2 coupon findings detected and searchable in HTML report
+
+### Changed
+- **Pattern: `wc-coupon-in-thankyou`** - Enhanced to detect `wc_get_coupon_id_by_code()` calls
+  - Added detection for `wc_get_coupon_id_by_code()` function (triggers slow LOWER(post_title) query)
+  - Updated standalone script (`detect-wc-coupon-in-thankyou.sh`) to include new pattern
+  - Updated pattern JSON with new detection rule
+  - **Impact:** Now catches both direct coupon manipulation AND slow coupon lookup queries
+- **Main Scanner (`check-performance.sh`)** - Added WooCommerce coupon performance checks
+  - Integrated two-step detection logic for both patterns
+  - Added skip logic for read-only coupon display (reduces false positives)
+  - Added remediation hints in text output (database index SQL)
+  - **Lines Modified:** 4624-4778 (154 lines added)
+  - **Impact:** All scans now automatically check for coupon performance issues
+- **HTML Report Template** - Added clear button to search input field
+  - **Feature:** Clear "×" button appears when search field has text
+  - **Behavior:**
+    - Button shows/hides automatically based on input
+    - Click button to clear search and reset filters
+    - ESC key also clears search (new keyboard shortcut)
+    - Button styled with hover/active states for better UX
+  - **Styling:** Circular gray button positioned inside search field (right side)
+  - **Accessibility:** Includes `aria-label` and `title` attributes
+  - **Impact:** Easier to clear search without manually deleting text
+  - **File Modified:** `dist/bin/templates/report-template.html` (CSS + HTML + JavaScript)
+- **HTML Report Template** - Fixed link contrast/legibility in header
+  - **Problem:** Links in purple gradient header had poor contrast (white text on purple)
+  - **Solution:** Added dark semi-transparent background to all header links
+  - **Styling:**
+    - Background: `rgba(0, 0, 0, 0.25)` (dark overlay for contrast)
+    - Border bottom: 2px solid white underline
+    - Font weight: 600 (semi-bold for better readability)
+    - Hover: Darker background + shadow effect
+  - **Impact:** Links now clearly visible and readable against purple gradient
+  - **Accessibility:** Meets WCAG contrast requirements (4.5:1 minimum)
+  - **File Modified:** `dist/bin/templates/report-template.html` (CSS only)
+- **Version:** Bumped to 1.1.1 (patch version for pattern enhancement + new related pattern)
+- **Pattern Library:** Updated to 28 patterns (16 PHP, 6 Headless, 4 Node.js, 1 JS, 1 WooCommerce Performance)
+
+## [1.1.0] - 2026-01-08
+
+### Added
+- **New Pattern: WooCommerce Coupon-in-Thank-You Detection** (`wc-coupon-in-thankyou`)
+  - **Category:** Reliability
+  - **Severity:** HIGH
+  - **Description:** Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts
+  - **Rationale:** Running coupon logic after order completion is a reliability anti-pattern that can cause data inconsistencies and unexpected side effects
+  - **Detection Strategy:** Two-step heuristic approach:
+    1. Find files with thank-you/order-received context markers (hooks, template paths, conditional checks)
+    2. Search those files for coupon operations (apply/remove/validation)
+  - **Context Markers Detected:**
+    - Hooks: `woocommerce_thankyou`, `*_woocommerce_thankyou`, `woocommerce_thankyou_*`
+    - Conditionals: `is_order_received_page()`, `is_wc_endpoint_url('order-received')`
+    - Templates: `woocommerce/checkout/thankyou.php`, `woocommerce/checkout/order-received.php`
+  - **Coupon Operations Flagged:**
+    - `apply_coupon()`, `remove_coupon()`, `has_coupon()`
+    - `new WC_Coupon()`, `wc_get_coupon()`
+    - `get_used_coupons()`, `get_coupon_codes()`
+    - Coupon validity filters and action hooks
+  - **Files Added:**
+    - `dist/patterns/wc-coupon-in-thankyou.json` - Pattern definition with full metadata
+    - `dist/bin/detect-wc-coupon-in-thankyou.sh` - Standalone detection script with user-friendly output
+    - `dist/bin/wc-coupon-thankyou-snippet.sh` - Minimal copy-paste version for CI integration
+  - **Pattern Library:** Auto-registered via pattern-library-manager.sh (now 27 total patterns)
+  - **Impact:** Helps identify post-checkout coupon logic that should be moved to cart/checkout hooks
+  - **False Positives:** May flag read-only coupon display logic (manual review recommended)
+
+### Changed
+- **Version:** Bumped to 1.1.0 (minor version bump for new pattern addition)
+- **Pattern Library:** Updated to 27 patterns (16 PHP, 6 Headless, 4 Node.js, 1 JS)
+- **Note:** Version 1.1.1 released same day with Smart Coupons performance pattern
+
+## [1.0.99] - 2026-01-08
+
+### Added
+- **AI Triage Logging & Verification** - Enhanced `ai-triage.py` with comprehensive logging and post-write verification
+  - Added detailed progress logging (input file, findings count, classification breakdown, confidence level)
+  - Added post-write verification to ensure `ai_triage` data persists correctly in JSON
+  - Added regression test (`test-ai-triage-simple.sh`) to verify AI triage functionality
+  - **Impact:** Easier debugging and guaranteed data integrity for AI triage operations
+  - **Affected File:** `dist/bin/ai-triage.py`
+  - **Test Status:** ✅ Verified with smoke test - 7 findings triaged successfully
+
+### Changed
+- **AI Triage Logging to stderr** - All `[AI Triage]` log messages now output to stderr instead of stdout
+  - **Rationale:** Prevents potential JSON output corruption when piping stdout (follows same pattern as main scanner)
+  - **Impact:** Safe to pipe stdout without mixing log messages with data output
+  - **Affected File:** `dist/bin/ai-triage.py` (all print statements now use `file=sys.stderr`)
+  - **Test Status:** ✅ Verified stdout is clean when stderr redirected to /dev/null
+- **AI Triage Schema Consistency** - Duplicated `findings_reviewed` into `ai_triage.summary` for convenience
+  - **Rationale:** Prevents future schema mismatches (similar to bug fixed in 1.0.98); keeps all summary stats in one place
+  - **Schema:** Now stored in both `ai_triage.scope.findings_reviewed` (original) and `ai_triage.summary.findings_reviewed` (new)
+  - **HTML Generator:** Updated to read from summary first, with fallback to scope for backward compatibility
+  - **Impact:** More consistent schema, fewer future breakages when accessing summary statistics
+  - **Affected Files:** `dist/bin/ai-triage.py`, `dist/bin/json-to-html.py`
+  - **Test Status:** ✅ Verified both locations contain same value (5 findings reviewed)
+- **Version:** Bumped to 1.0.99
+
+## [1.0.98] - 2026-01-08
+
+### Fixed
+- **Phase 2 AI Triage Report Bug** - Fixed "REVIEWED" count showing 0 in HTML reports
+  - **Root Cause:** `json-to-html.py` was looking for `findings_reviewed` in `ai_triage['summary']` but it's actually stored in `ai_triage['scope']['findings_reviewed']`
+  - **Symptom:** Phase 2 summary stats showed "REVIEWED: 0" even though findings were analyzed
+  - **Fix:** Extract `findings_reviewed` from correct location in JSON structure
+  - **Impact:** Phase 2 reports now correctly display the number of findings reviewed
+  - **Affected File:** `dist/bin/json-to-html.py` line 266-268
+  - **Test Status:** ✅ Verified with regenerated report - REVIEWED count now shows correct value
+
+### Changed
+- **Version:** Bumped to 1.0.98
+
+## [1.0.97] - 2026-01-08
+
+### Fixed
+- **Critical Bug: JSON Output Corruption** - Fixed console output being appended to JSON log files
+  - **Root Cause:** Pattern library manager was outputting to stdout after JSON was written, corrupting the JSON file with console messages
+  - **Symptom:** JSON files failed to parse with `JSONDecodeError: Extra data` error
+  - **Fix:** Redirect pattern library manager output to `/dev/tty` in JSON mode to prevent appending to log file
+  - **Implementation:** Added conditional check for `OUTPUT_FORMAT` before running pattern library manager
+  - **Impact:** JSON logs are now clean and valid, can be parsed by downstream tools
+  - **Affected File:** `dist/bin/check-performance.sh` lines 5252-5275
+  - **Test Status:** ✅ Verified with test scan - JSON parses correctly with 76 findings and 49 checks
+
+### Changed
+- **Version:** Bumped to 1.0.97
+
+## [1.0.96] - 2026-01-07
+
+### Added
+- **Post-Scan Triage Instructions** - Comprehensive AI agent instructions for first-pass issue triage
+  - **Step 6a**: Quick summary format with scan stats and top issues
+  - **Step 6b**: Critical issue investigation workflow with false positive checklist
+  - **Step 6c**: Markdown triage report template with verdict classifications (✅ Confirmed, ⚠️ Needs Review, ❌ False Positive)
+  - **Step 6d**: Scope limits (top 10-15 findings first pass, grouping similar issues)
+  - **False Positive Reference Table**: Common patterns for `spo-002-superglobals`, `rest-no-pagination`, `get-users-no-limit`, etc.
+  - **Location**: `dist/TEMPLATES/_AI_INSTRUCTIONS.md` lines 644-791
+
+### Changed
+- **Version:** Bumped to 1.0.96
+
+## [1.0.95] - 2026-01-07
+
+### Fixed
+- **Critical Bug: Cron Interval Validation** - Fixed subshell variable scope issue preventing error detection
+  - **Root Cause:** Pipe into `while` loop created subshell, preventing `CRON_INTERVAL_FAIL` from persisting to parent shell
+  - **Fix:** Use temporary file to communicate findings from subshell (portable across all Bash versions)
+  - **Implementation:** Write "FAIL" to temp file for each finding, count lines after loop completes
+  - **Impact:** Cron interval validation now correctly reports errors (was showing "✓ Passed" despite finding violations)
+  - **Affected Pattern:** `unvalidated-cron-interval` (HIGH severity)
+  - **Test Status:** ✅ Fixture test now passes (1 error, 0 warnings as expected)
+  - **Compatibility:** Works on macOS, Linux, and GitHub Actions (Bash 3.2+)
+
+### Removed
+- **Development Test Scripts** - Removed obsolete pattern testing scripts from repository root
+  - `test-pattern-load.sh` - Pattern loading test (now covered by fixture tests)
+  - `test-pattern-extraction.sh` - Pattern extraction test (now covered by fixture tests)
+  - **Reason:** Development artifacts no longer needed; pattern loading is production-ready and tested via `dist/tests/run-fixture-tests.sh`
+
+### Changed
+- **Version:** Bumped to 1.0.95
+
+## [1.0.94] - 2026-01-06
+
+### Enhanced
+- **Enhancement 4 (Updated): Prepared Variable Tracking** (`wpdb-query-no-prepare`)
+  - **Increased context window from 10 to 20 lines** to catch multi-line `$wpdb->prepare()` statements
+  - **Added nested prepare detection:** Now detects `$wpdb->query( $wpdb->prepare(...) )` pattern
+  - **Impact:** Reduced false positives from 10 to 1 (-90%) on KISS plugin test
+  - **Root cause:** Multi-line prepare statements in KISS plugin span 14-18 lines, exceeding previous 10-line window
+  - **Analysis:** See `PROJECT/3-COMPLETED/ANALYSIS-WPDB-PREPARE-FALSE-POSITIVES.md` for detailed investigation
+
+### Changed
+- **Overall False Positive Reduction:** 36% reduction on KISS plugin test (25 → 16 findings)
+- **Version:** Bumped to 1.0.94
+
+### Performance Comparison (KISS Plugin Test)
+
+**Progressive Improvement Across Versions:**
+
+| Version | Total Findings | wpdb-query-no-prepare | spo-004-missing-cap-check | Overall Reduction |
+|---------|----------------|----------------------|---------------------------|-------------------|
+| **v1.0.92** (Baseline) | 33 | 15 | 9 | - |
+| **v1.0.93** | 25 | 10 | 7 | **-24%** |
+| **v1.0.94** | 16 | 1 | 4 | **-52%** |
+
+**Key Achievements:**
+- **v1.0.93:** Context-aware detection (nonce verification, capability parsing, prepared variable tracking)
+- **v1.0.94:** Extended context windows + nested pattern detection
+- **Total Improvement:** 52% reduction in false positives (33 → 16 findings)
+
+## [1.0.93] - 2026-01-06
+
+### Added
+- **Phase 1: False Positive Reduction - Quick Wins** - Context-aware detection enhancements
+  - **Enhancement 1: Nonce Verification Detection** (`spo-002-superglobals`)
+    - Detects `wp_verify_nonce()`, `check_admin_referer()`, `wp_nonce_field()` near the match (20 lines before), clamped to the same function/method
+    - Suppresses findings when nonce verification exists
+    - **Impact:** Reduced false positives from 5 to 2 (-60%) on KISS plugin test
+  - **Enhancement 2: Capability Parameter Parsing** (`spo-004-missing-cap-check`)
+    - Parses `add_submenu_page()` / `add_menu_page()` to extract capability parameter
+    - Detects common WordPress capabilities: `manage_options`, `manage_woocommerce`, `edit_posts`, etc.
+    - Suppresses findings when valid capability found in function call
+    - **Impact:** Reduced false positives from 9 to 7 (-22%) on KISS plugin test
+  - **Enhancement 3: Hard Cap Detection** (`limit-multiplier-from-count`)
+    - Detects `min(count(...) * N, MAX)` pattern as mitigation
+    - Downgrades severity: MEDIUM → LOW when hard cap exists
+    - Adds informative message: `[Mitigated by: hard cap of N]`
+    - **Impact:** 1 of 2 findings downgraded to LOW on KISS plugin test
+  - **Enhancement 4: Prepared Variable Tracking** (`wpdb-query-no-prepare`)
+    - Tracks variable assignments: `$sql = $wpdb->prepare(...)`
+    - Checks previous 10 lines for prepared variable pattern, clamped to the same function/method
+    - Suppresses findings when variable was prepared before use
+    - **Impact:** Reduced false positives from 15 to 10 (-33%) on KISS plugin test
+  - **Enhancement 5: Strict Comparison Detection** (`unsanitized-superglobal-read`)
+    - Detects strict comparison to literals: `$_POST['key'] === '1'`
+    - Recognizes this as implicit sanitization for boolean flags
+    - Requires nonce verification in the same function/method (20 lines before)
+    - Suppresses findings when both conditions met
+
+### Fixed
+- **Context leakage prevention (function/method boundaries):** Several “look back N lines” false-positive reducers now clamp their context windows to the enclosing function/method to avoid cross-function suppression.
+  - `spo-002-superglobals` nonce lookback
+  - `unsanitized-superglobal-read` nonce lookbacks
+  - `wpdb-query-no-prepare` prepared-variable lookback
+  - `unvalidated-cron-interval` validation lookback
+
+### Changed
+- **Overall False Positive Reduction:** 24% reduction on KISS plugin test (33 → 25 findings)
+- **Version:** Bumped to 1.0.93
+
+### Testing
+- **Fixture Count:** Increased to 20 fixtures (adds method-scope coverage for mitigation detection)
+  - Added class method scoping fixtures to prevent cross-method mitigation leakage and validate admin-only mitigation inside methods
+
+## [1.0.92] - 2026-01-06
+
+### Changed
+- **Pattern Library Manager** - Enhanced to include multi-platform pattern tracking
+  - **Multi-Platform Support:** Now tracks patterns by type (PHP/WordPress, Headless WordPress, Node.js, JavaScript)
+  - **Expanded Coverage:** Detects all 26 patterns across subdirectories (`patterns/`, `patterns/headless/`, `patterns/nodejs/`, `patterns/js/`)
+  - **Updated Stats:**
+    - **Total Patterns:** 26 (up from 15)
+    - **By Platform:** PHP (15), Headless (6), Node.js (4), JavaScript (1)
+    - **By Severity:** 9 CRITICAL, 8 HIGH, 6 MEDIUM, 3 LOW
+    - **By Category:** Performance (8), Security (8), Duplication (5), Reliability (3)
+  - **Marketing Stats:** Updated one-liner to highlight multi-platform support
+  - **Bug Fix:** Fixed category counting arithmetic error when category names contained numbers
+
+## [1.0.91] - 2026-01-06
+
+### Added
+- **Pattern Library Manager** - Automated pattern registry generation and marketing stats
+  - **Auto-Generated Registry:** `dist/PATTERN-LIBRARY.json` - Canonical JSON registry of all detection patterns
+  - **Auto-Generated Documentation:** `dist/PATTERN-LIBRARY.md` - Human-readable pattern library with marketing stats
+  - **Automatic Updates:** Runs after every scan to keep registry in sync with implementation
+  - **Pattern Metadata Tracking:**
+    - Total patterns by severity (CRITICAL, HIGH, MEDIUM, LOW)
+    - Patterns by category (performance, security, duplication)
+    - Mitigation detection status (4 patterns with AI-powered mitigation)
+    - Heuristic vs definitive pattern classification (6 heuristic, 9 definitive)
+  - **Marketing Stats Generation:**
+    - One-liner stats for landing pages
+    - Feature highlights for product descriptions
+    - Comprehensive coverage metrics (15 patterns across 3 categories)
+    - False positive reduction stats (60-70% on mitigated patterns)
+  - **Bash 3+ Compatible:** Works on macOS default bash (3.2) with fallback mode
+  - **Standalone Script:** `dist/bin/pattern-library-manager.sh` can be run independently
+  - **Integration:** Automatically called at end of `check-performance.sh` (non-fatal if fails)
+
+### Changed
+- **Fixture Count:** Increased from 14 to 17 test fixtures for pattern validation (adds mitigation downgrade branch coverage)
+- **Mitigation Downgrade Fixtures:** Added fixtures to assert CRITICAL severity downgrades based on detected mitigations
+  - `dist/tests/fixtures/wp-query-unbounded-mitigated.php` (3 mitigations → CRITICAL→LOW)
+  - `dist/tests/fixtures/wp-query-unbounded-mitigated-1.php` (1 mitigation → CRITICAL→HIGH)
+  - `dist/tests/fixtures/wp-query-unbounded-mitigated-2.php` (2 mitigations → CRITICAL→MEDIUM)
+- **Main Scanner:** Now calls Pattern Library Manager after each scan completion
+
+## [1.0.90] - 2026-01-06
+
+### Added
+- **False Positive Reduction - Mitigation Detection** - Context-aware severity adjustment for unbounded queries
+  - **4 Mitigation Patterns Detected:**
+    - **Caching:** Detects `get_transient()`, `set_transient()`, `wp_cache_get()`, `wp_cache_set()`, `wp_cache_add()` within the same function
+    - **Parent-Scoped Queries:** Detects `'parent' => $variable` in WooCommerce queries (limits scope to child items)
+    - **IDs-Only Queries:** Detects `'return' => 'ids'` or `'fields' => 'ids'` (lower memory footprint)
+    - **Admin Context:** Detects `is_admin()`, `current_user_can()` checks (admin-only execution)
+  - **Multi-Factor Severity Adjustment:**
+    - 3+ mitigations: CRITICAL → LOW
+    - 2 mitigations: CRITICAL → MEDIUM
+    - 1 mitigation: CRITICAL → HIGH
+    - 0 mitigations: CRITICAL (unchanged)
+  - **Applied To:** `unbounded-wc-get-orders`, `get-users-no-limit`, `get-terms-no-limit`
+  - **Informative Messages:** Shows detected mitigations (e.g., `[Mitigated by: caching,parent-scoped,ids-only]`)
+  - **Impact:** Reduces false positives by 60-70% while highlighting truly critical unbounded queries
+
+- **Memory / OOM Crash Prevention Checks** - New rules based on real WooCommerce object hydration failure modes
+  - Added new pattern JSON files:
+    - `unbounded-wc-get-orders` (detects `wc_get_orders()` with `limit => -1`)
+    - `unbounded-wc-get-products` (detects `wc_get_products()` with `limit => -1`)
+    - `wp-query-unbounded` (detects `WP_Query`/`get_posts()` with `posts_per_page => -1`, `nopaging => true`, or `numberposts => -1`)
+    - `wp-user-query-meta-bloat` (detects `WP_User_Query` missing `update_user_meta_cache => false`)
+    - `limit-multiplier-from-count` (heuristic: flags `count(...) * N` limit multipliers)
+    - `array-merge-in-loop` (heuristic: flags `$arr = array_merge($arr, ...)` inside loops)
+  - Integrated these checks into the main scanner output (text + JSON)
+  - **Impact:** Helps catch high-probability OOM patterns in plugins/themes before production crashes
+
+### Fixed
+- **get_users Detection** - Fixed false positives when `'number'` parameter is defined before the function call
+  - Changed context window from "next 5 lines" to "±10 lines" to catch array definitions above the call
+  - **Impact:** Eliminates false positives for properly bounded `get_users()` calls
+
+### Changed
+- **Mitigation Detection Scope** - Function-scoped analysis prevents cross-function false positives
+  - Uses function boundaries to limit mitigation detection to the same function
+  - Prevents detecting caching in adjacent functions
+  - **Impact:** More accurate mitigation detection, fewer false reductions
+
+- **Mitigation Coverage** - Applied mitigation-based severity adjustment to additional OOM rules
+  - **Now Also Applies To:** `wp-query-unbounded`, `wp-user-query-meta-bloat`
+  - **Impact:** Consistent severity downgrades for cached/admin-only mitigated queries
+
+### Testing
+- Created `dist/tests/test-mitigation-detection.php` with 7 test cases
+- Verified all 4 mitigation patterns are detected correctly
+- Tested on Universal Child Theme 2024 (real-world codebase)
+  - 2 unbounded queries correctly adjusted (CRITICAL→LOW, CRITICAL→HIGH)
+  - 1 false positive eliminated (properly bounded `get_users` call)
+
+### Documentation
+- Updated backlog with a concrete next-steps plan for hardening the new OOM/memory checks (including valid fixtures, heuristic tuning, and calibration)
+- Standardized the plan to checkbox style and fixed malformed section headings in `PROJECT/BACKLOG.md`
+
+## [1.0.89] - 2026-01-06
+
+### Added
+- **JavaScript/TypeScript/Node.js Pattern Detection** - Full support for scanning JavaScript, TypeScript, JSX, and TSX files
+  - Added 11 new security and performance patterns for modern JavaScript frameworks
+  - **6 Headless WordPress patterns:** API key exposure, fetch error handling, GraphQL errors, hardcoded URLs, missing auth headers, Next.js ISR
+  - **4 Node.js security patterns:** Command injection, eval() usage, path traversal, unhandled promises
+  - **1 JavaScript DRY pattern:** Duplicate localStorage/sessionStorage keys
+  - **Impact:** Can now scan headless WordPress projects (Next.js, Nuxt, Gatsby, etc.) and Node.js backends
+
+### Changed
+- **Pattern Loader** - Extended to support multi-language pattern detection
+  - Reads `file_patterns` array from JSON (e.g., `["*.js", "*.jsx", "*.ts", "*.tsx"]`)
+  - Supports both single `search_pattern` and `patterns` array (combines with OR)
+  - Defaults to `*.php` for backward compatibility with existing patterns
+  - **Impact:** Pattern JSON files can now specify which file types to scan
+
+- **Scanner Core** - Added direct pattern discovery and processing
+  - Auto-discovers patterns from `headless/`, `nodejs/`, `js/` subdirectories
+  - Builds dynamic `--include` flags from pattern `file_patterns`
+  - Processes patterns before Magic String Detector section
+  - Increments error/warning counters correctly
+  - **Impact:** No hardcoding needed - just add JSON files to subdirectories
+
+- **Exclusions** - Added JavaScript-specific exclusions
+  - Directories: `.next/`, `dist/`, `build/` (build output)
+  - Files: `*.min.js`, `*bundle*.js`, `*.min.css` (minified/bundled files)
+  - Already excluded: `node_modules/`, `vendor/`, `.git/`
+  - **Impact:** Faster scans, fewer false positives from build artifacts
+
+### Documentation
+- **dist/HOWTO-JAVASCRIPT-PATTERNS.md** - Guide for JavaScript pattern detection
+- **PROJECT/1-INBOX/PROJECT-NODEJS.md** - Planning document for Node.js support
+- **PROJECT/2-WORKING/PHASE-2-NODEJS-PATTERN-ANALYSIS.md** - Implementation analysis
+
+### Testing
+- Created `dist/tests/test-js-pattern.js` with API key exposure violations
+- Verified all 11 patterns are discovered and processed
+- Confirmed error counting works correctly
+- Tested backward compatibility with existing PHP patterns
+
+### Backward Compatibility
+- ✅ Existing PHP patterns work without changes (default to `*.php`)
+- ✅ No impact on current PHP pattern detection
+- ✅ Pattern JSON files without `file_patterns` still work
+
+## [1.0.88] - 2026-01-06
+
+### Fixed
+- **JSON Output Corruption** - Fixed bash error messages being prepended/appended to JSON logs
+  - Fixed line 1709: Removed redundant `|| echo "0"` that caused duplicate output in `match_count`
+  - Added `match_count=${match_count:-0}` to ensure valid integer value
+  - Redirected Python HTML generator output to `/dev/tty` instead of stderr
+  - **Impact:** JSON logs are now valid and can be parsed without manual cleanup
+  - **Before:** JSON files had error message `/dist/bin/check-performance.sh: line 1713: [: 0\n0: integer expression expected` prepended
+  - **After:** Clean JSON output starting with `{` and ending with `}`
+
+### Technical Details
+- **Root Cause:** `grep -c .` returns "0" when no matches, but `|| echo "0"` also executed, resulting in "0\n0"
+- **Integer Comparison:** Line 1713 comparison `[ "$match_count" -gt "$((MAX_FILES * 10))" ]` failed with non-integer value
+- **Output Redirection:** Python generator stderr was captured by `exec 2>&1` on line 616, mixing with JSON output
+- **Solution:** Removed redundant fallback, added parameter expansion, and redirected to `/dev/tty`
+
+## [1.0.87] - 2026-01-06
+
+### Added
+- **Python HTML Report Generator** - Standalone Python script for reliable HTML report generation
+  - Added `dist/bin/json-to-html.py` - Python 3 script to convert JSON logs to HTML reports
+  - Added `dist/bin/json-to-html.sh` - Bash wrapper for Python generator (backward compatibility)
+  - Added `dist/bin/templates/report-template.html` - HTML template for report generation
+  - **Impact:** More reliable HTML generation, can regenerate reports from existing JSON logs
+  - **Benefits:** No bash subprocess issues, faster execution, better error handling
+  - **Usage:** `python3 dist/bin/json-to-html.py <input.json> <output.html>`
+
+### Changed
+- **HTML Report Generation** - Switched from bash to Python for better reliability
+  - Main scanner now calls Python generator instead of inline bash function
+  - Requires Python 3.6+ (gracefully skips HTML generation if not available)
+  - Auto-opens generated report in browser (macOS/Linux)
+  - Shows detailed progress and file size information
+  - **Impact:** Eliminates HTML generation timeouts and subprocess hangs
+
+### Documentation
+- **AGENTS.md** - Added JSON to HTML Report Conversion section
+  - Documents when to use the Python generator
+  - Provides usage examples and troubleshooting tips
+  - Explains integration with main scanner
+- **dist/TEMPLATES/_AI_INSTRUCTIONS.md** - Updated with Python generator guidance
+
+## [1.0.86] - 2026-01-06
+
+### Added
+- **Smart N+1 Detection with Meta Caching Awareness** - Hybrid detection reduces false positives for optimized code
+  - Added `has_meta_cache_optimization()` helper function to detect WordPress meta caching APIs
+  - Detects `update_meta_cache()`, `update_postmeta_cache()`, and `update_termmeta_cache()` usage
+  - Files using meta caching are downgraded from WARNING to INFO severity
+  - Added test fixture `n-plus-one-optimized.php` with real-world optimization examples
+  - **Impact:** Properly optimized code (like KISS Woo Fast Search) no longer triggers false positive warnings
+  - **Rationale:** Encourages WordPress best practices while reducing noise for developers using proper caching
+
+### Changed
+- **N+1 Pattern Detection Logic** - Now distinguishes between optimized and unoptimized code
+  - Files WITHOUT meta caching: Standard WARNING (unchanged behavior)
+  - Files WITH meta caching: INFO severity with message "verify optimization"
+  - Console output shows: "✓ Passed (N file(s) use meta caching - likely optimized)"
+  - JSON findings include severity "info" for optimized files vs "warning" for unoptimized
+  - **Impact:** Reduces false positive noise while still alerting developers to review optimization
+  - **Note:** Static analysis cannot verify cache covers all IDs, so INFO alerts remain for manual review
+
+## [1.0.85] - 2026-01-06
+
+### Added
+- **Phase 3 Priority 2: Progress Tracking** - Added real-time progress indicators for better UX
+  - Added `section_start()`, `section_progress()`, and `section_end()` helper functions
+  - Display current section name when starting each major section (Critical Checks, Warning Checks, etc.)
+  - Show elapsed time every 10 seconds during long operations
+  - Added progress updates during clone detection file processing ("Processing file X of Y...")
+  - Added progress updates during hash aggregation ("Analyzing hash X of Y...")
+  - **Impact:** Users can now see what's happening during long scans, reducing perceived wait time
+
+### Changed
+- **Section Progress Display** - All major sections now show start/end markers
+  - Critical Checks section shows "→ Starting: Critical Checks"
+  - Warning Checks section shows "→ Starting: Warning Checks"
+  - Magic String Detector shows "→ Starting: Magic String Detector"
+  - Function Clone Detector shows "→ Starting: Function Clone Detector"
+  - Elapsed time displayed as "⏱ Section Name: Xs elapsed..." every 10 seconds
+  - **Impact:** Better visibility into scan progress, easier to diagnose slow sections
+
+## [1.0.84] - 2026-01-06
+
+### Added
+- **Phase 3 Clone Detection Optimizations** - Added controls to prevent clone detection timeouts
+  - Added `MAX_CLONE_FILES` environment variable (default: 100) to limit files processed in clone detection
+  - Added `--skip-clone-detection` flag to skip clone detection entirely for faster scans
+  - Added file count warning when approaching clone detection limit (80% threshold)
+  - **Impact:** Prevents timeouts on large codebases (500+ files), 90%+ faster scans when skipped
+
+### Changed
+- **Clone Detection Limits** - Separated clone detection limits from general file limits
+  - Clone detection now uses `MAX_CLONE_FILES` instead of `MAX_FILES` (more conservative default)
+  - Shows clear warning message when file count exceeds limit with instructions to override
+  - Displays progress warning when processing large file counts (>80 files)
+  - **Impact:** Clone detection is now opt-in for large codebases, prevents WooCommerce-scale timeouts
+
+## [1.0.82] - 2026-01-06
+
+### Added
+- **Phase 1 Stability Safeguards** - Added safety nets to prevent catastrophic hangs and runaway scans
+  - Added `MAX_SCAN_TIME` environment variable (default: 300s) to limit scan duration per pattern
+  - Added `MAX_FILES` environment variable (default: 10,000) to limit files processed in aggregation
+  - Added `MAX_LOOP_ITERATIONS` environment variable (default: 50,000) to prevent infinite loops
+  - Created `run_with_timeout()` portable timeout wrapper (macOS Bash 3.2 compatible using Perl)
+  - **Impact:** Prevents hangs on very large codebases, graceful degradation with warnings
+
+### Changed
+- **Aggregated Pattern Performance** - Added timeout and iteration limits to expensive operations
+  - Magic string detection now respects `MAX_SCAN_TIME` timeout on initial grep
+  - Clone detection now respects `MAX_FILES` limit and `MAX_SCAN_TIME` timeout
+  - All aggregation loops now have `MAX_LOOP_ITERATIONS` safety limit with early exit
+  - Added match count limit (MAX_FILES * 10) to aggregated patterns as file count proxy
+  - **Impact:** Large codebase scans won't hang indefinitely, clear warnings when limits hit
+
+### Fixed
+- **Timeout Exit Code Detection** - Fixed timeout wrapper exit codes being swallowed by `|| true`
+  - Removed `|| true` from command substitutions that prevented detecting exit code 124
+  - Now properly captures and checks exit codes before falling back to normal processing
+  - **Impact:** Timeout protection now actually works instead of being silently bypassed
+
+- **Incomplete Loop Bounds** - Added missing iteration limits to all aggregation loops
+  - Added `MAX_LOOP_ITERATIONS` to unique_strings aggregation loop
+  - Added `MAX_LOOP_ITERATIONS` to clone detection hash aggregation loop
+  - **Impact:** All loops now have documented termination conditions, no unbounded iterations
+
+- **Version Banner Inconsistency** - Updated stale version comment from 1.0.80 to 1.0.82
+  - Fixed header comment to match `SCRIPT_VERSION` variable
+  - **Impact:** Version reporting is now consistent across all locations
+
+### Documentation
+- **Performance Bottleneck Documentation** - Added inline comments documenting expensive operations
+  - Documented typical performance characteristics for small/medium/large codebases
+  - Noted optimization opportunities for future Phase 2-3 work
+  - **Impact:** Developers can understand performance trade-offs and future improvement paths
+
+- **Backlog Planning** - Documented future cherry-pick tasks from `fix/split-off-html-generator` branch
+  - Added notes for Python HTML generator (commit `713e903`)
+  - Added notes for Node.js/JavaScript/Headless WordPress patterns (commits `2653c59`, `7180f97`, `f6b1664`)
+  - Documented conflicts, dependencies, and recommended cherry-pick order
+  - **Impact:** Clear roadmap for future feature integration after stability work completes
+
+## [1.0.81] - 2026-01-05
+
+### Fixed
+- **Template Path Resolution** - Fixed `run` script looking for templates in wrong directory
+  - Changed `REPO_ROOT` from `../..` to `..` in `dist/bin/run` (line 22)
+  - Now correctly points to `dist/TEMPLATES/` instead of `/TEMPLATES/`
+  - **Impact:** Template-based scans now work correctly
+
+- **Template Variable Quoting** - Fixed bash sourcing error with paths containing spaces
+  - Changed single quotes to double quotes in template files
+  - Fixed `universal-child-theme-oct-2024.txt` PROJECT_PATH and NAME variables
+  - **Impact:** Templates with spaces in paths/names now work correctly
+
+- **DEBUG_TRACE JSON Corruption** - Fixed debug output polluting JSON logs
+  - Created `debug_echo()` helper that only outputs in text mode
+  - Prevents stderr from merging into JSON output via `exec 2>&1`
+  - **Impact:** JSON output is now clean when DEBUG_TRACE=1 is enabled
+
+- **Unconditional Debug Logging** - Removed privacy-leaking debug logs
+  - Replaced all `/tmp/wp-code-check-debug.log` writes with `debug_echo()`
+  - Removed unconditional logging in aggregated patterns and clone detection
+  - **Impact:** No more path leaks to /tmp, no unbounded log growth
+
+### Changed
+- **Reduced Output Verbosity** - Pattern regex only shown in verbose mode
+  - `text_echo "→ Pattern: $pattern_search"` now requires `--verbose` flag
+  - **Impact:** Cleaner terminal output, easier to read scan results
+
+- **Directory Rename** - Renamed `dist/bin/templates/` to `dist/bin/report-templates/`
+  - Avoids confusion with `dist/TEMPLATES/` (project configuration templates)
+  - Updated reference in `check-performance.sh` (line 735)
+  - **Impact:** Clearer directory structure, less ambiguity
+
+## [1.0.80] - 2026-01-05
+
+### Fixed
+- **CI Fixture Test Failure** - Fixed `file-get-contents-url.php` expected error count
+  - Changed expected errors from 4 to 1 in `run-fixture-tests.sh`
+  - **Root Cause:** Scanner groups findings by check type (1 error with 4 findings, not 4 separate errors)
+  - **Impact:** GitHub Actions CI now passes fixture validation tests
+  - Test was expecting 4 errors but scanner correctly reports 1 error with 4 findings (lines 13, 16, 20, 24)
+
 ## [1.0.79] - 2026-01-02
 
 ### Fixed

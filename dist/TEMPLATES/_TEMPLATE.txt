@@ -75,4 +75,4 @@ VERSION=''
 
 # Fixture validation (proof-of-detection)
 # Number of fixtures to validate (default: 8). Environment override: FIXTURE_VALIDATION_COUNT
-FIXTURE_COUNT=8
+FIXTURE_COUNT=20
