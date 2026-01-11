@@ -6,9 +6,187 @@
 
 ---
 
+## 📑 Table of Contents
+
+1. [Core Concept](#-core-concept)
+2. [Implementation Phases](#-implementation-phases)
+   - [Phase 1: Core Functionality (MVP)](#phase-1-core-functionality-mvp)
+   - [Phase 2: Enhanced Features](#phase-2-enhanced-features)
+   - [Phase 3: Advanced Automation](#phase-3-advanced-automation)
+3. [Workflow Overview](#-thoughts-on-extending-the-workflow)
+4. [Enhanced Phase 3 Workflow](#-enhanced-phase-3-workflow)
+5. [Implementation Strategy](#-implementation-strategy)
+6. [Parent Issue Template Structure](#-parent-issue-template-structure)
+7. [Benefits & Considerations](#-benefits-of-parent-issue--checklist-approach)
+8. [Implementation Plan](#-implementation-plan)
+9. [Example Usage](#-example-usage)
+10. [Design Decisions](#-design-decisions)
+11. [Template Enhancement Strategy](#-template-enhancement-strategy)
+12. [Fallback Detection Strategy](#-fallback-detection-strategy)
+
+---
+
 ## 🎯 Core Concept
 
 **One Parent Issue Per Scan** with a checklist of confirmed findings that can be converted to child issues using GitHub's tasklist feature.
+
+---
+
+## 📋 Implementation Phases
+
+### **Phase 1: Core Functionality (MVP)**
+
+**Goal:** Create parent GitHub issues with AI-triaged findings as checklists
+
+- [ ] **1.1 Template System Enhancement**
+  - [ ] Update `_TEMPLATE.txt` with GitHub integration section
+  - [ ] Add `GITHUB_REPO`, `GITHUB_AUTO_ISSUE`, `GITHUB_ISSUE_LABELS` fields
+  - [ ] Add `GITHUB_ASSIGNEE`, `GITHUB_MILESTONE` fields
+  - [ ] Add `GITHUB_ALLOW_MULTIPLE_DAILY_SCANS` field
+  - [ ] Update `_AI_INSTRUCTIONS.md` with Phase 3 workflow documentation
+
+- [ ] **1.2 Repository Detection**
+  - [ ] Create `dist/bin/lib/detect-github-repo.sh` helper script
+  - [ ] Implement git remote URL parsing (HTTPS, SSH, git:// formats)
+  - [ ] Extract owner/repo from various GitHub URL formats
+  - [ ] Validate repository format (owner/repo pattern)
+  - [ ] Add fallback to template-specified `GITHUB_REPO` value
+
+- [ ] **1.3 GitHub CLI Validation**
+  - [ ] Check if `gh` CLI is installed
+  - [ ] Verify `gh auth status` (authenticated)
+  - [ ] Validate repository access with `gh repo view`
+  - [ ] Check write permissions with `gh repo view --json viewerPermission`
+  - [ ] Add helpful error messages for each failure case
+
+- [ ] **1.4 Parent Issue Template Generator**
+  - [ ] Create `dist/bin/lib/generate-parent-issue-body.sh` script
+  - [ ] Format executive summary (total findings, confirmed, false positives)
+  - [ ] Generate GitHub tasklist syntax for confirmed issues
+  - [ ] Add severity sections (Critical, High, Medium, Low)
+  - [ ] Include collapsed `<details>` section for false positives
+  - [ ] Add detailed breakdown for each confirmed issue (code, analysis, recommendation)
+  - [ ] Include links to HTML report and JSON log
+  - [ ] Add footer with scanner version and branding
+
+- [ ] **1.5 Issue Creation Logic**
+  - [ ] Add `--create-github-issue` flag to `check-performance.sh`
+  - [ ] Integrate repository detection after template loading
+  - [ ] Generate parent issue body from AI triage JSON
+  - [ ] Create issue with `gh issue create` command
+  - [ ] Apply labels from template (`GITHUB_ISSUE_LABELS`)
+  - [ ] Assign to user from template (`GITHUB_ASSIGNEE`)
+  - [ ] Link to milestone if specified (`GITHUB_MILESTONE`)
+  - [ ] Output issue URL to console
+
+- [ ] **1.6 Duplicate Detection**
+  - [ ] Search for existing issues with same UTC timestamp in title
+  - [ ] Use `gh issue list --search "in:title [WP Code Check] Scan Report (YYYY-MM-DD-HHMMSS)"`
+  - [ ] UTC timestamp ensures unique identification per scan
+  - [ ] If found (unlikely with timestamp), add comment instead of creating duplicate
+  - [ ] Support `GITHUB_ALLOW_MULTIPLE_DAILY_SCANS` for backward compatibility
+
+- [ ] **1.7 Dry-Run Mode**
+  - [ ] Add `--dry-run-github-issue` flag
+  - [ ] Preview issue title, labels, assignee, milestone
+  - [ ] Display full markdown body with formatting
+  - [ ] Show what would be created without actually creating it
+  - [ ] Add instructions on how to create for real
+
+- [ ] **1.8 Opt-In Safety**
+  - [ ] Default `GITHUB_AUTO_ISSUE=false` in templates
+  - [ ] Require explicit `true` value to enable auto-creation
+  - [ ] Skip GitHub integration silently if not enabled
+  - [ ] Allow manual issue creation from JSON log later
+
+- [ ] **1.9 Testing & Validation**
+  - [ ] Test with Hypercart Server Monitor MKII repository
+  - [ ] Verify parent issue creation with checklist
+  - [ ] Test duplicate detection (same-day scans)
+  - [ ] Verify dry-run mode output
+  - [ ] Test with different label/assignee/milestone configurations
+  - [ ] Validate GitHub tasklist → child issue conversion workflow
+
+- [ ] **1.10 Documentation**
+  - [ ] Update README.md with GitHub integration section
+  - [ ] Add setup instructions (gh CLI installation, authentication)
+  - [ ] Document template configuration options
+  - [ ] Add example workflows (auto, manual, dry-run)
+  - [ ] Include screenshots of parent issue and child issue conversion
+  - [ ] Document security considerations and permissions
+
+---
+
+### **Phase 2: Enhanced Features**
+
+**Goal:** Add advanced integrations and analytics
+
+- [ ] **2.1 GitHub Projects Integration**
+  - [ ] Add `GITHUB_PROJECT` field to templates
+  - [ ] Auto-add parent issue to project board
+  - [ ] Set project status (e.g., "Triage", "To Do")
+  - [ ] Support GitHub Projects v2 API
+
+- [ ] **2.2 Report Artifact Upload**
+  - [ ] Upload HTML report as GitHub release asset
+  - [ ] Link to uploaded report in parent issue body
+  - [ ] Add JSON log as downloadable artifact
+  - [ ] Set retention policy for old reports
+
+- [ ] **2.3 Trend Analysis**
+  - [ ] Compare current scan with previous scan results
+  - [ ] Show improvement/regression metrics in issue
+  - [ ] Add trend chart (e.g., "5 issues → 2 issues ✅")
+  - [ ] Track issue resolution rate over time
+
+- [ ] **2.4 Smart Labeling**
+  - [ ] Auto-detect issue type (security, performance, reliability)
+  - [ ] Apply category labels to parent issue
+  - [ ] Suggest labels for child issues based on pattern ID
+  - [ ] Support custom label mapping in templates
+
+- [ ] **2.5 Team Mentions**
+  - [ ] Parse CODEOWNERS file for file ownership
+  - [ ] `@mention` relevant team members in issue
+  - [ ] Add team-based assignee suggestions
+  - [ ] Support custom mention rules in templates
+
+---
+
+### **Phase 3: Advanced Automation**
+
+**Goal:** Full automation with intelligent workflows
+
+- [ ] **3.1 Auto-Close Resolved Issues**
+  - [ ] Re-scan and compare with previous findings
+  - [ ] Auto-close child issues when issue no longer detected
+  - [ ] Add comment with verification details
+  - [ ] Support manual override (keep issue open)
+
+- [ ] **3.2 Webhook Notifications**
+  - [ ] Add Slack webhook integration
+  - [ ] Add Discord webhook integration
+  - [ ] Send scan summary to configured channels
+  - [ ] Include quick links to parent issue
+
+- [ ] **3.3 Email Digests**
+  - [ ] Weekly summary of scan results
+  - [ ] Aggregate multiple scans into one email
+  - [ ] Include trend analysis and highlights
+  - [ ] Support multiple recipients
+
+- [ ] **3.4 Multi-Platform Support**
+  - [ ] GitLab integration (GitLab CLI)
+  - [ ] Bitbucket integration (Bitbucket API)
+  - [ ] Azure DevOps integration (Azure CLI)
+  - [ ] Generic webhook for other platforms
+
+- [ ] **3.5 Auto-PR Creation**
+  - [ ] Detect simple fixable issues (e.g., add LIMIT clause)
+  - [ ] Generate fix code automatically
+  - [ ] Create PR with fix and link to parent issue
+  - [ ] Add tests to verify fix
+  - [ ] Request review from CODEOWNERS
 
 ---
 
@@ -78,23 +256,29 @@ Add to template files:
 ```bash
 gh issue create \
   --repo "Hypercart-Dev-Tools/Server-Monitor-MKII" \
-  --title "[WP Code Check] Scan Report - 2026-01-10 (2 confirmed issues)" \
+  --title "[WP Code Check] Scan Report (2026-01-10-205923) - 2 confirmed issues" \
   --body "$(cat parent-issue-template.md)" \
   --label "code-quality,wp-code-check" \
   --assignee "@me"
 ```
+
+**Title Format:** `[WP Code Check] Scan Report (YYYY-MM-DD-HHMMSS) - N confirmed issues`
+- **UTC Timestamp:** Matches JSON log filename for easy correlation
+- **Issue Count:** Quick visibility of scan severity
+- **Unique Identifier:** Prevents duplicates, enables log lookup
 
 ---
 
 ## 📋 Parent Issue Template Structure
 
 ```markdown
-# 🔍 WP Code Check Scan Report - 2026-01-10
+# 🔍 WP Code Check Scan Report (2026-01-10-205927)
 
-**Scan Date:** 2026-01-10T20:59:27Z
+**Scan Timestamp:** 2026-01-10-205927 UTC (2026-01-10T20:59:27Z)
 **Scanner Version:** 1.2.2
 **Project:** Hypercart Server Monitor MKII v0.2.0
 **Files Analyzed:** 20 files (3,438 lines of code)
+**Log File:** `2026-01-10-205927-UTC.json`
 
 ---
 
@@ -296,11 +480,14 @@ gh repo view "$GITHUB_REPO" --json viewerPermission
 
 ### **2. Duplicate Prevention**
 ```bash
-# Check if scan report already exists for this date
-gh issue list --repo "$GITHUB_REPO" --search "in:title [WP Code Check] Scan Report - $(date +%Y-%m-%d)"
+# Check if scan report already exists for this exact timestamp
+# UTC timestamp format: YYYY-MM-DD-HHMMSS (matches JSON log filename)
+TIMESTAMP="2026-01-10-205927"
+gh issue list --repo "$GITHUB_REPO" --search "in:title [WP Code Check] Scan Report ($TIMESTAMP)"
 
-# If exists, add comment with new scan results instead of creating new issue
-# Or append to existing issue body
+# With UTC timestamp, duplicates are virtually impossible
+# Each scan has unique timestamp matching the JSON log file
+# Example: 2026-01-10-205927-UTC.json → Issue title includes (2026-01-10-205927)
 ```
 
 ### **3. Rate Limiting**
@@ -364,10 +551,11 @@ gh issue list --repo "$GITHUB_REPO" --search "in:title [WP Code Check] Scan Repo
 ./dist/bin/run hypercart-server-monitor-mkii
 
 # Output:
-# ✅ Scan complete: 5 findings
+# ✅ Scan complete: 5 findings (2026-01-10-205927-UTC.json)
 # 🧠 AI Triage: 2 confirmed, 3 false positives
 # 🔍 Detected repo: Hypercart-Dev-Tools/Server-Monitor-MKII
 # 📝 Creating parent issue with 2 confirmed items...
+# 📋 Title: [WP Code Check] Scan Report (2026-01-10-205927) - 2 confirmed issues
 # ✅ Issue created: https://github.com/Hypercart-Dev-Tools/Server-Monitor-MKII/issues/42
 ```
 
@@ -377,11 +565,12 @@ gh issue list --repo "$GITHUB_REPO" --search "in:title [WP Code Check] Scan Repo
 ./dist/bin/run hypercart-server-monitor-mkii --format json
 
 # Then create parent issue from scan log
-./dist/bin/create-github-issue-from-scan.sh dist/logs/2026-01-10-205923-UTC.json
+./dist/bin/create-github-issue-from-scan.sh dist/logs/2026-01-10-205927-UTC.json
 
 # Output:
-# 📊 Scan Summary: 2 confirmed issues, 3 false positives
+# 📊 Scan Summary: 2 confirmed issues, 3 false positives (2026-01-10-205927)
 # 📝 Creating parent issue in Hypercart-Dev-Tools/Server-Monitor-MKII...
+# 📋 Title: [WP Code Check] Scan Report (2026-01-10-205927) - 2 confirmed issues
 # ✅ Issue #42 created: https://github.com/Hypercart-Dev-Tools/Server-Monitor-MKII/issues/42
 #
 # Next steps:
@@ -397,9 +586,10 @@ gh issue list --repo "$GITHUB_REPO" --search "in:title [WP Code Check] Scan Repo
 # Output:
 # 📋 Preview of GitHub issue that would be created:
 #
-# Title: [WP Code Check] Scan Report - 2026-01-10 (2 confirmed issues)
+# Title: [WP Code Check] Scan Report (2026-01-10-205927) - 2 confirmed issues
 # Labels: code-quality, wp-code-check
 # Assignee: @me
+# Repo: Hypercart-Dev-Tools/Server-Monitor-MKII
 #
 # Body:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -451,9 +641,11 @@ gh issue list --repo "$GITHUB_REPO" --search "in:title [WP Code Check] Scan Repo
 - 💡 **Child issues:** Inherit parent milestone automatically
 
 ### **5. Duplicate Handling**
-- ✅ **One parent issue per day max** (check for existing issue with same date)
-- ✅ **If exists:** Add comment with new scan results instead of creating new issue
-- ⚙️ **Configurable:** `GITHUB_ALLOW_MULTIPLE_DAILY_SCANS=true` (create new issue each time)
+- ✅ **One parent issue per scan** (UTC timestamp ensures uniqueness)
+- ✅ **Timestamp format:** `(YYYY-MM-DD-HHMMSS)` matches JSON log filename
+- ✅ **Virtually no duplicates** - each scan has unique timestamp
+- ✅ **Easy correlation:** Issue title → JSON log file (e.g., `2026-01-10-205927-UTC.json`)
+- ⚙️ **Configurable:** `GITHUB_ALLOW_MULTIPLE_DAILY_SCANS` kept for backward compatibility
 
 ### **6. Notification Preferences**
 - ✅ **Default:** Standard GitHub notifications (issue creation)
