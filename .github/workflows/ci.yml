@@ -123,10 +123,25 @@ jobs:
   validate-test-fixtures:
     name: Validate Test Fixtures
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Environment snapshot
+        run: |
+          echo "=== CI Environment Diagnostic ==="
+          echo "OS: $(uname -a)"
+          echo "Shell: $SHELL ($BASH_VERSION)"
+          echo "jq: $(command -v jq && jq --version || echo 'NOT INSTALLED')"
+          echo "perl: $(perl -v | head -2)"
+          echo "grep: $(grep --version | head -1)"
+          echo "================================="
 
       - name: Make scripts executable
         run: |
@@ -136,7 +151,7 @@ jobs:
       - name: Run automated fixture tests
         run: |
           echo "Running automated fixture validation..."
-          ./dist/tests/run-fixture-tests.sh
+          cd dist && ./tests/run-fixture-tests.sh
 
       - name: Test antipatterns detection (legacy check)
         run: |
