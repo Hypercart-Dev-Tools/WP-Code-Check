@@ -1,10 +1,44 @@
-Great question! Let me analyze the codebase to identify the specific memory-hungry patterns causing the >512MB crashes.
+**STATUS:** COMPLETED
 
-Now let me check for the most dangerous pattern - loading full order objects:
+Yes — the ideas from PATTERN-MEMORY.md have been added to the pattern systems and are actively used by the scanner, but the doc itself is not directly wired in as a “source of truth” artifact.
 
-Perfect! Now I can give you a detailed answer. Let me create a visual diagram showing the memory-hungry patterns:
+Evidence it’s been incorporated
+1) Patterns mentioned in PATTERN-MEMORY.md exist in the pattern library
+These IDs referenced in the doc are present in the pattern library index + JSON registry + pattern definition files:
 
-Excellent question! Here are the **specific code patterns causing the >512MB memory crashes**:
+unbounded-wc-get-orders
+In PATTERN-LIBRARY.md
+In PATTERN-LIBRARY.json (points to unbounded-wc-get-orders.json)
+In severity-levels.json
+unbounded-wc-get-products
+In PATTERN-LIBRARY.md
+In PATTERN-LIBRARY.json (points to unbounded-wc-get-products.json)
+Pattern file exists: unbounded-wc-get-products.json
+limit-multiplier-from-count
+In PATTERN-LIBRARY.md
+In PATTERN-LIBRARY.json
+Pattern file exists: limit-multiplier-from-count.json
+wp-user-query-meta-bloat
+In PATTERN-LIBRARY.md
+In PATTERN-LIBRARY.json
+Pattern file exists: wp-user-query-meta-bloat.json
+array-merge-in-loop
+In PATTERN-LIBRARY.md
+In PATTERN-LIBRARY.json
+Pattern file exists: array-merge-in-loop.json
+2) The scanner references these pattern IDs
+The main scanner script includes these IDs in its internal fixture validation strings / rule logic (examples show up in check-performance.sh around the rule sections and the fixture expectations list).
+
+3) The scanner has produced real findings using these IDs
+For example, unbounded-wc-get-orders appears in multiple historical JSON logs under dist/logs/...json, meaning the scanner is emitting findings for that rule in real runs.
+
+4) Project planning references it explicitly
+BACKLOG.md contains an entry: “OOM / Memory Pattern Hardening (from PATTERN-MEMORY.md)”, which indicates the doc influenced the implementation workstream.
+
+What is not true (important nuance)
+I do not see PATTERN-MEMORY.md itself being “registered” as an input artifact (e.g., automatically parsed into patterns).
+Instead, its concepts have been implemented as pattern IDs and integrated into the scanner/pattern library.
+If you want, I can also check whether fixtures exist for each of these pattern IDs (some docs say “fixture TODO”), and confirm which ones are covered by tests vs only implemented in production rules.
 
 ---
 

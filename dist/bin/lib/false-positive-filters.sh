@@ -182,16 +182,19 @@ get_function_scope_range() {
   [ "$search_start" -lt 1 ] && search_start=1
 
   # Find the last "function" keyword before our line
-  func_start=$(sed -n "${search_start},${line_num}p" "$file" | \
+  local func_line
+  func_line=$(sed -n "${search_start},${line_num}p" "$file" | \
     grep -n "^[[:space:]]*function[[:space:]]" | \
-    tail -1 | \
-    cut -d: -f1)
+    tail -1)
 
-  if [ -z "$func_start" ]; then
+  if [ -z "$func_line" ]; then
     # Not in a function
     echo ""
     return
   fi
+
+  # Extract line number (before the colon)
+  func_start=$(echo "$func_line" | cut -d: -f1)
 
   # Convert relative line number to absolute
   func_start=$((search_start + func_start - 1))
@@ -287,7 +290,14 @@ detect_guards() {
   else
     # In a function - only search within function scope
     # func_scope is "start end", extract start
-    start_line=$(echo "$func_scope" | cut -d' ' -f1)
+    start_line=$(echo "$func_scope" | awk '{print $1}')
+
+    # Safety check: ensure start_line is a valid integer
+    if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+      # Fallback to window-based search if parsing failed
+      start_line=$((line_num - 20))
+      [ "$start_line" -lt 1 ] && start_line=1
+    fi
   fi
 
   # PHASE 2.1: Only scan BEFORE the access line (not after)
@@ -463,7 +473,14 @@ is_variable_sanitized() {
   fi
 
   # func_scope is "start end", extract start
-  start_line=$(echo "$func_scope" | cut -d' ' -f1)
+  start_line=$(echo "$func_scope" | awk '{print $1}')
+
+  # Safety check: ensure start_line is a valid integer
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    # Can't parse function scope - bail out
+    echo ""
+    return
+  fi
 
   # Only search BEFORE current line (not after)
   end_line=$((line_num - 1))
