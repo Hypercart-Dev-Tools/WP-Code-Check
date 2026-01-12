@@ -72,6 +72,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verifies sanitizers array in JSON output
   - Verifies SQL safety detection and severity downgrading
 
+### Known Limitations (Phase 2.1 Improvements Required)
+
+⚠️ **IMPORTANT:** Phase 2 provides valuable context signals but has limitations that require refinement:
+
+1. **Guard Misattribution Risk**: Window-based detection may attribute guards to unrelated access (different branch/function)
+2. **Suppression Too Aggressive**: Suppressing findings when guards+sanitizers detected risks false negatives
+3. **Single-Line Sanitizer Detection**: Misses multi-line patterns like `$x = sanitize_text_field($_GET['x']); use($x);`
+4. **user_can() Overcounting**: May count non-guard uses; needs conditional context detection
+5. **Limited Branch Coverage**: Test fixtures don't cover all branch misattribution cases
+
+**Recommendation for v1.3.0:** Use guard/sanitizer arrays in JSON output for manual triage. Consider disabling automatic severity downgrading until Phase 2.1 improvements are complete. See `PROJECT/1-INBOX/PHASE2-QUALITY-IMPROVEMENTS.md` for improvement plan.
+
 ## [1.2.4] - 2026-01-12
 
 ### Added

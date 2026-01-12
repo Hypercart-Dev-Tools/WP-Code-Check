@@ -91,6 +91,17 @@ Also, update changelog to reflect changes.
 - `dist/bin/lib/false-positive-filters.sh` (v1.2.0) - Added 3 new detection functions
 - `CHANGELOG.md` - Documented Phase 2 changes
 
+**Known Limitations (Requires Phase 2.1 Improvements):**
+⚠️ **CRITICAL:** The following issues must be addressed before Phase 2 is production-safe:
+
+1. **Guard Misattribution** - Window-based detection can attribute guards to wrong access (different branch/function)
+2. **Suppression Too Aggressive** - Suppressing findings with guards+sanitizers risks false negatives
+3. **Single-Line Sanitizer Detection** - Misses `$x = sanitize_text_field($_GET['x']); use($x);` patterns
+4. **user_can() Too Noisy** - Overcounts guards; needs conditional context or removal
+5. **Missing Branch Test Cases** - Fixtures don't cover guard in different branch/function
+
+**Recommendation:** Use Phase 2 for **context signals in JSON output only**. Disable automatic severity downgrading until Phase 2.1 improvements are complete. See `PROJECT/1-INBOX/PHASE2-QUALITY-IMPROVEMENTS.md` for detailed improvement plan.
+
 ## Phase 1 — Reduce Obvious False Positives (Low Risk, High Impact)
 
 ### Goal
