@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-01-12
+
+### Fixed
+- **Phase 2.1: Critical Quality Improvements**
+  - **Issue #2 (Suppression)**: Removed aggressive suppression logic
+    - Findings with guards+sanitizers now emit as LOW severity (not suppressed)
+    - Prevents false negatives from heuristic misattribution
+    - Still provides context signals for manual triage
+  - **Issue #4 (user_can)**: Removed `user_can()` from guard detection
+    - `user_can($user_id, 'cap')` checks OTHER users, not current request
+    - Reduces false confidence from non-guard capability checks
+    - Only `current_user_can()` is now detected as a guard
+  - **Issue #1 (Function Scope)**: Implemented function-scoped guard detection
+    - Guards now scoped to same function using `get_function_scope_range()`
+    - Guards must appear BEFORE the superglobal access (not after)
+    - Prevents branch misattribution (guards in different if/else)
+    - Prevents cross-function misattribution
+  - **Issue #3 (Taint Propagation)**: Added basic variable sanitization tracking
+    - Detects sanitized variable assignments: `$x = sanitize_text_field($_POST['x'])`
+    - Tracks sanitized variables within function scope
+    - Detects two-step sanitization: `$x = $_POST['x']; $x = sanitize($x);`
+    - Reduces false positives for common safe patterns
+  - **Issue #5 (Test Coverage)**: Added comprehensive test fixtures
+    - `phase2-branch-misattribution.php`: Tests guards in different branches/functions
+    - `phase2-sanitizer-multiline.php`: Tests multi-line sanitization patterns
+    - `verify-phase2.1-improvements.sh`: Automated verification script
+
+### Changed
+- **Library Version**: Updated `false-positive-filters.sh` to v1.3.0
+  - Added `get_function_scope_range()` helper function
+  - Enhanced `detect_guards()` with function scoping
+  - Added `is_variable_sanitized()` for taint propagation
+  - Fixed variable scope issues (explicit local declarations)
+
+### Technical Details
+- **Function Scope Detection**: Uses brace counting to find function boundaries
+- **Guard Detection**: Scans backward within function, stops at access line
+- **Variable Tracking**: Matches assignment patterns with sanitizer functions
+- **Limitations Documented**: Heuristic-based, not full PHP parser
+
 ## [1.3.0] - 2026-01-12
 
 ### Added

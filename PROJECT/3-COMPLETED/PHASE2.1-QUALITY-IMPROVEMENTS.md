@@ -1,9 +1,10 @@
-# Phase 2 Quality Improvements (Critical)
+# Phase 2.1 Quality Improvements (Critical)
 
 **Created:** 2026-01-12
-**Status:** Not Started
+**Completed:** 2026-01-12
+**Status:** ✅ Completed
 **Priority:** CRITICAL
-**Blocks:** Phase 2 production deployment
+**Shipped In:** v1.3.1
 
 ## Context
 
@@ -220,4 +221,91 @@ Before Phase 2 can be considered production-safe:
 These improvements are **blocking** for Phase 2 production deployment. The current implementation provides value (context signals in JSON), but the severity downgrading and suppression logic needs refinement to avoid false confidence.
 
 **Recommendation:** Ship Phase 2 with guard/sanitizer detection in JSON output, but **disable automatic severity downgrading** until these issues are resolved. Let users see the context signals and make their own decisions.
+
+---
+
+## Implementation Summary (v1.3.1)
+
+**Completed:** 2026-01-12
+
+### Changes Made
+
+1. **Issue #2 (Suppression) - FIXED ✅**
+   - Removed suppression logic from `check-performance.sh`
+   - Findings with guards+sanitizers now emit as LOW severity (not suppressed)
+   - Prevents false negatives from heuristic misattribution
+   - Users still get context signals for manual triage
+
+2. **Issue #4 (user_can) - FIXED ✅**
+   - Removed `user_can()` from guard detection in `false-positive-filters.sh`
+   - Only `current_user_can()` is now detected as a guard
+   - Reduces false confidence from non-guard capability checks
+
+3. **Issue #1 (Function Scope) - FIXED ✅**
+   - Implemented `get_function_scope_range()` helper function
+   - Guards now scoped to same function using brace counting
+   - Guards must appear BEFORE the superglobal access (not after)
+   - Prevents branch misattribution (guards in different if/else)
+   - Prevents cross-function misattribution
+
+4. **Issue #3 (Taint Propagation) - FIXED ✅**
+   - Added `is_variable_sanitized()` function
+   - Detects sanitized variable assignments: `$x = sanitize_text_field($_POST['x'])`
+   - Tracks sanitized variables within function scope
+   - Detects two-step sanitization: `$x = $_POST['x']; $x = sanitize($x);`
+   - Reduces false positives for common safe patterns
+
+5. **Issue #5 (Test Coverage) - FIXED ✅**
+   - Created `dist/tests/fixtures/phase2-branch-misattribution.php`
+   - Created `dist/tests/fixtures/phase2-sanitizer-multiline.php`
+   - Created `dist/tests/verify-phase2.1-improvements.sh`
+   - Comprehensive test coverage for all improvements
+
+### Files Modified
+
+- `dist/bin/check-performance.sh` (v1.3.1)
+  - Integrated variable sanitization tracking
+  - Removed suppression logic
+  - Added LOW severity for guarded+sanitized findings
+
+- `dist/bin/lib/false-positive-filters.sh` (v1.3.0)
+  - Added `get_function_scope_range()` function
+  - Enhanced `detect_guards()` with function scoping
+  - Added `is_variable_sanitized()` for taint propagation
+  - Removed `user_can()` from guard detection
+  - Fixed variable scope issues (explicit local declarations)
+
+- `CHANGELOG.md`
+  - Documented all Phase 2.1 changes
+
+### Results
+
+**Before Phase 2.1:**
+- Guards detected across function boundaries (false confidence)
+- Findings suppressed when guards+sanitizers detected (false negatives)
+- `user_can()` counted as guard (noise)
+- Missed multi-line sanitization patterns (false positives)
+
+**After Phase 2.1:**
+- Guards scoped to same function, must be before access
+- Findings always emitted (LOW severity if guarded+sanitized)
+- Only `current_user_can()` counted as guard
+- Detects variable sanitization patterns
+
+**Production Readiness:** Phase 2.1 significantly improves accuracy and reduces false confidence. Ready for production use with documented limitations.
+
+### Remaining Limitations
+
+- Function scope detection is heuristic-based (not full PHP parser)
+- Variable tracking is 1-step only (doesn't follow `$a = $b; $c = $a;`)
+- Doesn't handle array elements (`$data['key']`)
+- Branch detection is basic (doesn't parse full control flow)
+
+### Lessons Learned
+
+1. **Heuristics Need Constraints**: Window-based detection without scope constraints creates false confidence
+2. **Suppression is Dangerous**: Better to emit LOW severity than suppress and risk false negatives
+3. **Test Fixtures are Critical**: Edge cases like branch misattribution are easy to miss without explicit tests
+4. **Incremental Improvement**: Phase 2.1 doesn't need perfect parsing - scoped heuristics are good enough
+5. **Document Limitations**: Clear documentation of what the tool CAN'T do is as important as what it CAN do
 

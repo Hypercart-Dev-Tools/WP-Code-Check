@@ -1,10 +1,11 @@
-**STATUS:** Phase 2 Complete ✅ - Phase 3 Ready
+**STATUS:** Phase 2.1 Complete ✅ - Phase 3 Ready
 **Author:** GitHub Copilot (Chat GPT 5.2) + Augment Agent (Claude Sonnet 4.5)
 **PRIORITY**: High
 **Started:** 2026-01-12
 **Phase 1 Completed:** 2026-01-12
 **Phase 1 Improvements Completed:** 2026-01-12
 **Phase 2 Completed:** 2026-01-12
+**Phase 2.1 Completed:** 2026-01-12
 
 ## Context
 
@@ -91,16 +92,38 @@ Also, update changelog to reflect changes.
 - `dist/bin/lib/false-positive-filters.sh` (v1.2.0) - Added 3 new detection functions
 - `CHANGELOG.md` - Documented Phase 2 changes
 
-**Known Limitations (Requires Phase 2.1 Improvements):**
-⚠️ **CRITICAL:** The following issues must be addressed before Phase 2 is production-safe:
+### Phase 2.1 Results (2026-01-12)
 
-1. **Guard Misattribution** - Window-based detection can attribute guards to wrong access (different branch/function)
-2. **Suppression Too Aggressive** - Suppressing findings with guards+sanitizers risks false negatives
-3. **Single-Line Sanitizer Detection** - Misses `$x = sanitize_text_field($_GET['x']); use($x);` patterns
-4. **user_can() Too Noisy** - Overcounts guards; needs conditional context or removal
-5. **Missing Branch Test Cases** - Fixtures don't cover guard in different branch/function
+**Implementation (v1.3.1):**
+- ✅ **Issue #2 Fixed**: Removed suppression logic - guards+sanitizers now emit as LOW severity
+- ✅ **Issue #4 Fixed**: Removed `user_can()` from guard detection (only `current_user_can()` now)
+- ✅ **Issue #1 Fixed**: Function-scoped guard detection with `get_function_scope_range()`
+- ✅ **Issue #3 Fixed**: Basic taint propagation tracks sanitized variable assignments
+- ✅ **Issue #5 Fixed**: Comprehensive test fixtures for branch misattribution and multi-line sanitization
 
-**Recommendation:** Use Phase 2 for **context signals in JSON output only**. Disable automatic severity downgrading until Phase 2.1 improvements are complete. See `PROJECT/1-INBOX/PHASE2-QUALITY-IMPROVEMENTS.md` for detailed improvement plan.
+**Key Improvements:**
+- **No More Suppression**: Findings always emitted, even with guards+sanitizers (prevents false negatives)
+- **Function Scoping**: Guards must be in same function and BEFORE access (prevents branch misattribution)
+- **Variable Tracking**: Detects `$x = sanitize_text_field($_POST['x'])` patterns
+- **Reduced Noise**: Removed `user_can()` false confidence
+
+**Test Fixtures Created:**
+- `dist/tests/fixtures/phase2-branch-misattribution.php` - Guards in different branches/functions
+- `dist/tests/fixtures/phase2-sanitizer-multiline.php` - Multi-line sanitization patterns
+- `dist/tests/verify-phase2.1-improvements.sh` - Automated verification
+
+**Files Modified:**
+- `dist/bin/check-performance.sh` (v1.3.1) - Integrated variable sanitization tracking
+- `dist/bin/lib/false-positive-filters.sh` (v1.3.0) - Added function scope detection, enhanced guards/sanitizers
+- `CHANGELOG.md` - Documented Phase 2.1 changes
+
+**Remaining Limitations:**
+- Function scope detection is heuristic-based (not full PHP parser)
+- Variable tracking is 1-step only (doesn't follow `$a = $b; $c = $a;`)
+- Doesn't handle array elements (`$data['key']`)
+- Branch detection is basic (doesn't parse full control flow)
+
+**Production Readiness:** Phase 2.1 significantly improves accuracy and reduces false confidence. Ready for production use with documented limitations.
 
 ## Phase 1 — Reduce Obvious False Positives (Low Risk, High Impact)
 

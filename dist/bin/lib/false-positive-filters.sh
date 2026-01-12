@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 #
 # False Positive Filters Library
-# Version: 1.0.0
+# Version: 1.3.0
 #
 # Shared library for detecting and filtering false positive patterns
 # in WordPress code scanning.
 #
 # This library provides heuristic functions to identify code patterns
 # that should not be flagged as violations (comments, configuration, etc.)
+#
+# Phase 2.1 additions:
+# - Function scope detection (get_function_scope_range)
+# - Function-scoped guard detection
+# - Basic taint propagation for sanitizers
 #
 # Usage:
 #   source "path/to/false-positive-filters.sh"
@@ -135,32 +140,168 @@ is_html_or_rest_config() {
 }
 
 # ============================================================
+# FUNCTION SCOPE DETECTION (Phase 2.1)
+# ============================================================
+
+# Get the line range of the function containing a given line
+#
+# This function attempts to find the start and end of the PHP function
+# that contains the specified line number. It uses brace counting to
+# determine function boundaries.
+#
+# Algorithm:
+# 1. Scan backward to find "function" keyword
+# 2. Find opening brace after function declaration
+# 3. Count braces forward to find matching closing brace
+#
+# Limitations:
+# - Heuristic-based (not a full PHP parser)
+# - May be confused by braces in strings or comments
+# - Assumes standard formatting (function keyword on same/previous line as brace)
+# - Does not handle anonymous functions perfectly
+#
+# Returns: "start_line end_line" or empty string if not in function
+# Usage: scope=$(get_function_scope_range "$file" "$line_number")
+get_function_scope_range() {
+  local file="$1"
+  local line_num="$2"
+  local func_start
+  local func_end
+  local search_start
+  local brace_line
+  local brace_count
+  local total_lines
+  local i
+  local line_content
+  local open_count
+  local close_count
+
+  # Scan backward to find function declaration (max 100 lines)
+  func_start=""
+  search_start=$((line_num - 100))
+  [ "$search_start" -lt 1 ] && search_start=1
+
+  # Find the last "function" keyword before our line
+  func_start=$(sed -n "${search_start},${line_num}p" "$file" | \
+    grep -n "^[[:space:]]*function[[:space:]]" | \
+    tail -1 | \
+    cut -d: -f1)
+
+  if [ -z "$func_start" ]; then
+    # Not in a function
+    echo ""
+    return
+  fi
+
+  # Convert relative line number to absolute
+  func_start=$((search_start + func_start - 1))
+
+  # Find opening brace (should be within 5 lines of function keyword)
+  brace_line=""
+  for i in $(seq "$func_start" $((func_start + 5))); do
+    if sed -n "${i}p" "$file" | grep -q "{"; then
+      brace_line="$i"
+      break
+    fi
+  done
+
+  if [ -z "$brace_line" ]; then
+    # No opening brace found
+    echo ""
+    return
+  fi
+
+  # Count braces to find matching closing brace
+  brace_count=0
+  func_end=""
+  total_lines=$(wc -l < "$file")
+
+  for i in $(seq "$brace_line" "$total_lines"); do
+    line_content=$(sed -n "${i}p" "$file")
+
+    # Count opening braces
+    open_count=$(echo "$line_content" | grep -o "{" | wc -l | tr -d ' ')
+    brace_count=$((brace_count + open_count))
+
+    # Count closing braces
+    close_count=$(echo "$line_content" | grep -o "}" | wc -l | tr -d ' ')
+    brace_count=$((brace_count - close_count))
+
+    # If brace count returns to 0, we found the end
+    if [ "$brace_count" -eq 0 ]; then
+      func_end="$i"
+      break
+    fi
+  done
+
+  if [ -z "$func_end" ]; then
+    # Couldn't find end of function
+    echo ""
+    return
+  fi
+
+  # Return range
+  echo "$func_start $func_end"
+}
+
+# ============================================================
 # GUARD DETECTION (Phase 2)
 # ============================================================
 
 # Detect security guards (nonce checks, capability checks) near a line
 #
+# Phase 2.1 Enhancement (Issue #1 fix):
+# - Scoped to same function (uses get_function_scope_range)
+# - Only detects guards BEFORE the access line (not after)
+# - Prevents branch misattribution (guards in different if/else)
+#
 # This function scans backward from a given line to detect WordPress
 # security guards that protect superglobal access:
 # - Nonce verification: wp_verify_nonce, check_ajax_referer, check_admin_referer
-# - Capability checks: current_user_can, user_can
+# - Capability checks: current_user_can
+#
+# Note: user_can() is NOT detected (Phase 2.1 Issue #4 fix)
+# Reason: user_can($user_id, 'cap') checks OTHER users' capabilities,
+# not access control for current request. It's often used for display logic
+# or checking permissions of arbitrary users, not as a guard for the current
+# user's access. Detecting it creates false confidence (noise).
 #
 # Returns: Space-separated list of detected guards (empty if none)
-# Usage: guards=$(detect_guards "$file" "$line_number" "$scan_lines")
+# Usage: guards=$(detect_guards "$file" "$line_number")
 detect_guards() {
   local file="$1"
   local line_num="$2"
-  local scan_lines="${3:-20}"  # Default: scan 20 lines backward
 
   local guards=""
+  local start_line
+  local func_scope
 
-  # Calculate scan range
-  local start_line=$((line_num - scan_lines))
-  [ "$start_line" -lt 1 ] && start_line=1
+  # PHASE 2.1: Get function scope to limit search range
+  func_scope=$(get_function_scope_range "$file" "$line_num")
 
-  # Get context
-  local context
-  context=$(sed -n "${start_line},${line_num}p" "$file" 2>/dev/null || echo "")
+  if [ -z "$func_scope" ]; then
+    # Not in a function - fall back to window-based search
+    # (for top-level code, though this is rare in WordPress)
+    start_line=$((line_num - 20))
+    [ "$start_line" -lt 1 ] && start_line=1
+  else
+    # In a function - only search within function scope
+    # func_scope is "start end", extract start
+    start_line=$(echo "$func_scope" | cut -d' ' -f1)
+  fi
+
+  # PHASE 2.1: Only scan BEFORE the access line (not after)
+  # Guards after access are too late to protect it
+  end_line=$((line_num - 1))
+
+  if [ "$end_line" -lt "$start_line" ]; then
+    # Access is at the very start of function - no guards possible
+    echo ""
+    return
+  fi
+
+  # Get context (only lines BEFORE access)
+  context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || echo "")
 
   # Detect nonce checks
   if echo "$context" | grep -qE "wp_verify_nonce[[:space:]]*\\("; then
@@ -175,14 +316,12 @@ detect_guards() {
     guards="${guards}check_admin_referer "
   fi
 
-  # Detect capability checks
+  # Detect capability checks (current_user_can only)
   if echo "$context" | grep -qE "current_user_can[[:space:]]*\\("; then
     guards="${guards}current_user_can "
   fi
 
-  if echo "$context" | grep -qE "user_can[[:space:]]*\\("; then
-    guards="${guards}user_can "
-  fi
+  # Note: user_can() deliberately excluded (see function header comment)
 
   # Trim trailing space
   guards=$(echo "$guards" | sed 's/[[:space:]]*$//')
@@ -278,6 +417,135 @@ detect_sanitizers() {
   # Detect WooCommerce sanitizer
   if echo "$code" | grep -qE "wc_clean[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)\\["; then
     sanitizers="${sanitizers}wc_clean "
+  fi
+
+  # Trim trailing space
+  sanitizers=$(echo "$sanitizers" | sed 's/[[:space:]]*$//')
+
+  echo "$sanitizers"
+}
+
+# Check if a variable was sanitized earlier in the function
+#
+# Phase 2.1 Enhancement (Issue #3 fix):
+# Implements basic taint propagation to track sanitized variables.
+#
+# This function checks if a variable (e.g., $name, $email) was assigned
+# a sanitized value earlier in the same function. It detects patterns like:
+#   $name = sanitize_text_field($_POST['name']);
+#   $data = wp_unslash($_GET['data']);
+#
+# Then later uses of $name or $data are considered sanitized.
+#
+# Limitations:
+# - Only tracks 1-step assignments (doesn't follow $a = $b; $c = $a;)
+# - Function-scoped only (doesn't track across functions)
+# - Doesn't handle array elements ($data['key'])
+# - Doesn't handle reassignments that remove sanitization
+#
+# Returns: Space-separated list of sanitizers used (empty if not sanitized)
+# Usage: sanitizers=$(is_variable_sanitized "$file" "$line_num" "$variable_name")
+is_variable_sanitized() {
+  local file="$1"
+  local line_num="$2"
+  local var_name="$3"  # e.g., "name" (without $)
+  local func_scope
+  local start_line
+  local end_line
+
+  # Get function scope
+  func_scope=$(get_function_scope_range "$file" "$line_num")
+
+  if [ -z "$func_scope" ]; then
+    # Not in a function - can't track
+    echo ""
+    return
+  fi
+
+  # func_scope is "start end", extract start
+  start_line=$(echo "$func_scope" | cut -d' ' -f1)
+
+  # Only search BEFORE current line (not after)
+  end_line=$((line_num - 1))
+
+  if [ "$end_line" -lt "$start_line" ]; then
+    # At start of function - no prior assignments
+    echo ""
+    return
+  fi
+
+  # Get context (lines before current line in same function)
+  context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || echo "")
+
+  # Look for assignment pattern: $var_name = sanitizer(...$_GET/POST/REQUEST/COOKIE...)
+  # Pattern: \$var_name\s*=\s*sanitizer_function(...$_...)
+
+  sanitizers=""
+
+  # Check each sanitizer type
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*sanitize_text_field[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}sanitize_text_field "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*sanitize_email[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}sanitize_email "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*sanitize_key[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}sanitize_key "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*sanitize_url[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}sanitize_url "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*esc_url_raw[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}esc_url_raw "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*esc_url[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}esc_url "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*esc_html[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}esc_html "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*esc_attr[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}esc_attr "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*absint[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}absint "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*intval[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}intval "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*floatval[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}floatval "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*wp_unslash[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}wp_unslash "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*stripslashes_deep[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}stripslashes_deep "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*wc_clean[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)"; then
+    sanitizers="${sanitizers}wc_clean "
+  fi
+
+  # Also check for two-step sanitization: $var = $_POST['x']; $var = sanitize($var);
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*sanitize_text_field[[:space:]]*\\([[:space:]]*\\\$${var_name}"; then
+    sanitizers="${sanitizers}sanitize_text_field "
+  fi
+
+  if echo "$context" | grep -qE "\\\$${var_name}[[:space:]]*=[[:space:]]*sanitize_email[[:space:]]*\\([[:space:]]*\\\$${var_name}"; then
+    sanitizers="${sanitizers}sanitize_email "
   fi
 
   # Trim trailing space

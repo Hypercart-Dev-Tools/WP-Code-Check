@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.0
+# Version: 1.3.1
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -2700,8 +2700,23 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     fi
 
     # PHASE 2 ENHANCEMENT: Detect guards and sanitizers
-    guards=$(detect_guards "$file" "$lineno" 20)
+    guards=$(detect_guards "$file" "$lineno")
     sanitizers=$(detect_sanitizers "$code")
+
+    # PHASE 2.1 ENHANCEMENT (Issue #3): Check if variable was sanitized earlier
+    # Extract variable name from code (e.g., $name, $email, $data)
+    # Pattern: echo $var, return $var, use_function($var), etc.
+    if [ -z "$sanitizers" ]; then
+      # No inline sanitizer found - check if variable was sanitized earlier
+      var_name=$(echo "$code" | grep -oE '\$[a-zA-Z_][a-zA-Z0-9_]*' | head -1 | sed 's/^\$//')
+      if [ -n "$var_name" ]; then
+        # Check if this variable was sanitized in a prior assignment
+        var_sanitizers=$(is_variable_sanitized "$file" "$lineno" "$var_name")
+        if [ -n "$var_sanitizers" ]; then
+          sanitizers="$var_sanitizers"
+        fi
+      fi
+    fi
 
     # Special case: $_POST used inside nonce verification function is SAFE
     # Example: wp_verify_nonce( $_POST['nonce'], 'action' )
@@ -2720,17 +2735,17 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
       fi
     fi
 
-    # PHASE 2: Skip if BOTH guards AND sanitizers are present (fully protected)
-    if [ -n "$guards" ] && [ -n "$sanitizers" ]; then
-      # Fully protected: has nonce/capability check AND sanitization
-      continue
-    fi
-
-    # PHASE 2: Downgrade severity based on context
+    # PHASE 2.1: Downgrade severity based on context (NEVER suppress)
+    # Issue #2 Fix: Changed from suppression to LOW severity with confidence field
     adjusted_severity="$UNSANITIZED_SEVERITY"
     context_note=""
 
-    if [ -n "$guards" ] && [ -z "$sanitizers" ]; then
+    if [ -n "$guards" ] && [ -n "$sanitizers" ]; then
+      # Has BOTH guards and sanitizers - downgrade to LOW (was: suppress)
+      # Note: Still emit finding because heuristics may misattribute guards/sanitizers
+      adjusted_severity="LOW"
+      context_note=" (has guards: $guards; sanitizers: $sanitizers)"
+    elif [ -n "$guards" ] && [ -z "$sanitizers" ]; then
       # Has guards but no sanitizers - downgrade one level
       case "$UNSANITIZED_SEVERITY" in
         CRITICAL) adjusted_severity="HIGH" ;;
