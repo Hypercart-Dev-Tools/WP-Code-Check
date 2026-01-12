@@ -120,62 +120,55 @@ jobs:
             echo "✅ Performance checks completed successfully"
           fi
 
-  # ============================================================================
-  # TEMPORARILY DISABLED: Test Fixtures Validation
-  # ============================================================================
-  # Reason: Tests are hanging in CI environment (pattern library manager issue)
-  # Date: 2026-01-10
-  # TODO: Re-enable after fixing Docker-based testing
-  # Issue: Tests work locally but hang in GitHub Actions Ubuntu environment
-  # ============================================================================
+  validate-test-fixtures:
+    name: Validate Test Fixtures
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
-  # validate-test-fixtures:
-  #   name: Validate Test Fixtures
-  #   runs-on: ubuntu-latest
-  #
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Install dependencies
-  #       run: sudo apt-get update && sudo apt-get install -y jq
-  #
-  #     - name: Environment snapshot
-  #       run: |
-  #         echo "=== CI Environment Diagnostic ==="
-  #         echo "OS: $(uname -a)"
-  #         echo "Shell: $SHELL ($BASH_VERSION)"
-  #         echo "jq: $(command -v jq && jq --version || echo 'NOT INSTALLED')"
-  #         echo "perl: $(perl -v | head -2)"
-  #         echo "grep: $(grep --version | head -1)"
-  #         echo "================================="
-  #
-  #     - name: Make scripts executable
-  #       run: |
-  #         chmod +x ./dist/bin/check-performance.sh
-  #         chmod +x ./dist/tests/run-fixture-tests.sh
-  #
-  #     - name: Run automated fixture tests
-  #       run: |
-  #         echo "Running automated fixture validation..."
-  #         cd dist && ./tests/run-fixture-tests.sh
-  #
-  #     - name: Test antipatterns detection (legacy check)
-  #       run: |
-  #         echo "Testing that antipatterns are correctly detected..."
-  #         if ./dist/bin/check-performance.sh --paths "dist/tests/fixtures/antipatterns.php" --no-log; then
-  #           echo "::error::Antipatterns should have been detected but weren't!"
-  #           exit 1
-  #         else
-  #           echo "✅ Antipatterns correctly detected (expected failure)"
-  #           exit 0
-  #         fi
-  #
-  #     - name: Test clean code passes
-  #       run: |
-  #         echo "Testing that clean code passes checks..."
-  #         # Clean code might have N+1 warnings, so we don't use --strict
-  #         ./dist/bin/check-performance.sh --paths "dist/tests/fixtures/clean-code.php" --no-log || {
-  #           echo "::warning::Clean code fixture has warnings (this is acceptable)"
-  #         }
-  #         echo "✅ Clean code validation complete"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Environment snapshot
+        run: |
+          echo "=== CI Environment Diagnostic ==="
+          echo "OS: $(uname -a)"
+          echo "Shell: $SHELL ($BASH_VERSION)"
+          echo "jq: $(command -v jq && jq --version || echo 'NOT INSTALLED')"
+          echo "perl: $(perl -v | head -2)"
+          echo "grep: $(grep --version | head -1)"
+          echo "================================="
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ./dist/bin/check-performance.sh
+          chmod +x ./dist/tests/run-fixture-tests.sh
+
+      - name: Run automated fixture tests
+        run: |
+          echo "Running automated fixture validation..."
+          cd dist && ./tests/run-fixture-tests.sh
+
+      - name: Test antipatterns detection (legacy check)
+        run: |
+          echo "Testing that antipatterns are correctly detected..."
+          if ./dist/bin/check-performance.sh --paths "dist/tests/fixtures/antipatterns.php" --no-log; then
+            echo "::error::Antipatterns should have been detected but weren't!"
+            exit 1
+          else
+            echo "✅ Antipatterns correctly detected (expected failure)"
+            exit 0
+          fi
+
+      - name: Test clean code passes
+        run: |
+          echo "Testing that clean code passes checks..."
+          # Clean code might have N+1 warnings, so we don't use --strict
+          ./dist/bin/check-performance.sh --paths "dist/tests/fixtures/clean-code.php" --no-log || {
+            echo "::warning::Clean code fixture has warnings (this is acceptable)"
+          }
+          echo "✅ Clean code validation complete"
