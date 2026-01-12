@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-01-12
+
+### Added
+- **Phase 2: Context Signals (Guards + Sanitizers)**
+  - **Guard Detection**: Automatically detects security guards near superglobal access
+    - Detects nonce checks: `wp_verify_nonce()`, `check_ajax_referer()`, `check_admin_referer()`
+    - Detects capability checks: `current_user_can()`, `user_can()`
+    - Scans 20 lines backward from finding to detect guards
+    - Guards are included in JSON output as array: `"guards":["wp_verify_nonce","current_user_can"]`
+  - **Sanitizer Detection**: Automatically detects sanitizers wrapping superglobal reads
+    - Detects `sanitize_*` functions: `sanitize_text_field()`, `sanitize_email()`, `sanitize_key()`, `sanitize_url()`
+    - Detects `esc_*` functions: `esc_url_raw()`, `esc_url()`, `esc_html()`, `esc_attr()`
+    - Detects type casters: `absint()`, `intval()`, `floatval()`
+    - Detects slashing functions: `wp_unslash()`, `stripslashes_deep()`
+    - Detects WooCommerce sanitizer: `wc_clean()`
+    - Sanitizers are included in JSON output as array: `"sanitizers":["sanitize_text_field","absint"]`
+  - **SQL Safety Detection**: Distinguishes safe literal SQL from unsafe concatenated SQL
+    - Safe literal SQL (only wpdb identifiers): Downgraded to LOW/MEDIUM (best-practice)
+    - Unsafe concatenated SQL (user input): Remains HIGH/CRITICAL (security)
+    - Detects superglobal concatenation: `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`
+    - Detects variable concatenation vs safe wpdb identifiers
+  - **New Helper Functions** (in `dist/bin/lib/false-positive-filters.sh` v1.2.0)
+    - `detect_guards()`: Scans backward to find security guards
+    - `detect_sanitizers()`: Analyzes code for sanitization functions
+    - `detect_sql_safety()`: Determines if SQL is safe literal or potentially tainted
+
+### Changed
+- **Enhanced JSON Output Schema**
+  - All findings now include `"guards":[]` and `"sanitizers":[]` arrays
+  - Provides context for faster triage and prioritization
+  - Enables automated risk assessment based on protective measures
+- **Intelligent Severity Downgrading**
+  - **Guards only**: Severity downgraded one level (e.g., HIGH → MEDIUM)
+  - **Sanitizers only**: Severity downgraded one level (e.g., HIGH → MEDIUM)
+  - **Guards + Sanitizers**: Finding suppressed (fully protected)
+  - **Safe literal SQL**: Downgraded to LOW/MEDIUM with "(literal SQL - best practice)" note
+  - **No guards/sanitizers**: Original severity maintained
+- **Improved Triage Messages**
+  - Findings include context notes: "(has guards: wp_verify_nonce)"
+  - Findings include context notes: "(has sanitizers: sanitize_text_field)"
+  - SQL findings include: "(literal SQL - best practice)" for safe queries
+- **Updated `add_json_finding()` Function**
+  - Now accepts optional 8th parameter: `guards` (space-separated list)
+  - Now accepts optional 9th parameter: `sanitizers` (space-separated list)
+  - Backward compatible: existing calls work without modification
+
+### Fixed
+- **Removed `local` keyword from loop contexts** (bash compatibility)
+  - Fixed "local: can only be used in a function" errors
+  - Variables in while loops no longer use `local` keyword
+- **Improved superglobal detection accuracy**
+  - Guards and sanitizers now properly detected and reported
+  - Fully protected code (guards + sanitizers) no longer flagged
+  - Context-aware severity adjustment reduces false positive noise
+
+### Testing
+- **Created Phase 2 Test Fixtures**
+  - `dist/tests/fixtures/phase2-guards-detection.php`: Tests guard detection (nonce, capability checks)
+  - `dist/tests/fixtures/phase2-wpdb-safety.php`: Tests SQL safety detection (literal vs concatenated)
+- **Created Phase 2 Verification Script**
+  - `dist/tests/verify-phase2-context-signals.sh`: Automated testing for Phase 2 features
+  - Verifies guards array in JSON output
+  - Verifies sanitizers array in JSON output
+  - Verifies SQL safety detection and severity downgrading
+
 ## [1.2.4] - 2026-01-12
 
 ### Added

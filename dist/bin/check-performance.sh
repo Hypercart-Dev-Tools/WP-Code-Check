@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.2.4
+# Version: 1.3.0
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -788,7 +788,8 @@ fi
 # ============================================================================
 
 # Add a finding to the JSON findings array
-# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet"
+# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"]
+# Phase 2 Enhancement: Optional guards and sanitizers parameters for context-aware findings
 add_json_finding() {
   local rule_id="$1"
   local severity="$2"
@@ -797,6 +798,8 @@ add_json_finding() {
   local line="$5"
   local message="$6"
   local code="$7"
+  local guards="${8:-}"      # Optional: space-separated list of detected guards
+  local sanitizers="${9:-}"  # Optional: space-separated list of detected sanitizers
 
   # Truncate code snippet to 200 characters for display
   local truncated_code="$code"
@@ -848,8 +851,54 @@ add_json_finding() {
     fi
   fi
 
+  # Build guards array (Phase 2)
+  local guards_json="[]"
+  if [ -n "$guards" ]; then
+    local guard_items=()
+    for guard in $guards; do
+      guard_items+=("\"$(json_escape "$guard")\"")
+    done
+
+    if [ ${#guard_items[@]} -gt 0 ]; then
+      local first=true
+      guards_json="["
+      for item in "${guard_items[@]}"; do
+        if [ "$first" = true ]; then
+          guards_json="${guards_json}${item}"
+          first=false
+        else
+          guards_json="${guards_json},${item}"
+        fi
+      done
+      guards_json="${guards_json}]"
+    fi
+  fi
+
+  # Build sanitizers array (Phase 2)
+  local sanitizers_json="[]"
+  if [ -n "$sanitizers" ]; then
+    local sanitizer_items=()
+    for sanitizer in $sanitizers; do
+      sanitizer_items+=("\"$(json_escape "$sanitizer")\"")
+    done
+
+    if [ ${#sanitizer_items[@]} -gt 0 ]; then
+      local first=true
+      sanitizers_json="["
+      for item in "${sanitizer_items[@]}"; do
+        if [ "$first" = true ]; then
+          sanitizers_json="${sanitizers_json}${item}"
+          first=false
+        else
+          sanitizers_json="${sanitizers_json},${item}"
+        fi
+      done
+      sanitizers_json="${sanitizers_json}]"
+    fi
+  fi
+
   local finding=$(cat <<EOF
-{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json}
+{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json}
 EOF
 )
   JSON_FINDINGS+=("$finding")
@@ -2509,27 +2558,30 @@ if [ -n "$SUPERGLOBAL_MATCHES" ]; then
       continue
     fi
 
-    # FALSE POSITIVE REDUCTION: Check for nonce verification near the match,
-    # clamped to the current function/method to avoid cross-function leakage.
-    range=$(get_function_scope_range "$file" "$lineno" 30)
-    function_start=${range%%:*}
-    start_line=$((lineno - 20))
-    [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
-    [ "$start_line" -lt 1 ] && start_line=1
-    context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
+    # PHASE 2 ENHANCEMENT: Detect security guards (nonce checks, capability checks)
+    guards=$(detect_guards "$file" "$lineno" 20)
 
-    # If nonce verification exists, suppress this finding (it's protected)
-    if echo "$context" | grep -qE "wp_verify_nonce[[:space:]]*\\(|check_admin_referer[[:space:]]*\\(|wp_nonce_field[[:space:]]*\\("; then
-      continue
-    fi
+    # If guards are present, still report but with context for triage
+    # (Previously we suppressed entirely; now we report with guard info)
 
     if should_suppress_finding "spo-002-superglobals" "$file"; then
       continue
     fi
 
+    # PHASE 2: Downgrade severity if guards are present
+    adjusted_severity="$SUPERGLOBAL_SEVERITY"
+    if [ -n "$guards" ]; then
+      # Downgrade from HIGH to MEDIUM, or CRITICAL to HIGH
+      case "$SUPERGLOBAL_SEVERITY" in
+        CRITICAL) adjusted_severity="HIGH" ;;
+        HIGH)     adjusted_severity="MEDIUM" ;;
+        MEDIUM)   adjusted_severity="LOW" ;;
+      esac
+    fi
+
     SUPERGLOBAL_FAILED=true
     ((SUPERGLOBAL_FINDING_COUNT++))
-    add_json_finding "spo-002-superglobals" "error" "$SUPERGLOBAL_SEVERITY" "$file" "$lineno" "Direct superglobal manipulation" "$code"
+    add_json_finding "spo-002-superglobals" "error" "$adjusted_severity" "$file" "$lineno" "Direct superglobal manipulation" "$code" "$guards" ""
 
     if [ -z "$SUPERGLOBAL_VISIBLE" ]; then
       SUPERGLOBAL_VISIBLE="$match"
@@ -2647,63 +2699,58 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
       continue
     fi
 
-    range=$(get_function_scope_range "$file" "$lineno" 30)
-    function_start=${range%%:*}
-
-    # CONTEXT-AWARE DETECTION: Check for nonce verification in previous 10 lines
-    # If nonce check found AND superglobal is sanitized, skip this finding
-    # Also skip if $_POST is used WITHIN nonce verification function itself
-    # Enhancement v1.0.93: Also detect strict comparison to literals as implicit sanitization
-    has_nonce_protection=false
+    # PHASE 2 ENHANCEMENT: Detect guards and sanitizers
+    guards=$(detect_guards "$file" "$lineno" 20)
+    sanitizers=$(detect_sanitizers "$code")
 
     # Special case: $_POST used inside nonce verification function is SAFE
     # Example: wp_verify_nonce( $_POST['nonce'], 'action' )
     if echo "$code" | grep -qE "(check_ajax_referer|wp_verify_nonce|check_admin_referer)[[:space:]]*\([^)]*\\\$_(GET|POST|REQUEST)\["; then
-      has_nonce_protection=true
+      # This is safe - superglobal is being passed to nonce verification
+      continue
     fi
 
     # FALSE POSITIVE REDUCTION: Detect strict comparison to literals (boolean flags)
     # Pattern: isset( $_POST['key'] ) && $_POST['key'] === '1'
     # This is safe for boolean flags - value is constrained to literal
     if echo "$code" | grep -qE "\\\$_(GET|POST|REQUEST)\[[^]]*\][[:space:]]*===[[:space:]]*['\"][^'\"]*['\"]"; then
-      # Check if nonce verification exists near this usage, clamped to function scope
-      start_line=$((lineno - 20))
-      [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
-      [ "$start_line" -lt 1 ] && start_line=1
-      context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
-
-      if echo "$context" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
-        # Strict comparison to literal + nonce verification = SAFE
-        has_nonce_protection=true
+      if [ -n "$guards" ]; then
+        # Strict comparison to literal + guards = SAFE
+        continue
       fi
     fi
 
-    if [ "$has_nonce_protection" = false ]; then
-      start_line=$((lineno - 10))
-      [ "$start_line" -lt "$function_start" ] && start_line="$function_start"
-      [ "$start_line" -lt 1 ] && start_line=1
-
-      # Get context (10 lines before current line)
-      context=$(sed -n "${start_line},${lineno}p" "$file" 2>/dev/null || true)
-
-      # Check for nonce verification functions
-      if echo "$context" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
-        # Nonce check found - now verify the current line has sanitization
-        if echo "$code" | grep -qE "sanitize_|esc_|absint|intval|floatval|wc_clean"; then
-          # This is SAFE: nonce verified AND sanitized
-          has_nonce_protection=true
-        fi
-      fi
-    fi
-
-    # Skip if protected by nonce + sanitization
-    if [ "$has_nonce_protection" = true ]; then
+    # PHASE 2: Skip if BOTH guards AND sanitizers are present (fully protected)
+    if [ -n "$guards" ] && [ -n "$sanitizers" ]; then
+      # Fully protected: has nonce/capability check AND sanitization
       continue
+    fi
+
+    # PHASE 2: Downgrade severity based on context
+    adjusted_severity="$UNSANITIZED_SEVERITY"
+    context_note=""
+
+    if [ -n "$guards" ] && [ -z "$sanitizers" ]; then
+      # Has guards but no sanitizers - downgrade one level
+      case "$UNSANITIZED_SEVERITY" in
+        CRITICAL) adjusted_severity="HIGH" ;;
+        HIGH)     adjusted_severity="MEDIUM" ;;
+        MEDIUM)   adjusted_severity="LOW" ;;
+      esac
+      context_note=" (has guards: $guards)"
+    elif [ -z "$guards" ] && [ -n "$sanitizers" ]; then
+      # Has sanitizers but no guards - downgrade one level
+      case "$UNSANITIZED_SEVERITY" in
+        CRITICAL) adjusted_severity="HIGH" ;;
+        HIGH)     adjusted_severity="MEDIUM" ;;
+        MEDIUM)   adjusted_severity="LOW" ;;
+      esac
+      context_note=" (has sanitizers: $sanitizers)"
     fi
 
     UNSANITIZED_FAILED=true
     ((UNSANITIZED_FINDING_COUNT++))
-    add_json_finding "unsanitized-superglobal-read" "error" "$UNSANITIZED_SEVERITY" "$file" "$lineno" "Unsanitized superglobal access" "$code"
+    add_json_finding "unsanitized-superglobal-read" "error" "$adjusted_severity" "$file" "$lineno" "Unsanitized superglobal access${context_note}" "$code" "$guards" "$sanitizers"
 
     if [ -z "$UNSANITIZED_VISIBLE" ]; then
       UNSANITIZED_VISIBLE="$match"
@@ -2810,9 +2857,31 @@ if [ -n "$WPDB_MATCHES" ]; then
       continue
     fi
 
+    # PHASE 2 ENHANCEMENT: Detect if SQL is safe literal vs concatenated with user input
+    sql_safety=$(detect_sql_safety "$code")
+
+    adjusted_severity="$WPDB_SEVERITY"
+    category="security"
+
+    if [ "$sql_safety" = "safe" ]; then
+      # Safe literal SQL - downgrade to best-practice severity
+      case "$WPDB_SEVERITY" in
+        CRITICAL) adjusted_severity="MEDIUM" ;;
+        HIGH)     adjusted_severity="LOW" ;;
+        MEDIUM)   adjusted_severity="LOW" ;;
+      esac
+      category="best-practice"
+    fi
+
     WPDB_FAILED=true
     ((WPDB_FINDING_COUNT++))
-    add_json_finding "wpdb-query-no-prepare" "error" "$WPDB_SEVERITY" "$file" "$lineno" "Direct database query without \$wpdb->prepare()" "$code"
+
+    message="Direct database query without \$wpdb->prepare()"
+    if [ "$category" = "best-practice" ]; then
+      message="$message (literal SQL - best practice)"
+    fi
+
+    add_json_finding "wpdb-query-no-prepare" "error" "$adjusted_severity" "$file" "$lineno" "$message" "$code"
 
     if [ -z "$WPDB_VISIBLE" ]; then
       WPDB_VISIBLE="$match"

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-12T04:53:43Z",
+  "generated": "2026-01-12T05:32:54Z",
   "summary": {
     "total_patterns": 29,
     "enabled": 29,
@@ -20,7 +20,7 @@
       "nodejs": 4,
       "javascript": 1
     },
-    "mitigation_detection_enabled": 4,
+    "mitigation_detection_enabled": 6,
     "heuristic_patterns": 10,
     "definitive_patterns": 19
   },
@@ -343,7 +343,7 @@
   "description": "Direct access to $_GET, $_POST, or $_REQUEST without sanitization functions. Unlike the isset-bypass pattern, this catches ANY unsanitized access regardless of isset/empty checks.",
   "detection_type": "direct",
   "pattern_type": "php",
-  "mitigation_detection": false,
+  "mitigation_detection": true,
   "heuristic": false,
   "file": "unsanitized-superglobal-read.json"
 },
@@ -427,7 +427,7 @@
   "description": "Detects $wpdb->query(), get_var(), get_row(), get_results(), or get_col() called without $wpdb->prepare() wrapper, creating SQL injection vulnerabilities.",
   "detection_type": "direct",
   "pattern_type": "php",
-  "mitigation_detection": false,
+  "mitigation_detection": true,
   "heuristic": false,
   "file": "wpdb-query-no-prepare.json"
 }
