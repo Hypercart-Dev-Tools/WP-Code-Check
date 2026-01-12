@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.2.1
+# Version: 1.2.4
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -49,6 +49,9 @@ source "$LIB_DIR/colors.sh"
 # shellcheck source=dist/bin/lib/common-helpers.sh
 source "$LIB_DIR/common-helpers.sh"
 
+# shellcheck source=dist/bin/lib/false-positive-filters.sh
+source "$LIB_DIR/false-positive-filters.sh"
+
 # shellcheck source=dist/lib/pattern-loader.sh
 source "$REPO_ROOT/lib/pattern-loader.sh"
 
@@ -58,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.2.2"
+SCRIPT_VERSION="1.2.4"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -70,6 +73,9 @@ SCRIPT_VERSION="1.2.2"
 # - public function foo() {}
 # - private static function foo() {}
 # - final protected function foo() {}
+#
+# NOTE: Comment detection and false positive filtering functions have been
+# moved to dist/bin/lib/false-positive-filters.sh (sourced above)
 #
 # Usage: get_function_scope_range "$file" "$lineno" [fallback_lines]
 # Output: "start:end"
@@ -2492,6 +2498,17 @@ if [ -n "$SUPERGLOBAL_MATCHES" ]; then
       continue
     fi
 
+    # PHASE 1 ENHANCEMENT: Skip if line is in comment/docblock
+    if is_line_in_comment "$file" "$lineno"; then
+      continue
+    fi
+
+    # PHASE 1 ENHANCEMENT: Skip HTML forms and REST route configs
+    # These are not actual superglobal access
+    if is_html_or_rest_config "$code"; then
+      continue
+    fi
+
     # FALSE POSITIVE REDUCTION: Check for nonce verification near the match,
     # clamped to the current function/method to avoid cross-function leakage.
     range=$(get_function_scope_range "$file" "$lineno" 30)
@@ -2613,6 +2630,16 @@ if [ -n "$UNSANITIZED_MATCHES" ]; then
     code=$(echo "$match" | cut -d: -f3-)
 
     if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    # PHASE 1 ENHANCEMENT: Skip if line is in comment/docblock
+    if is_line_in_comment "$file" "$lineno"; then
+      continue
+    fi
+
+    # PHASE 1 ENHANCEMENT: Skip HTML forms and REST route configs
+    if is_html_or_rest_config "$code"; then
       continue
     fi
 
@@ -5020,6 +5047,12 @@ if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
 
     # Check if line number is numeric
     if ! [[ "$line_num" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+
+    # PHASE 1 ENHANCEMENT: Skip if line is in comment/docblock
+    # This eliminates false positives from PHPDoc @uses annotations
+    if is_line_in_comment "$file" "$line_num"; then
       continue
     fi
 
