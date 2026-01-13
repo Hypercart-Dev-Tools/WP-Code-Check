@@ -18,6 +18,12 @@ PROJECT_PATH=''
 NAME=''
 VERSION=''
 
+# GitHub repository (OPTIONAL)
+# Used for automated GitHub issue creation
+# Format: owner/repo (e.g., binoidthemes/universal-child-theme-oct-2024)
+# Or full URL: https://github.com/owner/repo
+# GITHUB_REPO=''
+
 # ============================================================
 # COMMON OPTIONS
 # ============================================================

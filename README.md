@@ -166,6 +166,30 @@ Validate findings and identify false positives with AI assistance:
 
 See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for detailed triage workflow.
 
+### 🎫 **GitHub Issue Creation**
+
+Automatically create GitHub issues from scan results with AI triage data:
+
+```bash
+# Create issue from latest scan
+./dist/bin/create-github-issue.sh \
+  --scan-id 2026-01-12-155649-UTC \
+  --repo owner/repo
+
+# Or use template's GitHub repo
+./dist/bin/create-github-issue.sh --scan-id 2026-01-12-155649-UTC
+```
+
+**Features:**
+- ✅ **Auto-formatted Issues** - Clean, actionable GitHub issues with checkboxes
+- ✅ **AI Triage Integration** - Shows confirmed issues vs. needs review
+- ✅ **Template Integration** - Reads GitHub repo from project templates
+- ✅ **Interactive Preview** - Review before creating the issue
+
+**Requirements:**
+- GitHub CLI (`gh`) installed and authenticated
+- Scan with AI triage data (`--ai-triage` flag)
+
 ---
 
 ## 🛠️ Tools Included
@@ -178,6 +202,7 @@ WP Code Check is a **complete code quality suite** with multiple specialized too
 |------|------|---------|-------|
 | **Quick Scanner** | Bash | 30+ WordPress antipatterns | <5s |
 | **JSON to HTML Converter** | Python | Beautiful HTML reports from scan logs | <1s |
+| **GitHub Issue Creator** | Bash | Auto-create GitHub issues from scan results | <2s |
 | **Slack Integration** | Bash | CI/CD notifications | Instant |
 | **Baseline Manager** | Built-in | Track technical debt over time | N/A |
 | **Project Templates** | Built-in | Save scan configurations | N/A |

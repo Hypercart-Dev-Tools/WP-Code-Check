@@ -8,8 +8,9 @@ Complete end-to-end workflow:
 3. **Phase 1c**: Run scan using template or direct path
 4. **Phase 2**: AI-assisted triage of findings
    
-IN PROGRESS - NOT READY YET:
-5. **Phase 3**: Send AI confirmed issues into GitHub issues via GitHub CLI
+**IN PROGRESS - NOT READY YET:**
+5. **Phase 3**: Send AI confirmed issues into a single GitHub issue via GitHub CLI
+This will require users to setup GitHub CLI (separately from GH desktop app) and authenticate their GitHub account 
 
 ### End-to-End Execution Mode
 
@@ -86,6 +87,16 @@ User creates a new `.txt` file in `dist/TEMPLATES/` with just a path, or asks yo
   ```
 - Extract `Plugin Name` and `Version`
 
+**Step 2b: Detect GitHub repository (OPTIONAL)**
+- Check if the plugin/theme has a GitHub repository
+- Look for common indicators:
+  - `readme.txt` or `README.md` with GitHub links
+  - Plugin header with `Plugin URI:` or `Theme URI:` pointing to GitHub
+  - `.git` folder (check remote URL with `git config --get remote.origin.url`)
+- If found, extract the `owner/repo` format (e.g., `gravityforms/gravityforms`)
+- If not found or uncertain, leave `GITHUB_REPO` commented out
+- **DO NOT guess or make up repository URLs**
+
 **Step 3: Generate the template** using this structure:
 ```bash
 # WP Code Check - Project Configuration Template
@@ -99,6 +110,12 @@ PROJECT_NAME=gravityforms
 PROJECT_PATH='/Users/noelsaw/Local Sites/my-site/app/public/wp-content/plugins/gravityforms'
 NAME='Gravity Forms'
 VERSION='2.7.1'
+
+# GitHub repository (OPTIONAL)
+# Used for automated GitHub issue creation
+# Format: owner/repo (e.g., gravityforms/gravityforms)
+# Or full URL: https://github.com/owner/repo
+# GITHUB_REPO=''
 
 # ============================================================
 # COMMON OPTIONS

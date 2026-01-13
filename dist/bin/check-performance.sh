@@ -5544,6 +5544,13 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
       echo "⚠ HTML report generation skipped (python3 not found)" > /dev/tty
       echo "   Install Python 3 to enable HTML reports" > /dev/tty
     fi
+
+    # Show GitHub issue creation hint if gh CLI is available and scan has AI triage data
+    if command -v gh &> /dev/null && jq -e '.ai_triage' "$LOG_FILE" > /dev/null 2>&1; then
+      echo "" > /dev/tty
+      echo "💡 Create GitHub issue from this scan:" > /dev/tty
+      echo "   $SCRIPT_DIR/create-github-issue.sh --scan-id $REPORT_TIMESTAMP --repo owner/repo" > /dev/tty
+    fi
   fi
 else
   # Summary (text mode)

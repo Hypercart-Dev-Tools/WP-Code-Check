@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-01-13
+
+### Added
+- **GitHub Issue Creation Tool** (`dist/bin/create-github-issue.sh`)
+  - Automatically create GitHub issues from scan results with AI triage data
+  - Interactive preview before creating issues
+  - Supports both `--repo owner/repo` flag and template-based repo detection
+  - Generates clean, actionable issues with:
+    - Scan metadata (plugin/theme name, version, scanner version)
+    - Confirmed issues section with checkboxes
+    - Needs review section with confidence levels
+    - Links to full HTML and JSON reports
+  - Requires GitHub CLI (`gh`) installed and authenticated
+  - Uses `--body-file` for reliable issue creation with large bodies
+
+### Changed
+- **README.md**: Added GitHub Issue Creator to tools table and usage documentation
+- **Template Support**: Templates now support optional `GITHUB_REPO` field for automated issue creation
+
 ## [1.3.1] - 2026-01-12
 
 ### Fixed
