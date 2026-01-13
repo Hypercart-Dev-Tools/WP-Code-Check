@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **README.md**: Added GitHub Issue Creator to tools table and usage documentation
 - **Template Support**: Templates now support optional `GITHUB_REPO` field for automated issue creation
+- **GitHub Issue Footer**: Changed from broken relative links to local file paths in code blocks for better usability
+- **GitHub Issue Creator**: Made `GITHUB_REPO` truly optional - script will generate issue body without creating the issue if no repo is specified
+- **Issue Persistence**: When no GitHub repo is specified, issue bodies are now saved to `dist/issues/GH-issue-{SCAN_ID}.md` for manual copy/paste to GitHub or project management apps
+- **AI Instructions**: Updated `dist/TEMPLATES/_AI_INSTRUCTIONS.md` with complete Phase 3 (GitHub Issue Creation) workflow documentation
 
 ## [1.3.1] - 2026-01-12
 

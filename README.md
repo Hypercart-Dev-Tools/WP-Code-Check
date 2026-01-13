@@ -171,23 +171,30 @@ See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for deta
 Automatically create GitHub issues from scan results with AI triage data:
 
 ```bash
-# Create issue from latest scan
+# Create issue from latest scan (specify repo)
 ./dist/bin/create-github-issue.sh \
   --scan-id 2026-01-12-155649-UTC \
   --repo owner/repo
 
-# Or use template's GitHub repo
+# Or use template's GitHub repo (if GITHUB_REPO is set in template)
 ./dist/bin/create-github-issue.sh --scan-id 2026-01-12-155649-UTC
+
+# Generate issue body without creating (no repo needed)
+# Useful for manual issue creation or when repo is not specified
+./dist/bin/create-github-issue.sh --scan-id 2026-01-12-155649-UTC
+# → Saves to dist/issues/GH-issue-2026-01-12-155649-UTC.md
 ```
 
 **Features:**
 - ✅ **Auto-formatted Issues** - Clean, actionable GitHub issues with checkboxes
 - ✅ **AI Triage Integration** - Shows confirmed issues vs. needs review
-- ✅ **Template Integration** - Reads GitHub repo from project templates
+- ✅ **Template Integration** - Reads GitHub repo from project templates (optional)
 - ✅ **Interactive Preview** - Review before creating the issue
+- ✅ **Graceful Degradation** - Works without GitHub repo (generates issue body only)
+- ✅ **Persistent Issue Files** - Saves to `dist/issues/` with matching filename pattern for easy manual copy/paste
 
 **Requirements:**
-- GitHub CLI (`gh`) installed and authenticated
+- GitHub CLI (`gh`) installed and authenticated (only for creating issues)
 - Scan with AI triage data (`--ai-triage` flag)
 
 ---
@@ -217,6 +224,24 @@ WP Code Check is a **complete code quality suite** with multiple specialized too
 - **Fast CI/CD**: Quick Scanner only (zero dependencies, stable)
 - **Deep Review**: Quick Scanner + Golden Rules (experimental)
 - **Legacy Audit**: Quick Scanner + Baseline + Golden Rules (experimental)
+
+### Output Directories
+
+All scan outputs are organized in the `dist/` directory:
+
+| Directory | Contents | Git Tracked | Purpose |
+|-----------|----------|-------------|---------|
+| `dist/logs/` | JSON scan results (`*.json`) | ❌ No | Machine-readable scan data |
+| `dist/reports/` | HTML reports (`*.html`) | ❌ No | Human-readable scan reports |
+| `dist/issues/` | GitHub issue bodies (`GH-issue-*.md`) | ❌ No | Manual copy/paste to GitHub or project management apps |
+| `dist/TEMPLATES/` | Project templates (`*.txt`) | ✅ Yes | Reusable scan configurations |
+
+**Filename Pattern:** All outputs use matching UTC timestamps for easy correlation:
+```
+dist/logs/2026-01-13-031719-UTC.json
+dist/reports/2026-01-13-031719-UTC.html
+dist/issues/GH-issue-2026-01-13-031719-UTC.md
+```
 
 ---
 

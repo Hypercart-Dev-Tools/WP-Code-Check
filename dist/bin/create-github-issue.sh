@@ -121,20 +121,21 @@ if [[ -z "$GITHUB_REPO" ]]; then
             fi
         done
     fi
-    
+
     if [[ -z "$GITHUB_REPO" ]]; then
-        echo -e "${RED}Error: Could not find GITHUB_REPO in template${NC}"
-        echo "Please specify --repo owner/repo or add GITHUB_REPO to your template file"
-        exit 1
+        echo -e "${YELLOW}⚠ No GITHUB_REPO found in template${NC}"
+        echo -e "${YELLOW}  Issue body will be generated but not created${NC}"
+        echo -e "${YELLOW}  To create the issue, specify --repo owner/repo or add GITHUB_REPO to your template${NC}"
+    else
+        echo -e "${GREEN}✓ Found GITHUB_REPO in template: $GITHUB_REPO${NC}"
     fi
-    
-    echo -e "${GREEN}✓ Found GITHUB_REPO in template: $GITHUB_REPO${NC}"
 fi
 
 # Clean up repo format (remove https://github.com/ if present)
-GITHUB_REPO=$(echo "$GITHUB_REPO" | sed 's|https://github.com/||' | sed 's|\.git$||')
-
-echo -e "${BLUE}🎯 Target repository: $GITHUB_REPO${NC}"
+if [[ -n "$GITHUB_REPO" ]]; then
+    GITHUB_REPO=$(echo "$GITHUB_REPO" | sed 's|https://github.com/||' | sed 's|\.git$||')
+    echo -e "${BLUE}🎯 Target repository: $GITHUB_REPO${NC}"
+fi
 
 # Convert UTC timestamp to local time
 SCAN_DATE=$(echo "$SCAN_ID" | cut -d'-' -f1-3)
@@ -207,7 +208,7 @@ fi
 
 ISSUE_BODY+="$NEEDS_REVIEW"
 
-# Add footer with links
+# Add footer with local file paths
 HTML_REPORT="dist/reports/${SCAN_ID}.html"
 JSON_REPORT="dist/logs/${SCAN_ID}.json"
 
@@ -215,7 +216,13 @@ ISSUE_BODY+="
 
 ---
 
-**Full Report:** [HTML](../$HTML_REPORT) | [JSON](../$JSON_REPORT)
+**Local Reports:**
+
+\`\`\`
+HTML Report: $HTML_REPORT
+JSON Report: $JSON_REPORT
+\`\`\`
+
 **Powered by:** [WPCodeCheck.com](https://wpCodeCheck.com)
 "
 
@@ -229,11 +236,30 @@ echo "----------------------------------------"
 head -n 30 "$TEMP_ISSUE_FILE"
 echo "----------------------------------------"
 
+# Check if we have a GitHub repo to create the issue
+if [[ -z "$GITHUB_REPO" ]]; then
+    # Create dist/issues directory if it doesn't exist
+    ISSUES_DIR="$PROJECT_ROOT/dist/issues"
+    mkdir -p "$ISSUES_DIR"
+
+    # Save to permanent location with matching filename pattern
+    PERMANENT_ISSUE_FILE="$ISSUES_DIR/GH-issue-${SCAN_ID}.md"
+    cp "$TEMP_ISSUE_FILE" "$PERMANENT_ISSUE_FILE"
+
+    echo -e "${YELLOW}⚠ No GitHub repository specified${NC}"
+    echo -e "${GREEN}✅ Issue body generated successfully!${NC}"
+    echo -e "${BLUE}   Saved to: $PERMANENT_ISSUE_FILE${NC}"
+    echo -e "${BLUE}   You can manually copy/paste this to GitHub or your project management app${NC}"
+    echo -e "${BLUE}   Or run again with --repo owner/repo to create automatically${NC}"
+    exit 0
+fi
+
 # Ask for confirmation
 read -p "Create GitHub issue in $GITHUB_REPO? (y/n) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}Cancelled by user${NC}"
+    echo -e "${BLUE}Issue body saved to: $TEMP_ISSUE_FILE${NC}"
     exit 0
 fi
 
@@ -261,14 +287,15 @@ if [[ $? -eq 0 ]]; then
         echo -e "${YELLOW}⚠ Sub-issue creation not yet implemented${NC}"
         # TODO: Implement sub-issue creation
     fi
+
+    # Clean up temp file after successful creation
+    rm -f "$TEMP_ISSUE_FILE"
 else
     echo -e "${RED}❌ Failed to create GitHub issue${NC}"
     echo "$ISSUE_URL"
+    echo -e "${BLUE}Issue body saved to: $TEMP_ISSUE_FILE${NC}"
     exit 1
 fi
-
-# Clean up temp file
-rm -f "$TEMP_ISSUE_FILE"
 
 echo -e "${GREEN}✅ Done!${NC}"
 

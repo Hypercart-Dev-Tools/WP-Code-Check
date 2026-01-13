@@ -4,13 +4,10 @@
 
 Complete end-to-end workflow:
 1. **Phase 1a**: Check for existing templates in `dist/TEMPLATES/`
-2. **Phase 1b**: Complete template if needed (extract metadata)
+2. **Phase 1b**: Complete template if needed (extract metadata + optional GitHub repo)
 3. **Phase 1c**: Run scan using template or direct path
 4. **Phase 2**: AI-assisted triage of findings
-   
-**IN PROGRESS - NOT READY YET:**
-5. **Phase 3**: Send AI confirmed issues into a single GitHub issue via GitHub CLI
-This will require users to setup GitHub CLI (separately from GH desktop app) and authenticate their GitHub account 
+5. **Phase 3**: Create GitHub issue (automated or manual)
 
 ### End-to-End Execution Mode
 
@@ -18,7 +15,8 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 
 1. **Run scan** → Generate JSON log (Phase 1c)
 2. **AI triage** → Analyze findings and update JSON (Phase 2)
-3. **Generate HTML** → Create final report with AI summary
+3. **Generate HTML** → Create final report with AI summary (Phase 2)
+4. **Create GitHub issue** → Automated or manual (Phase 3)
 
 **No manual intervention required** - the AI agent handles all phases automatically.
 
@@ -26,6 +24,7 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 - "Run template gravityforms end to end"
 - "Execute woocommerce end to end"
 - "Run gravityforms complete workflow"
+- "Scan, triage, and create GitHub issue for hypercart-helper"
 
 **AI Agent Actions:**
 1. Execute scan: `dist/bin/run [template-name]` (wait for completion)
@@ -33,11 +32,13 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 3. Perform AI triage analysis (read JSON, analyze findings)
 4. Update JSON with `ai_triage` section
 5. Regenerate HTML: `python3 dist/bin/json-to-html.py [json] [html]`
-6. Report completion with final HTML report location
+6. Create GitHub issue: `dist/bin/create-github-issue.sh --scan-id [TIMESTAMP]`
+7. Report completion with final HTML report and GitHub issue URL (if created)
 
 **Error Handling:**
 - If scan fails → stop and report error
-- If triage fails → generate basic HTML without AI summary, report issue
+- If triage fails → generate basic HTML without AI summary, report issue to user
+- If GitHub issue creation fails → issue body saved to `dist/issues/` for manual use
 - Provide progress updates as each phase completes
 
 ---
@@ -307,6 +308,137 @@ The HTML report will now show:
 | `high` | 90%+ confident in this assessment |
 | `medium` | 60-89% confident |
 | `low` | <60% confident, needs human review |
+
+---
+
+## Phase 3: GitHub Issue Creation
+
+After AI triage is complete, create a GitHub issue with the findings.
+
+### When to Use
+
+- **Automatically**: When user requests "end to end" execution with GitHub repo configured
+- **Manually**: User explicitly asks "Create GitHub issue for this scan"
+- User wants to track findings in their project management system
+- User needs to share findings with their team
+
+### Prerequisites
+
+- ✅ Scan completed with JSON log
+- ✅ AI triage performed (JSON has `ai_triage` section)
+- ⚠️ GitHub CLI (`gh`) installed and authenticated (only for automated creation)
+- ⚠️ GitHub repo specified (via `--repo` flag or `GITHUB_REPO` in template) - **OPTIONAL**
+
+### Workflow Steps
+
+**Step 1: Determine the scan ID**
+```bash
+# Scan ID is the timestamp from the JSON filename
+# Example: dist/logs/2026-01-13-031719-UTC.json
+# Scan ID: 2026-01-13-031719-UTC
+```
+
+**Step 2: Run the GitHub issue creator**
+
+**Option A: Automated (with GitHub repo)**
+```bash
+# If template has GITHUB_REPO field
+./dist/bin/create-github-issue.sh --scan-id 2026-01-13-031719-UTC
+
+# Or specify repo manually
+./dist/bin/create-github-issue.sh --scan-id 2026-01-13-031719-UTC --repo owner/repo
+```
+
+**Option B: Manual (without GitHub repo)**
+```bash
+# No repo specified - saves to dist/issues/ for manual copy/paste
+./dist/bin/create-github-issue.sh --scan-id 2026-01-13-031719-UTC
+# → Saves to: dist/issues/GH-issue-2026-01-13-031719-UTC.md
+```
+
+**Step 3: Handle the result**
+
+**If automated creation succeeds:**
+- GitHub issue URL will be displayed
+- Issue includes:
+  - Scan metadata (plugin/theme name, version, date)
+  - Summary counts (confirmed issues, needs review, false positives)
+  - Confirmed issues section with checkboxes
+  - Needs review section with confidence levels
+  - Local file paths to reports
+
+**If no GitHub repo specified:**
+- Issue body saved to `dist/issues/GH-issue-{SCAN_ID}.md`
+- User can manually copy/paste to:
+  - GitHub (create issue manually)
+  - Jira, Linear, Asana, Trello, Monday.com
+  - Internal documentation
+  - Email or Slack
+
+### Output Locations
+
+All outputs use matching UTC timestamps for easy correlation:
+
+```
+dist/logs/2026-01-13-031719-UTC.json          # Scan data with AI triage
+dist/reports/2026-01-13-031719-UTC.html       # HTML report with AI summary
+dist/issues/GH-issue-2026-01-13-031719-UTC.md # Issue body (if no repo)
+```
+
+### GitHub Issue Format
+
+The generated issue includes:
+
+```markdown
+# WP Code Check Review - {SCAN_ID}
+
+**Scanned:** {Date in local timezone}
+**Plugin/Theme:** {Name} v{Version}
+**Scanner Version:** {Version}
+
+**Summary:** {total} findings | {confirmed} confirmed issues | {needs_review} need review | {false_positives} false positives
+
+---
+
+## ✅ Confirmed by AI Triage
+- [ ] **{Rationale}...**
+  `{file}:{line}` | Rule: `{rule_id}`
+
+---
+
+## 🔍 Most Critical but Unconfirmed
+
+- [ ] **{Classification} ({confidence} confidence)**
+  `{file}:{line}` | Rule: `{rule_id}`
+
+---
+
+**Local Reports:**
+
+```
+HTML Report: dist/reports/{SCAN_ID}.html
+JSON Report: dist/logs/{SCAN_ID}.json
+```
+
+**Powered by:** [WPCodeCheck.com](https://wpCodeCheck.com)
+```
+
+### Error Handling
+
+| Scenario | Behavior | User Action |
+|----------|----------|-------------|
+| No GitHub repo specified | ✅ Saves to `dist/issues/` | Copy/paste manually to GitHub or PM app |
+| GitHub CLI not installed | ❌ Error message | Install `gh` CLI or use manual workflow |
+| GitHub CLI not authenticated | ❌ Error message | Run `gh auth login` |
+| No AI triage data | ⚠️ Warning | Run AI triage first (Phase 2) |
+| Invalid scan ID | ❌ Error message | Check scan ID matches JSON filename |
+
+### Best Practices
+
+1. **Always run AI triage first** - GitHub issues are more useful with confirmed/false positive classifications
+2. **Use templates with GITHUB_REPO** - Enables fully automated workflow
+3. **Review before creating** - Script shows preview and asks for confirmation
+4. **Keep issue bodies** - Files in `dist/issues/` are not tracked by Git, safe to keep for reference
 
 ---
 

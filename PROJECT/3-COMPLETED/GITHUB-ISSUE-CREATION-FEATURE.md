@@ -40,14 +40,15 @@ Implemented automated GitHub issue creation from scan results with AI triage dat
 
 ## Features
 
-✅ **Auto-formatted Issues** - Clean, actionable GitHub issues with checkboxes  
-✅ **AI Triage Integration** - Shows confirmed issues vs. needs review  
-✅ **Template Integration** - Reads GitHub repo from project templates  
-✅ **Interactive Preview** - Review before creating the issue  
-✅ **Confidence Levels** - Shows AI confidence for each finding  
-✅ **File Path Cleanup** - Removes local paths for cleaner display  
-✅ **Timezone Conversion** - Converts UTC timestamps to local time  
-✅ **Report Links** - Includes links to full HTML and JSON reports
+✅ **Auto-formatted Issues** - Clean, actionable GitHub issues with checkboxes
+✅ **AI Triage Integration** - Shows confirmed issues vs. needs review
+✅ **Template Integration** - Reads GitHub repo from project templates (optional)
+✅ **Interactive Preview** - Review before creating the issue
+✅ **Confidence Levels** - Shows AI confidence for each finding
+✅ **File Path Cleanup** - Removes local paths for cleaner display
+✅ **Timezone Conversion** - Converts UTC timestamps to local time
+✅ **Local File Paths** - Shows local report paths instead of broken links
+✅ **Graceful Degradation** - Works without GitHub repo, saves to `dist/issues/` for manual use
 
 ## Usage
 
@@ -79,12 +80,17 @@ The script generates issues with:
 
 ## Testing
 
-✅ Tested with Elementor v3.34.1 scan (200 AI-triaged findings)  
-✅ Created test issue #67 in Hypercart-Dev-Tools/WP-Code-Check  
-✅ Verified issue format and content  
-✅ Verified file path cleanup  
-✅ Verified timezone conversion  
+✅ Tested with Elementor v3.34.1 scan (200 AI-triaged findings)
+✅ Tested with Hypercart Helper v1.1.4 scan (4 AI-triaged findings)
+✅ Created test issue #67 in Hypercart-Dev-Tools/WP-Code-Check
+✅ Created production issue #7 in NeochromeTeam/hypercart-helper
+✅ Verified issue format and content
+✅ Verified file path cleanup
+✅ Verified timezone conversion
 ✅ Verified interactive preview
+✅ Verified local file paths in footer (no broken links)
+✅ Verified graceful degradation without GitHub repo
+✅ Verified persistent issue files saved to `dist/issues/`
 
 ## Integration
 
