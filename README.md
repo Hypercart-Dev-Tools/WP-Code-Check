@@ -166,6 +166,102 @@ Validate findings and identify false positives with AI assistance:
 
 See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for detailed triage workflow.
 
+### 🎫 **GitHub Issue Creation**
+
+Automatically create GitHub issues from scan results with AI triage data:
+
+```bash
+# Create issue from latest scan (specify repo)
+./dist/bin/create-github-issue.sh \
+  --scan-id 2026-01-12-155649-UTC \
+  --repo owner/repo
+
+# Or use template's GitHub repo (if GITHUB_REPO is set in template)
+./dist/bin/create-github-issue.sh --scan-id 2026-01-12-155649-UTC
+
+# Generate issue body without creating (no repo needed)
+# Useful for manual issue creation or when repo is not specified
+./dist/bin/create-github-issue.sh --scan-id 2026-01-12-155649-UTC
+# → Saves to dist/issues/GH-issue-2026-01-12-155649-UTC.md
+```
+
+**Features:**
+- ✅ **Auto-formatted Issues** - Clean, actionable GitHub issues with checkboxes
+- ✅ **AI Triage Integration** - Shows confirmed issues vs. needs review
+- ✅ **Template Integration** - Reads GitHub repo from project templates (optional)
+- ✅ **Interactive Preview** - Review before creating the issue
+- ✅ **Graceful Degradation** - Works without GitHub repo (generates issue body only)
+- ✅ **Persistent Issue Files** - Saves to `dist/issues/` with matching filename pattern for easy manual copy/paste
+
+**Requirements:**
+- GitHub CLI (`gh`) installed and authenticated (only for creating issues)
+- Scan with AI triage data (`--ai-triage` flag)
+
+### 🔌 **MCP Protocol Support (AI Integration)**
+
+WP Code Check supports the Model Context Protocol (MCP), allowing AI assistants like Claude Desktop and Cline to directly access scan results.
+
+**Quick Start:**
+
+```bash
+# 1. Install Node.js dependencies
+npm install
+
+# 2. Configure Claude Desktop (macOS)
+# Add to ~/Library/Application Support/Claude/claude_desktop_config.json:
+{
+  "mcpServers": {
+    "wp-code-check": {
+      "command": "node",
+      "args": ["/absolute/path/to/wp-code-check/dist/bin/mcp-server.js"]
+    }
+  }
+}
+
+# 3. Run a scan
+./dist/bin/check-performance.sh --paths /path/to/plugin
+
+# 4. Ask Claude: "Show me the latest WP Code Check scan results"
+```
+
+**Features:**
+- ✅ **Direct AI Access** - AI assistants can read scan results without copy/paste
+- ✅ **Latest Scan Resource** - `wpcc://latest-scan` returns most recent JSON
+- ✅ **Historical Scans** - `wpcc://scan/{id}` accesses specific scans
+- ✅ **HTML Reports** - `wpcc://latest-report` returns formatted reports
+- ✅ **Zero Config** - Works with existing JSON output
+
+**Supported AI Tools:**
+- Claude Desktop (macOS, Windows)
+- Cline (VS Code extension)
+- Any MCP-compatible AI assistant
+
+**Developer Guide:**
+
+For AI agents using MCP:
+
+```javascript
+// Read latest scan
+const scan = await readResource("wpcc://latest-scan");
+
+// Parse findings
+const findings = JSON.parse(scan.text).findings;
+
+// Analyze critical issues
+const critical = findings.filter(f => f.severity === "CRITICAL");
+```
+
+See [PROJECT/1-INBOX/PROJECT-MCP.md](PROJECT/1-INBOX/PROJECT-MCP.md) for complete MCP documentation.
+
+**AI Agent Instructions:**
+
+When analyzing WP Code Check results via MCP:
+1. Read `wpcc://latest-scan` for JSON data
+2. Check `ai_triage` field for confirmed vs. false positives
+3. Prioritize CRITICAL and HIGH severity findings
+4. Suggest fixes with code examples
+5. Reference specific file paths and line numbers
+
 ---
 
 ## 🛠️ Tools Included
@@ -178,6 +274,7 @@ WP Code Check is a **complete code quality suite** with multiple specialized too
 |------|------|---------|-------|
 | **Quick Scanner** | Bash | 30+ WordPress antipatterns | <5s |
 | **JSON to HTML Converter** | Python | Beautiful HTML reports from scan logs | <1s |
+| **GitHub Issue Creator** | Bash | Auto-create GitHub issues from scan results | <2s |
 | **Slack Integration** | Bash | CI/CD notifications | Instant |
 | **Baseline Manager** | Built-in | Track technical debt over time | N/A |
 | **Project Templates** | Built-in | Save scan configurations | N/A |
@@ -192,6 +289,24 @@ WP Code Check is a **complete code quality suite** with multiple specialized too
 - **Fast CI/CD**: Quick Scanner only (zero dependencies, stable)
 - **Deep Review**: Quick Scanner + Golden Rules (experimental)
 - **Legacy Audit**: Quick Scanner + Baseline + Golden Rules (experimental)
+
+### Output Directories
+
+All scan outputs are organized in the `dist/` directory:
+
+| Directory | Contents | Git Tracked | Purpose |
+|-----------|----------|-------------|---------|
+| `dist/logs/` | JSON scan results (`*.json`) | ❌ No | Machine-readable scan data |
+| `dist/reports/` | HTML reports (`*.html`) | ❌ No | Human-readable scan reports |
+| `dist/issues/` | GitHub issue bodies (`GH-issue-*.md`) | ❌ No | Manual copy/paste to GitHub or project management apps |
+| `dist/TEMPLATES/` | Project templates (`*.txt`) | ✅ Yes | Reusable scan configurations |
+
+**Filename Pattern:** All outputs use matching UTC timestamps for easy correlation:
+```
+dist/logs/2026-01-13-031719-UTC.json
+dist/reports/2026-01-13-031719-UTC.html
+dist/issues/GH-issue-2026-01-13-031719-UTC.md
+```
 
 ---
 

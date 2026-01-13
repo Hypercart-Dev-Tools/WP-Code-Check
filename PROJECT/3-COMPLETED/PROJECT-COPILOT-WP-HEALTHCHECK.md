@@ -1,9 +1,11 @@
-**STATUS:** Phase 1 Improvements Complete ✅ - Phase 2 Ready
-**Author:** GitHub Copilot (Chat GPT 5.2)
+**STATUS:** Phase 2.1 Complete ✅ - Phase 3 Ready
+**Author:** GitHub Copilot (Chat GPT 5.2) + Augment Agent (Claude Sonnet 4.5)
 **PRIORITY**: High
 **Started:** 2026-01-12
 **Phase 1 Completed:** 2026-01-12
 **Phase 1 Improvements Completed:** 2026-01-12
+**Phase 2 Completed:** 2026-01-12
+**Phase 2.1 Completed:** 2026-01-12
 
 ## Context
 
@@ -23,7 +25,7 @@ Also, update changelog to reflect changes.
 ## Phased Progress Checklist (High Level)
 
 - [x] **Phase 1 complete:** Scanner no longer flags PHPDoc/comment-only matches; avoids POST-method false positives in HTML/REST config. ✅ **COMPLETED 2026-01-12**
-- [ ] **Phase 2 complete:** Findings include context signals (nonce/cap checks; sanitizer detection) and are downgraded appropriately.
+- [x] **Phase 2 complete:** Findings include context signals (nonce/cap checks; sanitizer detection) and are downgraded appropriately. ✅ **COMPLETED 2026-01-12**
 - [ ] **Phase 3 complete:** Findings are categorized (security vs best-practice vs performance) with clearer default severities.
 
 ### Phase 1 Results (2026-01-12)
@@ -54,6 +56,74 @@ Also, update changelog to reflect changes.
 - `dist/tests/fixtures/phase1-comment-filtering.php` - Enhanced with edge cases
 - `dist/tests/fixtures/phase1-html-rest-filtering.php` - Enhanced with edge cases
 - `dist/tests/verify-phase1-improvements.sh` - New verification script
+
+### Phase 2 Results (2026-01-12)
+
+**Implementation (v1.3.0):**
+- ✅ Created `detect_guards()` function to detect nonce and capability checks
+- ✅ Created `detect_sanitizers()` function to detect sanitization functions
+- ✅ Created `detect_sql_safety()` function to distinguish safe vs unsafe SQL
+- ✅ Enhanced `add_json_finding()` to accept optional guards and sanitizers parameters
+- ✅ Updated superglobal manipulation check to use guard detection and downgrade severity
+- ✅ Updated unsanitized superglobal check to use both guard and sanitizer detection
+- ✅ Updated wpdb prepare check to detect safe literal SQL vs unsafe concatenated SQL
+- ✅ Fixed bash compatibility issues (removed `local` keyword from loop contexts)
+
+**JSON Output Enhancements:**
+- All findings now include `"guards":[]` array with detected security guards
+- All findings now include `"sanitizers":[]` array with detected sanitizers
+- Context messages include guard/sanitizer information for faster triage
+- Example: `"Unsanitized superglobal access (has guards: wp_verify_nonce)"`
+
+**Severity Downgrading Logic:**
+- **Guards only**: Severity downgraded one level (HIGH → MEDIUM, CRITICAL → HIGH)
+- **Sanitizers only**: Severity downgraded one level (HIGH → MEDIUM, CRITICAL → HIGH)
+- **Guards + Sanitizers**: Finding suppressed entirely (fully protected)
+- **Safe literal SQL**: Downgraded to LOW/MEDIUM with "(literal SQL - best practice)" note
+- **No protection**: Original severity maintained
+
+**Test Fixtures Created:**
+- `dist/tests/fixtures/phase2-guards-detection.php` - Tests guard detection (14 test cases)
+- `dist/tests/fixtures/phase2-wpdb-safety.php` - Tests SQL safety detection (12 test cases)
+- `dist/tests/verify-phase2-context-signals.sh` - Automated verification script
+
+**Files Modified:**
+- `dist/bin/check-performance.sh` (v1.3.0) - Added guard/sanitizer detection, severity downgrading
+- `dist/bin/lib/false-positive-filters.sh` (v1.2.0) - Added 3 new detection functions
+- `CHANGELOG.md` - Documented Phase 2 changes
+
+### Phase 2.1 Results (2026-01-12)
+
+**Implementation (v1.3.1):**
+- ✅ **Issue #2 Fixed**: Removed suppression logic - guards+sanitizers now emit as LOW severity
+- ✅ **Issue #4 Fixed**: Removed `user_can()` from guard detection (only `current_user_can()` now)
+- ✅ **Issue #1 Fixed**: Function-scoped guard detection with `get_function_scope_range()`
+- ✅ **Issue #3 Fixed**: Basic taint propagation tracks sanitized variable assignments
+- ✅ **Issue #5 Fixed**: Comprehensive test fixtures for branch misattribution and multi-line sanitization
+
+**Key Improvements:**
+- **No More Suppression**: Findings always emitted, even with guards+sanitizers (prevents false negatives)
+- **Function Scoping**: Guards must be in same function and BEFORE access (prevents branch misattribution)
+- **Variable Tracking**: Detects `$x = sanitize_text_field($_POST['x'])` patterns
+- **Reduced Noise**: Removed `user_can()` false confidence
+
+**Test Fixtures Created:**
+- `dist/tests/fixtures/phase2-branch-misattribution.php` - Guards in different branches/functions
+- `dist/tests/fixtures/phase2-sanitizer-multiline.php` - Multi-line sanitization patterns
+- `dist/tests/verify-phase2.1-improvements.sh` - Automated verification
+
+**Files Modified:**
+- `dist/bin/check-performance.sh` (v1.3.1) - Integrated variable sanitization tracking
+- `dist/bin/lib/false-positive-filters.sh` (v1.3.0) - Added function scope detection, enhanced guards/sanitizers
+- `CHANGELOG.md` - Documented Phase 2.1 changes
+
+**Remaining Limitations:**
+- Function scope detection is heuristic-based (not full PHP parser)
+- Variable tracking is 1-step only (doesn't follow `$a = $b; $c = $a;`)
+- Doesn't handle array elements (`$data['key']`)
+- Branch detection is basic (doesn't parse full control flow)
+
+**Production Readiness:** Phase 2.1 significantly improves accuracy and reduces false confidence. Ready for production use with documented limitations.
 
 ## Phase 1 — Reduce Obvious False Positives (Low Risk, High Impact)
 
@@ -87,28 +157,28 @@ Eliminate the most common “clearly wrong” matches that do not represent exec
 Keep reporting potentially risky patterns, but attach “context” so reviewers can triage faster and reduce high-severity noise.
 
 ### Checklist
-- [ ] **Guard heuristics (nearby checks)**
-  - [ ] If a superglobal read is preceded within ~N lines by `check_ajax_referer(`, downgrade severity (e.g., `error -> review`).
-  - [ ] If preceded within ~N lines by `wp_verify_nonce(` (or equivalent nonce checks), downgrade severity.
-  - [ ] If preceded within ~N lines by `current_user_can(` (or wrapper), downgrade severity.
-  - [ ] Output should record which guard(s) were detected (e.g., `guards: ['check_ajax_referer','current_user_can']`).
+- [x] **Guard heuristics (nearby checks)**
+  - [x] If a superglobal read is preceded within ~N lines by `check_ajax_referer(`, downgrade severity (e.g., `error -> review`).
+  - [x] If preceded within ~N lines by `wp_verify_nonce(` (or equivalent nonce checks), downgrade severity.
+  - [x] If preceded within ~N lines by `current_user_can(` (or wrapper), downgrade severity.
+  - [x] Output should record which guard(s) were detected (e.g., `guards: ['check_ajax_referer','current_user_can']`).
 
-- [ ] **Sanitizer/caster detection on superglobal reads**
-  - [ ] Detect common WP sanitizers/casters wrapping input (examples):
-    - [ ] `sanitize_text_field( $_GET[...] )`
-    - [ ] `sanitize_email( $_POST[...] )`
-    - [ ] `absint( $_GET[...] )`
-    - [ ] `esc_url_raw( $_REQUEST[...] )`
-  - [ ] Output should record which sanitizer was detected (e.g., `sanitizers: ['sanitize_email']`).
+- [x] **Sanitizer/caster detection on superglobal reads**
+  - [x] Detect common WP sanitizers/casters wrapping input (examples):
+    - [x] `sanitize_text_field( $_GET[...] )`
+    - [x] `sanitize_email( $_POST[...] )`
+    - [x] `absint( $_GET[...] )`
+    - [x] `esc_url_raw( $_REQUEST[...] )`
+  - [x] Output should record which sanitizer was detected (e.g., `sanitizers: ['sanitize_email']`).
 
-- [ ] **Refine `$wpdb->prepare()` finding severity when no user input exists**
-  - [ ] If SQL is a literal and only includes safe identifiers (e.g. `{$wpdb->options}`), classify as best-practice / lower severity.
-  - [ ] Keep higher severity for concatenated SQL that includes superglobals or other tainted variables.
+- [x] **Refine `$wpdb->prepare()` finding severity when no user input exists**
+  - [x] If SQL is a literal and only includes safe identifiers (e.g. `{$wpdb->options}`), classify as best-practice / lower severity.
+  - [x] Keep higher severity for concatenated SQL that includes superglobals or other tainted variables.
 
 ### Deliverables
-- [ ] JSON output augmented with guard/sanitizer hints.
-- [ ] Severity downgrade rules for “guarded” findings.
-- [ ] Regression fixtures for guarded vs unguarded superglobal reads.
+- [x] JSON output augmented with guard/sanitizer hints.
+- [x] Severity downgrade rules for “guarded” findings.
+- [x] Regression fixtures for guarded vs unguarded superglobal reads.
 
 ## Phase 3 — Reclassify Findings (Categories + Severity Defaults)
 

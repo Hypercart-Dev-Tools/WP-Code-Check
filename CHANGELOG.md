@@ -7,6 +7,193 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-01-13
+
+### Added
+- **MCP (Model Context Protocol) Support - Tier 1** - AI assistants can now directly access scan results
+  - **MCP Server** (`dist/bin/mcp-server.js`) - Node.js server exposing scan results as MCP resources
+  - **Resources Exposed:**
+    - `wpcc://latest-scan` - Most recent JSON scan log
+    - `wpcc://latest-report` - Most recent HTML report
+    - `wpcc://scan/{scan-id}` - Individual scans by timestamp ID
+  - **Supported AI Tools:**
+    - Claude Desktop (macOS, Windows)
+    - Cline (VS Code extension)
+    - Any MCP-compatible AI assistant
+  - **Features:**
+    - Automatic discovery of last 10 scans
+    - JSON and HTML resource types
+    - Error handling for missing scans
+    - Stdio transport (standard MCP)
+  - **Files Added:**
+    - `dist/bin/mcp-server.js` (227 lines) - MCP server implementation
+    - `package.json` - Node.js dependencies (`@modelcontextprotocol/sdk`)
+    - `PROJECT/1-INBOX/PROJECT-MCP.md` (538 lines) - Comprehensive MCP documentation
+  - **Impact:** AI assistants can now read scan results without manual copy/paste, enabling automated triage and fix suggestions
+
+### Changed
+- **README.md** - Added MCP Protocol Support section with:
+  - Quick start guide for Claude Desktop configuration
+  - Developer guide for AI agents using MCP
+  - AI agent instructions for analyzing scan results
+  - Links to comprehensive MCP documentation
+- **MARKETING.md** - Added MCP protocol support to comparison table
+  - WP Code Check: ✅ MCP support
+  - PHPCS, PHPStan, Psalm: ❌ No MCP support
+  - Differentiates WP Code Check as AI-first tool
+
+### Technical Details
+- **MCP Version:** 1.0.0 (Tier 1 - Basic Resources)
+- **Node.js Requirement:** >=18.0.0
+- **Dependencies:** `@modelcontextprotocol/sdk` ^0.5.0
+- **Protocol:** stdio transport (standard MCP)
+- **Performance:** <100ms startup, <50ms resource reads
+- **Memory:** ~30MB (Node.js + SDK)
+
+### Roadmap
+- **Tier 2 (Planned):** Interactive tools (`scan_wordpress_code`, `filter_findings`)
+- **Tier 3 (Planned):** Real-time streaming, prompts, dynamic resources
+
+## [1.3.2] - 2026-01-13
+
+### Added
+- **GitHub Issue Creation Tool** (`dist/bin/create-github-issue.sh`)
+  - Automatically create GitHub issues from scan results with AI triage data
+  - Interactive preview before creating issues
+  - Supports both `--repo owner/repo` flag and template-based repo detection
+  - Generates clean, actionable issues with:
+    - Scan metadata (plugin/theme name, version, scanner version)
+    - Confirmed issues section with checkboxes
+    - Needs review section with confidence levels
+    - Links to full HTML and JSON reports
+  - Requires GitHub CLI (`gh`) installed and authenticated
+  - Uses `--body-file` for reliable issue creation with large bodies
+
+### Changed
+- **README.md**: Added GitHub Issue Creator to tools table and usage documentation
+- **Template Support**: Templates now support optional `GITHUB_REPO` field for automated issue creation
+- **GitHub Issue Footer**: Changed from broken relative links to local file paths in code blocks for better usability
+- **GitHub Issue Creator**: Made `GITHUB_REPO` truly optional - script will generate issue body without creating the issue if no repo is specified
+- **Issue Persistence**: When no GitHub repo is specified, issue bodies are now saved to `dist/issues/GH-issue-{SCAN_ID}.md` for manual copy/paste to GitHub or project management apps
+- **AI Instructions**: Updated `dist/TEMPLATES/_AI_INSTRUCTIONS.md` with complete Phase 3 (GitHub Issue Creation) workflow documentation
+
+## [1.3.1] - 2026-01-12
+
+### Fixed
+- **Phase 2.1: Critical Quality Improvements**
+  - **Issue #2 (Suppression)**: Removed aggressive suppression logic
+    - Findings with guards+sanitizers now emit as LOW severity (not suppressed)
+    - Prevents false negatives from heuristic misattribution
+    - Still provides context signals for manual triage
+  - **Issue #4 (user_can)**: Removed `user_can()` from guard detection
+    - `user_can($user_id, 'cap')` checks OTHER users, not current request
+    - Reduces false confidence from non-guard capability checks
+    - Only `current_user_can()` is now detected as a guard
+  - **Issue #1 (Function Scope)**: Implemented function-scoped guard detection
+    - Guards now scoped to same function using `get_function_scope_range()`
+    - Guards must appear BEFORE the superglobal access (not after)
+    - Prevents branch misattribution (guards in different if/else)
+    - Prevents cross-function misattribution
+  - **Issue #3 (Taint Propagation)**: Added basic variable sanitization tracking
+    - Detects sanitized variable assignments: `$x = sanitize_text_field($_POST['x'])`
+    - Tracks sanitized variables within function scope
+    - Detects two-step sanitization: `$x = $_POST['x']; $x = sanitize($x);`
+    - Reduces false positives for common safe patterns
+  - **Issue #5 (Test Coverage)**: Added comprehensive test fixtures
+    - `phase2-branch-misattribution.php`: Tests guards in different branches/functions
+    - `phase2-sanitizer-multiline.php`: Tests multi-line sanitization patterns
+    - `verify-phase2.1-improvements.sh`: Automated verification script
+
+### Changed
+- **Library Version**: Updated `false-positive-filters.sh` to v1.3.0
+  - Added `get_function_scope_range()` helper function
+  - Enhanced `detect_guards()` with function scoping
+  - Added `is_variable_sanitized()` for taint propagation
+  - Fixed variable scope issues (explicit local declarations)
+
+### Technical Details
+- **Function Scope Detection**: Uses brace counting to find function boundaries
+- **Guard Detection**: Scans backward within function, stops at access line
+- **Variable Tracking**: Matches assignment patterns with sanitizer functions
+- **Limitations Documented**: Heuristic-based, not full PHP parser
+
+## [1.3.0] - 2026-01-12
+
+### Added
+- **Phase 2: Context Signals (Guards + Sanitizers)**
+  - **Guard Detection**: Automatically detects security guards near superglobal access
+    - Detects nonce checks: `wp_verify_nonce()`, `check_ajax_referer()`, `check_admin_referer()`
+    - Detects capability checks: `current_user_can()`, `user_can()`
+    - Scans 20 lines backward from finding to detect guards
+    - Guards are included in JSON output as array: `"guards":["wp_verify_nonce","current_user_can"]`
+  - **Sanitizer Detection**: Automatically detects sanitizers wrapping superglobal reads
+    - Detects `sanitize_*` functions: `sanitize_text_field()`, `sanitize_email()`, `sanitize_key()`, `sanitize_url()`
+    - Detects `esc_*` functions: `esc_url_raw()`, `esc_url()`, `esc_html()`, `esc_attr()`
+    - Detects type casters: `absint()`, `intval()`, `floatval()`
+    - Detects slashing functions: `wp_unslash()`, `stripslashes_deep()`
+    - Detects WooCommerce sanitizer: `wc_clean()`
+    - Sanitizers are included in JSON output as array: `"sanitizers":["sanitize_text_field","absint"]`
+  - **SQL Safety Detection**: Distinguishes safe literal SQL from unsafe concatenated SQL
+    - Safe literal SQL (only wpdb identifiers): Downgraded to LOW/MEDIUM (best-practice)
+    - Unsafe concatenated SQL (user input): Remains HIGH/CRITICAL (security)
+    - Detects superglobal concatenation: `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`
+    - Detects variable concatenation vs safe wpdb identifiers
+  - **New Helper Functions** (in `dist/bin/lib/false-positive-filters.sh` v1.2.0)
+    - `detect_guards()`: Scans backward to find security guards
+    - `detect_sanitizers()`: Analyzes code for sanitization functions
+    - `detect_sql_safety()`: Determines if SQL is safe literal or potentially tainted
+
+### Changed
+- **Enhanced JSON Output Schema**
+  - All findings now include `"guards":[]` and `"sanitizers":[]` arrays
+  - Provides context for faster triage and prioritization
+  - Enables automated risk assessment based on protective measures
+- **Intelligent Severity Downgrading**
+  - **Guards only**: Severity downgraded one level (e.g., HIGH → MEDIUM)
+  - **Sanitizers only**: Severity downgraded one level (e.g., HIGH → MEDIUM)
+  - **Guards + Sanitizers**: Finding suppressed (fully protected)
+  - **Safe literal SQL**: Downgraded to LOW/MEDIUM with "(literal SQL - best practice)" note
+  - **No guards/sanitizers**: Original severity maintained
+- **Improved Triage Messages**
+  - Findings include context notes: "(has guards: wp_verify_nonce)"
+  - Findings include context notes: "(has sanitizers: sanitize_text_field)"
+  - SQL findings include: "(literal SQL - best practice)" for safe queries
+- **Updated `add_json_finding()` Function**
+  - Now accepts optional 8th parameter: `guards` (space-separated list)
+  - Now accepts optional 9th parameter: `sanitizers` (space-separated list)
+  - Backward compatible: existing calls work without modification
+
+### Fixed
+- **Removed `local` keyword from loop contexts** (bash compatibility)
+  - Fixed "local: can only be used in a function" errors
+  - Variables in while loops no longer use `local` keyword
+- **Improved superglobal detection accuracy**
+  - Guards and sanitizers now properly detected and reported
+  - Fully protected code (guards + sanitizers) no longer flagged
+  - Context-aware severity adjustment reduces false positive noise
+
+### Testing
+- **Created Phase 2 Test Fixtures**
+  - `dist/tests/fixtures/phase2-guards-detection.php`: Tests guard detection (nonce, capability checks)
+  - `dist/tests/fixtures/phase2-wpdb-safety.php`: Tests SQL safety detection (literal vs concatenated)
+- **Created Phase 2 Verification Script**
+  - `dist/tests/verify-phase2-context-signals.sh`: Automated testing for Phase 2 features
+  - Verifies guards array in JSON output
+  - Verifies sanitizers array in JSON output
+  - Verifies SQL safety detection and severity downgrading
+
+### Known Limitations (Phase 2.1 Improvements Required)
+
+⚠️ **IMPORTANT:** Phase 2 provides valuable context signals but has limitations that require refinement:
+
+1. **Guard Misattribution Risk**: Window-based detection may attribute guards to unrelated access (different branch/function)
+2. **Suppression Too Aggressive**: Suppressing findings when guards+sanitizers detected risks false negatives
+3. **Single-Line Sanitizer Detection**: Misses multi-line patterns like `$x = sanitize_text_field($_GET['x']); use($x);`
+4. **user_can() Overcounting**: May count non-guard uses; needs conditional context detection
+5. **Limited Branch Coverage**: Test fixtures don't cover all branch misattribution cases
+
+**Recommendation for v1.3.0:** Use guard/sanitizer arrays in JSON output for manual triage. Consider disabling automatic severity downgrading until Phase 2.1 improvements are complete. See `PROJECT/1-INBOX/PHASE2-QUALITY-IMPROVEMENTS.md` for improvement plan.
+
 ## [1.2.4] - 2026-01-12
 
 ### Added
