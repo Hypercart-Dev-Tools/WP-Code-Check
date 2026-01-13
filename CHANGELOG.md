@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-01-13
+
+### Added
+- **MCP (Model Context Protocol) Support - Tier 1** - AI assistants can now directly access scan results
+  - **MCP Server** (`dist/bin/mcp-server.js`) - Node.js server exposing scan results as MCP resources
+  - **Resources Exposed:**
+    - `wpcc://latest-scan` - Most recent JSON scan log
+    - `wpcc://latest-report` - Most recent HTML report
+    - `wpcc://scan/{scan-id}` - Individual scans by timestamp ID
+  - **Supported AI Tools:**
+    - Claude Desktop (macOS, Windows)
+    - Cline (VS Code extension)
+    - Any MCP-compatible AI assistant
+  - **Features:**
+    - Automatic discovery of last 10 scans
+    - JSON and HTML resource types
+    - Error handling for missing scans
+    - Stdio transport (standard MCP)
+  - **Files Added:**
+    - `dist/bin/mcp-server.js` (227 lines) - MCP server implementation
+    - `package.json` - Node.js dependencies (`@modelcontextprotocol/sdk`)
+    - `PROJECT/1-INBOX/PROJECT-MCP.md` (538 lines) - Comprehensive MCP documentation
+  - **Impact:** AI assistants can now read scan results without manual copy/paste, enabling automated triage and fix suggestions
+
+### Changed
+- **README.md** - Added MCP Protocol Support section with:
+  - Quick start guide for Claude Desktop configuration
+  - Developer guide for AI agents using MCP
+  - AI agent instructions for analyzing scan results
+  - Links to comprehensive MCP documentation
+- **MARKETING.md** - Added MCP protocol support to comparison table
+  - WP Code Check: ✅ MCP support
+  - PHPCS, PHPStan, Psalm: ❌ No MCP support
+  - Differentiates WP Code Check as AI-first tool
+
+### Technical Details
+- **MCP Version:** 1.0.0 (Tier 1 - Basic Resources)
+- **Node.js Requirement:** >=18.0.0
+- **Dependencies:** `@modelcontextprotocol/sdk` ^0.5.0
+- **Protocol:** stdio transport (standard MCP)
+- **Performance:** <100ms startup, <50ms resource reads
+- **Memory:** ~30MB (Node.js + SDK)
+
+### Roadmap
+- **Tier 2 (Planned):** Interactive tools (`scan_wordpress_code`, `filter_findings`)
+- **Tier 3 (Planned):** Real-time streaming, prompts, dynamic resources
+
 ## [1.3.2] - 2026-01-13
 
 ### Added

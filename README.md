@@ -197,6 +197,71 @@ Automatically create GitHub issues from scan results with AI triage data:
 - GitHub CLI (`gh`) installed and authenticated (only for creating issues)
 - Scan with AI triage data (`--ai-triage` flag)
 
+### 🔌 **MCP Protocol Support (AI Integration)**
+
+WP Code Check supports the Model Context Protocol (MCP), allowing AI assistants like Claude Desktop and Cline to directly access scan results.
+
+**Quick Start:**
+
+```bash
+# 1. Install Node.js dependencies
+npm install
+
+# 2. Configure Claude Desktop (macOS)
+# Add to ~/Library/Application Support/Claude/claude_desktop_config.json:
+{
+  "mcpServers": {
+    "wp-code-check": {
+      "command": "node",
+      "args": ["/absolute/path/to/wp-code-check/dist/bin/mcp-server.js"]
+    }
+  }
+}
+
+# 3. Run a scan
+./dist/bin/check-performance.sh --paths /path/to/plugin
+
+# 4. Ask Claude: "Show me the latest WP Code Check scan results"
+```
+
+**Features:**
+- ✅ **Direct AI Access** - AI assistants can read scan results without copy/paste
+- ✅ **Latest Scan Resource** - `wpcc://latest-scan` returns most recent JSON
+- ✅ **Historical Scans** - `wpcc://scan/{id}` accesses specific scans
+- ✅ **HTML Reports** - `wpcc://latest-report` returns formatted reports
+- ✅ **Zero Config** - Works with existing JSON output
+
+**Supported AI Tools:**
+- Claude Desktop (macOS, Windows)
+- Cline (VS Code extension)
+- Any MCP-compatible AI assistant
+
+**Developer Guide:**
+
+For AI agents using MCP:
+
+```javascript
+// Read latest scan
+const scan = await readResource("wpcc://latest-scan");
+
+// Parse findings
+const findings = JSON.parse(scan.text).findings;
+
+// Analyze critical issues
+const critical = findings.filter(f => f.severity === "CRITICAL");
+```
+
+See [PROJECT/1-INBOX/PROJECT-MCP.md](PROJECT/1-INBOX/PROJECT-MCP.md) for complete MCP documentation.
+
+**AI Agent Instructions:**
+
+When analyzing WP Code Check results via MCP:
+1. Read `wpcc://latest-scan` for JSON data
+2. Check `ai_triage` field for confirmed vs. false positives
+3. Prioritize CRITICAL and HIGH severity findings
+4. Suggest fixes with code examples
+5. Reference specific file paths and line numbers
+
 ---
 
 ## 🛠️ Tools Included
