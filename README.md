@@ -26,8 +26,14 @@ If you're using an AI coding assistant (Cursor, GitHub Copilot, Augment, etc.):
 
 1. Open `dist/TEMPLATES/_AI_INSTRUCTIONS.md` in your editor
 2. Ask your AI: **"Please review this document and what can I do with this tool?"**
+3. For automated workflows, ask: **"Run template [name] end to end"**
 
-Your VS Code Agent will guide you through scanning WordPress plugins and themes, creating templates, and interpreting results.
+Your AI agent will guide you through:
+- **Phase 1**: Scanning WordPress plugins/themes (with template auto-completion)
+- **Phase 2**: AI-assisted triage to identify false positives
+- **Phase 3**: Automated GitHub issue creation
+
+See [AI Instructions](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for the complete end-to-end workflow.
 
 ---
 
@@ -137,14 +143,19 @@ Manage technical debt in legacy codebases:
 Save scan configurations for frequently-checked projects:
 
 ```bash
-# Create template
+# Create template (AI agents can auto-complete metadata)
 ./dist/bin/run my-plugin
 
 # Reuse template
 ./dist/bin/run my-plugin
 ```
 
-See [HOWTO-TEMPLATES.md](dist/HOWTO-TEMPLATES.md) for details.
+**AI Agent Features:**
+- ✅ **Auto-completion** - AI extracts plugin name, version, and GitHub repo from headers
+- ✅ **Template Variations** - Handles hyphens, underscores, spaces in filenames
+- ✅ **GitHub Integration** - Optional `GITHUB_REPO` field for automated issue creation
+
+See [HOWTO-TEMPLATES.md](dist/HOWTO-TEMPLATES.md) for manual usage or [AI Instructions - Phase 1b](dist/TEMPLATES/_AI_INSTRUCTIONS.md#phase-1b-template-completion-if-needed) for AI-assisted template creation.
 
 ### 🤖 **Phase 2: AI-Assisted Triage (v1.1 POC)**
 
@@ -163,8 +174,15 @@ Validate findings and identify false positives with AI assistance:
 - ✅ **Confidence Scoring** - Rates overall assessment confidence (high/medium/low)
 - ✅ **Actionable Recommendations** - Prioritized list of issues to fix
 - ✅ **Executive Summary** - 3-5 paragraph narrative for stakeholders
+- ✅ **TL;DR Format** - Summary appears at top of HTML report for quick review
 
-See [TEMPLATES/_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for detailed triage workflow.
+**Workflow:**
+1. Run scan with template: `./dist/bin/run [template-name]`
+2. AI agent analyzes findings and updates JSON with `ai_triage` section
+3. HTML report regenerated with AI summary at top
+4. Optionally create GitHub issue with confirmed findings
+
+See [AI Instructions - Phase 2](dist/TEMPLATES/_AI_INSTRUCTIONS.md#phase-2-ai-assisted-triage) for detailed triage workflow and common false positive patterns.
 
 ### 🎫 **GitHub Issue Creation**
 
@@ -192,10 +210,13 @@ Automatically create GitHub issues from scan results with AI triage data:
 - ✅ **Interactive Preview** - Review before creating the issue
 - ✅ **Graceful Degradation** - Works without GitHub repo (generates issue body only)
 - ✅ **Persistent Issue Files** - Saves to `dist/issues/` with matching filename pattern for easy manual copy/paste
+- ✅ **Multi-Platform Support** - Use issue bodies in Jira, Linear, Asana, Trello, etc.
 
 **Requirements:**
-- GitHub CLI (`gh`) installed and authenticated (only for creating issues)
-- Scan with AI triage data (`--ai-triage` flag)
+- GitHub CLI (`gh`) installed and authenticated (only for automated creation)
+- Scan with AI triage data (recommended for best results)
+
+See [AI Instructions - Phase 3](dist/TEMPLATES/_AI_INSTRUCTIONS.md#phase-3-github-issue-creation) for complete workflow and error handling.
 
 ### 🔌 **MCP Protocol Support (AI Integration)**
 
@@ -261,6 +282,8 @@ When analyzing WP Code Check results via MCP:
 3. Prioritize CRITICAL and HIGH severity findings
 4. Suggest fixes with code examples
 5. Reference specific file paths and line numbers
+
+For complete AI triage workflow and false positive detection patterns, see [AI Instructions](dist/TEMPLATES/_AI_INSTRUCTIONS.md).
 
 ---
 

@@ -1,5 +1,12 @@
 # AI Agent Instructions for WP Code Check
 
+**Quick Links:**
+- [Main README](../../README.md) - User-facing documentation
+- [Template Guide](../HOWTO-TEMPLATES.md) - Manual template creation
+- [MCP Documentation](../../PROJECT/1-INBOX/PROJECT-MCP.md) - AI integration via Model Context Protocol
+
+---
+
 ## Overview
 
 Complete end-to-end workflow:
@@ -8,6 +15,22 @@ Complete end-to-end workflow:
 3. **Phase 1c**: Run scan using template or direct path
 4. **Phase 2**: AI-assisted triage of findings
 5. **Phase 3**: Create GitHub issue (automated or manual)
+
+**Workflow Decision Tree:**
+
+```
+User Request
+    │
+    ├─ "Run [name] end to end" ──────► Execute all phases (1c → 2 → 3)
+    │
+    ├─ "Run [name] scan" ─────────────► Phase 1c only (scan)
+    │
+    ├─ "Complete template [name]" ────► Phase 1b (metadata extraction)
+    │
+    ├─ "Triage [scan-id]" ────────────► Phase 2 only (AI analysis)
+    │
+    └─ "Create issue [scan-id]" ──────► Phase 3 only (GitHub issue)
+```
 
 ### End-to-End Execution Mode
 
@@ -51,12 +74,41 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 ls -1 /Users/noelsaw/Documents/GitHub\ Repos/wp-code-check/dist/TEMPLATES/*.txt
 ```
 
-**Examples of template names:**
-- `gravityforms.txt` → for Gravity Forms plugin
-- `woocommerce.txt` → for WooCommerce plugin
-- `twentytwentyfour.txt` → for Twenty Twenty-Four theme
+### Template Naming Best Practices
 
-If a template exists, skip to **Phase 1c: Running Scans**.
+**Preferred naming convention:** Lowercase with hyphens
+
+| ✅ Recommended | ⚠️ Acceptable | ❌ Avoid |
+|---------------|--------------|---------|
+| `gravity-forms.txt` | `gravityforms.txt` | `Gravity Forms.txt` |
+| `woocommerce.txt` | `woo_commerce.txt` | `WooCommerce.txt` |
+| `twenty-twenty-four.txt` | `twentytwentyfour.txt` | `Twenty Twenty Four.txt` |
+
+**Why lowercase with hyphens?**
+- Consistent with WordPress plugin slug conventions
+- Easier to type and autocomplete
+- Avoids shell escaping issues with spaces
+- Matches GitHub repository naming patterns
+
+### Template Detection Logic
+
+When user says "Run [name]", try these variations in order:
+
+1. **Exact match**: `[name].txt`
+2. **Lowercase**: `[name-lowercase].txt`
+3. **With hyphens**: Replace spaces/underscores with hyphens
+4. **Without hyphens**: Remove all separators
+
+**Example:** User says "Run Gravity Forms"
+```bash
+# Try in this order:
+1. Gravity Forms.txt
+2. gravity forms.txt
+3. gravity-forms.txt
+4. gravityforms.txt
+```
+
+If a template exists, skip to **[Phase 1c: Running Scans](#phase-1c-running-scans)**.
 
 ---
 
@@ -89,14 +141,75 @@ User creates a new `.txt` file in `dist/TEMPLATES/` with just a path, or asks yo
 - Extract `Plugin Name` and `Version`
 
 **Step 2b: Detect GitHub repository (OPTIONAL)**
-- Check if the plugin/theme has a GitHub repository
-- Look for common indicators:
-  - `readme.txt` or `README.md` with GitHub links
-  - Plugin header with `Plugin URI:` or `Theme URI:` pointing to GitHub
-  - `.git` folder (check remote URL with `git config --get remote.origin.url`)
-- If found, extract the `owner/repo` format (e.g., `gravityforms/gravityforms`)
-- If not found or uncertain, leave `GITHUB_REPO` commented out
-- **DO NOT guess or make up repository URLs**
+
+Check if the plugin/theme has a GitHub repository using these methods:
+
+**Method 1: Plugin/Theme Headers**
+```bash
+# Search for GitHub URLs in main plugin file
+grep -E "(Plugin URI|Theme URI|GitHub Plugin URI):" [main-file.php]
+```
+
+Common header fields:
+- `Plugin URI:` - Official plugin homepage (may be GitHub)
+- `GitHub Plugin URI:` - GitHub Updater plugin convention
+- `Theme URI:` - Official theme homepage
+
+**Method 2: README Files**
+```bash
+# Search readme.txt for GitHub links
+grep -i "github.com" readme.txt
+
+# Search README.md for repository links
+grep -E "\[.*\]\(https://github.com/[^)]+\)" README.md
+```
+
+**Method 3: Git Remote (if .git folder exists)**
+```bash
+cd [plugin-path]
+git config --get remote.origin.url
+# Example output: https://github.com/owner/repo.git
+```
+
+**Extraction Patterns:**
+
+| Source | Pattern | Example |
+|--------|---------|---------|
+| URL | `github.com/([^/]+)/([^/]+)` | `github.com/woocommerce/woocommerce` → `woocommerce/woocommerce` |
+| Git remote | `github.com[:/]([^/]+)/(.+?)(.git)?$` | `git@github.com:owner/repo.git` → `owner/repo` |
+
+**Important Rules:**
+- ✅ Only use if you find explicit GitHub references
+- ✅ Verify the URL points to the actual plugin/theme repository (not a fork or unrelated project)
+- ❌ DO NOT guess or make up repository URLs
+- ❌ DO NOT use WordPress.org plugin pages as GitHub repos
+- ⚠️ If uncertain, leave `GITHUB_REPO` commented out
+
+**Example valid detections:**
+```bash
+# Plugin header
+Plugin URI: https://github.com/gravityforms/gravityforms
+→ GITHUB_REPO='gravityforms/gravityforms'
+
+# Git remote
+git@github.com:woocommerce/woocommerce.git
+→ GITHUB_REPO='woocommerce/woocommerce'
+
+# README.md
+[View on GitHub](https://github.com/Automattic/jetpack)
+→ GITHUB_REPO='Automattic/jetpack'
+```
+
+**Example invalid detections:**
+```bash
+# WordPress.org plugin page (NOT GitHub)
+Plugin URI: https://wordpress.org/plugins/woocommerce/
+→ Leave GITHUB_REPO commented out
+
+# Generic company website
+Plugin URI: https://gravityforms.com
+→ Leave GITHUB_REPO commented out
+```
 
 **Step 3: Generate the template** using this structure:
 ```bash
@@ -154,6 +267,9 @@ VERSION='2.7.1'
 - Don't uncomment optional settings unless asked
 - Add timestamps in the header
 - Validate the path exists before completing
+- Use lowercase-with-hyphens naming convention for new templates
+
+**Cross-Reference:** See [Template Guide](../HOWTO-TEMPLATES.md) for manual template creation and configuration options.
 
 ---
 
@@ -209,17 +325,29 @@ If the exact filename doesn't exist, try these variations:
 - **JSON logs**: `dist/logs/TIMESTAMP.json`
 - **HTML reports**: `dist/reports/TIMESTAMP.html` (auto-generated from JSON)
 
+**Note:** If HTML generation fails during scan, use the standalone converter:
+```bash
+python3 dist/bin/json-to-html.py dist/logs/[TIMESTAMP].json dist/reports/[TIMESTAMP].html
+```
+
+See [Manual JSON to HTML Conversion](#manual-json-to-html-conversion) section below for troubleshooting.
+
 ---
 
 ## Phase 2: AI-Assisted Triage
 
 After HTML report is generated, perform a 2nd pass AI triage to identify false positives and provide an overall assessment.
 
+**Purpose:** Reduce noise by identifying false positives and providing actionable recommendations.
+
 ### When to Use
 - **Automatically**: When user requests "end to end" execution
 - **Manually**: User explicitly asks "Run AI triage on this report"
 - User wants to validate false positives before publishing
 - User needs an executive summary of findings
+- Preparing findings for stakeholder review or GitHub issue creation
+
+**Cross-Reference:** See [README - AI-Assisted Triage](../../README.md#-phase-2-ai-assisted-triage-v11-poc) for feature overview.
 
 ### HTML Report Layout
 
@@ -303,11 +431,13 @@ The HTML report will now show:
 
 ### Confidence Levels
 
-| Level | Meaning |
-|-------|---------|
-| `high` | 90%+ confident in this assessment |
-| `medium` | 60-89% confident |
-| `low` | <60% confident, needs human review |
+| Level | Meaning | When to Use |
+|-------|---------|-------------|
+| `high` | 90%+ confident in this assessment | Clear patterns, definitive evidence |
+| `medium` | 60-89% confident | Some ambiguity, context-dependent |
+| `low` | <60% confident, needs human review | Insufficient context, complex logic |
+
+**Tip:** When confidence is `low`, add specific questions in the `needs_review` section to guide manual review.
 
 ---
 
@@ -315,12 +445,17 @@ The HTML report will now show:
 
 After AI triage is complete, create a GitHub issue with the findings.
 
+**Purpose:** Convert scan findings into actionable GitHub issues with checkboxes and priority ordering.
+
 ### When to Use
 
 - **Automatically**: When user requests "end to end" execution with GitHub repo configured
 - **Manually**: User explicitly asks "Create GitHub issue for this scan"
 - User wants to track findings in their project management system
 - User needs to share findings with their team
+- Preparing findings for external stakeholders or clients
+
+**Cross-Reference:** See [README - GitHub Issue Creation](../../README.md#-github-issue-creation) for feature overview and multi-platform support.
 
 ### Prerequisites
 
@@ -439,44 +574,192 @@ JSON Report: dist/logs/{SCAN_ID}.json
 2. **Use templates with GITHUB_REPO** - Enables fully automated workflow
 3. **Review before creating** - Script shows preview and asks for confirmation
 4. **Keep issue bodies** - Files in `dist/issues/` are not tracked by Git, safe to keep for reference
+5. **Use issue bodies for other platforms** - Copy/paste to Jira, Linear, Asana, Trello, Monday.com, etc.
+
+**Multi-Platform Workflow:**
+```bash
+# Generate issue body without creating GitHub issue
+./dist/bin/create-github-issue.sh --scan-id [TIMESTAMP]
+
+# Copy from dist/issues/GH-issue-[TIMESTAMP].md to:
+# - Jira (paste as description)
+# - Linear (paste as issue description)
+# - Asana (paste as task description)
+# - Trello (paste as card description)
+# - Email or Slack (formatted markdown)
+```
 
 ---
 
 ## Common False Positive Patterns
 
-| Rule ID | Common False Positive Reason |
-|---------|------------------------------|
-| `spo-002-superglobals` | Has `phpcs:ignore` with nonce verification elsewhere in function |
-| `rest-no-pagination` | Endpoint returns single item, not collection (e.g., `/item/{id}`) |
-| `get-users-no-limit` | Args passed through `apply_filters()` hook that adds limit |
-| `direct-db-query` | Query uses `$wpdb->prepare()` on adjacent line (multi-line query) |
-| `admin-no-cap-check` | Function is only called from another function that has cap check |
-| `n-plus-1-pattern` | File has "meta" in variable name but not actual meta query in loop |
+Understanding these patterns helps AI agents provide accurate triage assessments.
+
+| Rule ID | Common False Positive Reason | How to Verify |
+|---------|------------------------------|---------------|
+| `spo-002-superglobals` | Has `phpcs:ignore` with nonce verification elsewhere in function | Check for `wp_verify_nonce()` or `check_admin_referer()` in same function |
+| `rest-no-pagination` | Endpoint returns single item, not collection (e.g., `/item/{id}`) | Check if route has `{id}` parameter or returns single object |
+| `get-users-no-limit` | Args passed through `apply_filters()` hook that adds limit | Look for `apply_filters()` wrapping the args array |
+| `direct-db-query` | Query uses `$wpdb->prepare()` on adjacent line (multi-line query) | Check 1-3 lines above/below for `$wpdb->prepare()` |
+| `admin-no-cap-check` | Function is only called from another function that has cap check | Trace function calls to see if parent has `current_user_can()` |
+| `n-plus-1-pattern` | File has "meta" in variable name but not actual meta query in loop | Verify if `get_post_meta()` or `get_user_meta()` is actually called in loop |
+| `unsafe-regexp` | RegExp pattern is static/hardcoded, not user input | Check if pattern comes from variable or is a string literal |
+| `debug-code` | Debug code in vendor/node_modules directory | Check file path - third-party code is not under developer control |
+
+**AI Agent Tip:** When analyzing findings, always read 5-10 lines of context around the flagged line to catch these patterns.
+
+**Cross-Reference:** See [README - Quick Scanner](../../README.md#-multi-layered-code-quality-analysis) for complete list of checks and severity levels.
 
 ---
 
 ## Manual JSON to HTML Conversion
 
-If HTML generation fails during a scan:
+If HTML generation fails during a scan, use the standalone Python converter.
 
+**When to use:**
+- Main scan completes but HTML report generation hangs or times out
+- Need to regenerate HTML after updating JSON with AI triage data
+- Want to create custom HTML reports from existing JSON logs
+
+**Basic usage:**
 ```bash
-# Find latest JSON log
-latest_json=$(ls -t dist/logs/*.json | head -1)
+# Convert specific JSON to HTML
+python3 dist/bin/json-to-html.py dist/logs/[TIMESTAMP].json dist/reports/[TIMESTAMP].html
 
-# Convert to HTML
+# Find latest JSON log and convert
+latest_json=$(ls -t dist/logs/*.json | head -1)
 python3 dist/bin/json-to-html.py "$latest_json" dist/reports/manual-report.html
 ```
+
+**Features:**
+- ✅ **Fast & Reliable** - Python-based, no bash subprocess issues
+- ✅ **Standalone** - Works independently of main scanner
+- ✅ **Auto-opens** - Automatically opens report in browser (macOS/Linux)
+- ✅ **No Dependencies** - Uses only Python 3 standard library
+- ✅ **Detailed Output** - Shows progress and file size
+
+**Troubleshooting:**
+
+| Error | Solution |
+|-------|----------|
+| `python3: command not found` | Install Python 3: `brew install python3` (macOS) or `apt install python3` (Linux) |
+| `FileNotFoundError: report-template.html` | Ensure `dist/bin/templates/report-template.html` exists |
+| `JSONDecodeError` | Validate JSON: `jq empty dist/logs/[file].json` |
+| `Permission denied` | Make script executable: `chmod +x dist/bin/json-to-html.py` |
+
+**Cross-Reference:** See [README - JSON to HTML Converter](../../README.md#-tools-included) for integration with main scanner.
 
 ---
 
 ## Troubleshooting
 
-| Error | Solution |
-|-------|----------|
-| `Permission denied` | `chmod +x /path/to/script.sh` |
-| `No such file or directory` | Use absolute path, verify file exists |
-| `python3: command not found` | Install Python 3 |
-| `Invalid JSON` | Validate with: `jq empty dist/logs/your-file.json` |
+### Common Errors and Solutions
+
+| Error | Likely Cause | Solution |
+|-------|--------------|----------|
+| `Permission denied` | Script not executable | `chmod +x /path/to/script.sh` |
+| `No such file or directory` | Incorrect path or file doesn't exist | Use absolute path, verify with `ls -la` |
+| `python3: command not found` | Python 3 not installed | Install: `brew install python3` (macOS) or `apt install python3` (Linux) |
+| `Invalid JSON` | Corrupted or incomplete JSON log | Validate: `jq empty dist/logs/your-file.json` |
+| `Template not found` | Template name mismatch | List templates: `ls -1 dist/TEMPLATES/*.txt` |
+| `gh: command not found` | GitHub CLI not installed | Install: `brew install gh` (macOS) or see [GitHub CLI docs](https://cli.github.com/) |
+| `gh auth required` | Not authenticated with GitHub | Run: `gh auth login` |
+| `Scan hangs or times out` | Large codebase or slow disk | Use `--exclude-pattern` to skip vendor/node_modules |
+
+### Getting Help
+
+If you encounter issues not covered here:
+
+1. **Check the logs**: `dist/logs/[TIMESTAMP].json` contains detailed error messages
+2. **Validate JSON**: Use `jq` to check for syntax errors
+3. **Review README**: [Main README](../../README.md) has additional troubleshooting
+4. **GitHub Issues**: [Report bugs](https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues)
 
 ---
+
+## Quick Reference for AI Agents
+
+### Phase Checklist
+
+**Phase 1a: Check Templates**
+- [ ] List existing templates: `ls -1 dist/TEMPLATES/*.txt`
+- [ ] Try name variations (exact, lowercase, hyphens, no-hyphens)
+- [ ] If found, skip to Phase 1c
+
+**Phase 1b: Complete Template**
+- [ ] Read user's template file for path
+- [ ] Find main plugin/theme file
+- [ ] Extract `Plugin Name` and `Version` from headers
+- [ ] Detect GitHub repo (optional, don't guess)
+- [ ] Generate complete template using structure from `_TEMPLATE.txt`
+- [ ] Use lowercase-with-hyphens naming convention
+
+**Phase 1c: Run Scan**
+- [ ] Execute: `dist/bin/run [template-name]`
+- [ ] Wait for completion (1-2 minutes typical)
+- [ ] Verify JSON log created: `dist/logs/[TIMESTAMP].json`
+- [ ] Verify HTML report created: `dist/reports/[TIMESTAMP].html`
+
+**Phase 2: AI Triage**
+- [ ] Read JSON log: `cat dist/logs/[TIMESTAMP].json`
+- [ ] Analyze findings for false positives (check context, safeguards)
+- [ ] Update JSON with `ai_triage` section (summary stats + recommendations)
+- [ ] Regenerate HTML: `python3 dist/bin/json-to-html.py [json] [html]`
+- [ ] Verify AI summary appears at top of HTML report
+
+**Phase 3: GitHub Issue**
+- [ ] Determine scan ID from JSON filename
+- [ ] Run: `dist/bin/create-github-issue.sh --scan-id [TIMESTAMP]`
+- [ ] If no repo: Issue body saved to `dist/issues/GH-issue-[TIMESTAMP].md`
+- [ ] If repo specified: GitHub issue created automatically
+- [ ] Verify issue includes confirmed findings and needs-review sections
+
+### End-to-End Execution
+
+When user says **"Run [name] end to end"**:
+
+```bash
+# 1. Run scan
+dist/bin/run [template-name]
+
+# 2. Extract scan ID from output or find latest JSON
+scan_id=$(ls -t dist/logs/*.json | head -1 | xargs basename | sed 's/.json//')
+
+# 3. Perform AI triage (read JSON, analyze, update with ai_triage section)
+# [AI agent performs analysis and updates JSON]
+
+# 4. Regenerate HTML with AI summary
+python3 dist/bin/json-to-html.py dist/logs/${scan_id}.json dist/reports/${scan_id}.html
+
+# 5. Create GitHub issue
+dist/bin/create-github-issue.sh --scan-id ${scan_id}
+```
+
+### Key File Locations
+
+| File Type | Location | Purpose |
+|-----------|----------|---------|
+| Templates | `dist/TEMPLATES/*.txt` | Scan configurations |
+| JSON Logs | `dist/logs/[TIMESTAMP].json` | Machine-readable scan data |
+| HTML Reports | `dist/reports/[TIMESTAMP].html` | Human-readable reports |
+| Issue Bodies | `dist/issues/GH-issue-[TIMESTAMP].md` | GitHub issue markdown |
+| Template Guide | `dist/HOWTO-TEMPLATES.md` | Manual template creation |
+| Main README | `README.md` | User-facing documentation |
+
+### Cross-Reference Map
+
+| Topic | AI Instructions Section | README Section |
+|-------|------------------------|----------------|
+| Template creation | [Phase 1b](#phase-1b-template-completion-if-needed) | [Project Templates](../../README.md#-project-templates) |
+| Running scans | [Phase 1c](#phase-1c-running-scans) | [Quick Start](../../README.md#quick-start) |
+| AI triage | [Phase 2](#phase-2-ai-assisted-triage) | [AI-Assisted Triage](../../README.md#-phase-2-ai-assisted-triage-v11-poc) |
+| GitHub issues | [Phase 3](#phase-3-github-issue-creation) | [GitHub Issue Creation](../../README.md#-github-issue-creation) |
+| False positives | [Common Patterns](#common-false-positive-patterns) | [Quick Scanner](../../README.md#-multi-layered-code-quality-analysis) |
+| JSON to HTML | [Manual Conversion](#manual-json-to-html-conversion) | [Tools Included](../../README.md#-tools-included) |
+
+---
+
+**Document Version:** 2.0
+**Last Updated:** 2026-01-13
+**Maintained By:** Hypercart Dev Tools
 
