@@ -1,28 +1,28 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-14T15:07:32Z",
+  "generated": "2026-01-14T21:03:38Z",
   "summary": {
-    "total_patterns": 29,
-    "enabled": 29,
+    "total_patterns": 31,
+    "enabled": 31,
     "disabled": 0,
     "by_severity": {
-      "CRITICAL": 9,
+      "CRITICAL": 11,
       "HIGH": 10,
       "MEDIUM": 7,
       "LOW": 3
     },
     "by_category": {
-      "performance": 9,"duplication": 5,"reliability": 5,"security": 8
+      "performance": 9,"duplication": 5,"reliability": 5,"security": 10
     },
     "by_pattern_type": {
-      "php": 18,
+      "php": 20,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 6,
     "heuristic_patterns": 10,
-    "definitive_patterns": 19
+    "definitive_patterns": 21
   },
   "patterns": [
     {
@@ -276,6 +276,34 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "unhandled-promise.json"
+},
+{
+  "id": "php-dynamic-include",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "security",
+  "severity": "CRITICAL",
+  "title": "Dynamic PHP include/require with variables",
+  "description": "Detects include/require statements where the path expression contains variables. Dynamic includes are a common source of local/remote file inclusion vulnerabilities.",
+  "detection_type": "direct",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "php-dynamic-include.json"
+},
+{
+  "id": "php-eval-injection",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "security",
+  "severity": "CRITICAL",
+  "title": "Dangerous eval() usage in PHP",
+  "description": "Detects eval() calls in PHP code, which execute arbitrary code and are almost never safe in WordPress plugins/themes.",
+  "detection_type": "direct",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "php-eval-injection.json"
 },
 {
   "id": "superglobal-with-nonce-context",

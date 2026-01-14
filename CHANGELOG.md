@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-01-14
+
+### Added
+- **Tier 1 Security Rules (PHP)** - Dangerous eval() and dynamic include/require detection
+  - New rule: `php-eval-injection` (**CRITICAL**, security)
+    - Detects `eval()` calls in PHP files
+    - Pattern JSON: `dist/patterns/php-eval-injection.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+  - New rule: `php-dynamic-include` (**CRITICAL**, security)
+    - Detects `include`/`require` statements whose path expressions contain variables (dynamic includes)
+    - Pattern JSON: `dist/patterns/php-dynamic-include.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+  - New fixture: `dist/tests/fixtures/eval-and-include-antipatterns.php` with eval() and dynamic include/require anti-patterns
+
+### Changed
+- **Severity Configuration** - Updated `dist/config/severity-levels.json`
+  - Incremented `total_checks` from 33 to 35
+  - Added severity entries for `php-eval-injection` and `php-dynamic-include` (both CRITICAL, category: security)
+- **Pattern Library Registry** - Pattern library auto-regenerated to include new PHP security rules
+  - `dist/PATTERN-LIBRARY.json` and `dist/PATTERN-LIBRARY.md` refreshed by scanner run
+
 ## [1.3.6] - 2026-01-14
 
 ### Fixed

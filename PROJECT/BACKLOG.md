@@ -10,6 +10,14 @@ This backlog intentionally contains **only pending work**. Completed items belon
 
 ## ⏭️ Next Up
 
+### Scanner Architecture & Rule Externalization (Next Phase)
+**Priority:** HIGH
+**Effort:** Multi-day (phased)
+
+- [ ] Add a clear comment/block in `dist/bin/check-performance.sh` indicating that **all new rules should live in external pattern JSON files** and the script should treat them as the single source of truth going forward.
+- [ ] Plan and execute a breakout of `dist/bin/check-performance.sh` into smaller, focused modules (e.g., core CLI, scan orchestration, pattern runner, reporting), while keeping the current behavior intact.
+- [ ] Gradually migrate existing inline checks to external rule files and continue implementing the remaining **Tier 1 rules** using the JSON + helper pattern (pattern file, fixture, integration, severity wiring, CHANGELOG).
+
 ### Calibration Feature - Pattern Sensitivity Adjustment (NEW)
 **Priority:** MEDIUM
 **Effort:** 3–5 days

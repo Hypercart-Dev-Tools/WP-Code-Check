@@ -8,6 +8,11 @@ Notes:
 - This is **not a new standalone script**. `dist/bin/check-performance.sh` already has limited “same function” scoping (used in caching mitigation); this mini-project extends/centralizes that approach.
 
 ### Checklist
+- [ ] Fix tty output for HTML reports (The commit added great new features (init, update, tab completion) with proper TTY detection. However, the original HTML generation code (lines 5848-5863) still writes to /dev/tty unconditionally)
+- [ ] Make a comment in main script to make rules in external files going forward
+- [ ] Breakout check-performance.sh into multiple files and external rule files
+- [ ] Continue with Tier 1 rules
+
 - [ ] Audit where we rely on context windows today (±N lines) and where “same function” scoping would reduce false positives.
 - [x] Add/centralize a helper to compute function/method scope boundaries (support `function foo()`, `public/protected/private static function foo()`, and common formatting).
 - [x] Use the helper in mitigation detection (so caching/ids-only/admin-only/parent-scoped all share the same scoping rules).

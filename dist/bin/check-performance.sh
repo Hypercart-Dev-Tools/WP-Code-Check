@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.6"
+SCRIPT_VERSION="1.3.7"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -3107,6 +3107,15 @@ else
   add_json_check "$UNSANITIZED_TITLE" "$UNSANITIZED_SEVERITY" "passed" 0
 fi
 text_echo ""
+
+# Dangerous eval() usage in PHP
+run_check "ERROR" "$(get_severity "php-eval-injection" "CRITICAL")" "Dangerous eval() usage in PHP" "php-eval-injection" \
+  "-E eval[[:space:]]*\\("
+
+# Dynamic PHP include/require with variables (LFI/RFI risk)
+run_check "ERROR" "$(get_severity "php-dynamic-include" "CRITICAL")" "Dynamic PHP include/require with variables" "php-dynamic-include" \
+  "-E include(_once)?[[:space:]]+[^;]*\\$" \
+  "-E require(_once)?[[:space:]]+[^;]*\\$"
 
 # Insecure data deserialization
 run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \
