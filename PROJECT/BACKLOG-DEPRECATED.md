@@ -1,4 +1,6 @@
-# Backlog - Future Work
+# Backlog - DEPRECATED - 
+
+**Status:** DEPRECATED
 
 This backlog intentionally contains **only pending work**. Completed items belong in `CHANGELOG.md` and `PROJECT/3-COMPLETED/`.
 
@@ -17,6 +19,12 @@ This backlog intentionally contains **only pending work**. Completed items belon
 - [ ] Add a clear comment/block in `dist/bin/check-performance.sh` indicating that **all new rules should live in external pattern JSON files** and the script should treat them as the single source of truth going forward.
 - [ ] Plan and execute a breakout of `dist/bin/check-performance.sh` into smaller, focused modules (e.g., core CLI, scan orchestration, pattern runner, reporting), while keeping the current behavior intact.
 - [ ] Gradually migrate existing inline checks to external rule files and continue implementing the remaining **Tier 1 rules** using the JSON + helper pattern (pattern file, fixture, integration, severity wiring, CHANGELOG).
+
+### Alternate - Checklist
+- [ ] Continue with Tier 1 rules
+- [ ] Fix tty output for HTML reports (The commit added great new features (init, update, tab completion) with proper TTY detection. However, the original HTML generation code (lines 5848-5863) still writes to /dev/tty unconditionally)
+- [ ] Make a comment in main script to make rules in external files going forward
+- [ ] Breakout check-performance.sh into multiple files and external rule files
 
 ### Calibration Feature - Pattern Sensitivity Adjustment (NEW)
 **Priority:** MEDIUM

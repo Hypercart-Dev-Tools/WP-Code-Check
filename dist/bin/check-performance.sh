@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.7"
+SCRIPT_VERSION="1.3.8"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -2775,6 +2775,13 @@ section_start "Critical Checks"
 text_echo "${RED}━━━ CRITICAL CHECKS (will fail build) ━━━${NC}"
 text_echo ""
 
+# NOTE (Rule Definition Strategy, v1.3.8):
+# - New rules SHOULD be defined in external JSON pattern files under dist/patterns
+#   and registered with the Pattern Library Manager.
+# - Inline run_check(...) blocks below are legacy and glue code; when adding
+#   new rules, prefer JSON + helper glue (see dist/patterns/php-eval-injection.json
+#   and dist/patterns/php-dynamic-include.json for examples).
+
 # Debug code in production (JS + PHP)
 OVERRIDE_GREP_INCLUDE="--include=*.php --include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
 run_check "ERROR" "$(get_severity "spo-001-debug-code" "CRITICAL")" "Debug code in production" "spo-001-debug-code" \
@@ -3116,6 +3123,13 @@ run_check "ERROR" "$(get_severity "php-eval-injection" "CRITICAL")" "Dangerous e
 run_check "ERROR" "$(get_severity "php-dynamic-include" "CRITICAL")" "Dynamic PHP include/require with variables" "php-dynamic-include" \
   "-E include(_once)?[[:space:]]+[^;]*\\$" \
   "-E require(_once)?[[:space:]]+[^;]*\\$"
+
+# Shell command execution functions (shell_exec/exec/system/passthru)
+run_check "ERROR" "$(get_severity "php-shell-exec-functions" "CRITICAL")" "Shell command execution functions in PHP" "php-shell-exec-functions" \
+  "-E shell_exec[[:space:]]*\\(" \
+  "-E exec[[:space:]]*\\(" \
+  "-E system[[:space:]]*\\(" \
+  "-E passthru[[:space:]]*\\("
 
 # Insecure data deserialization
 run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \

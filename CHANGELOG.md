@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-01-14
+
+### Added
+- **Tier 1 Security Rules (PHP)** - Shell command execution detection
+  - New rule: `php-shell-exec-functions` (**CRITICAL**, security)
+    - Detects usage of `shell_exec()`, `exec()`, `system()`, and `passthru()` in PHP code
+    - Pattern JSON: `dist/patterns/php-shell-exec-functions.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+  - New fixture: `dist/tests/fixtures/shell-exec-antipatterns.php` with shell command execution anti-patterns
+
+### Changed
+- **Severity Configuration** - Updated `dist/config/severity-levels.json`
+  - Incremented `total_checks` from 35 to 36
+  - Added severity entry for `php-shell-exec-functions` (CRITICAL, category: security)
+
 ## [1.3.7] - 2026-01-14
 
 ### Added

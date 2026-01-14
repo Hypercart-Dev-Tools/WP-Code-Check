@@ -1,28 +1,28 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-14T21:03:38Z",
+  "generated": "2026-01-14T22:17:45Z",
   "summary": {
-    "total_patterns": 31,
+    "total_patterns": 32,
     "enabled": 31,
-    "disabled": 0,
+    "disabled": 1,
     "by_severity": {
-      "CRITICAL": 11,
+      "CRITICAL": 12,
       "HIGH": 10,
       "MEDIUM": 7,
       "LOW": 3
     },
     "by_category": {
-      "performance": 9,"duplication": 5,"reliability": 5,"security": 10
+      "performance": 9,"duplication": 5,"reliability": 5,"security": 11
     },
     "by_pattern_type": {
-      "php": 20,
+      "php": 21,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 6,
     "heuristic_patterns": 10,
-    "definitive_patterns": 21
+    "definitive_patterns": 22
   },
   "patterns": [
     {
@@ -304,6 +304,20 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "php-eval-injection.json"
+},
+{
+  "id": "php-shell-exec-functions",
+  "version": "",
+  "enabled": ,
+  "category": "security",
+  "severity": "CRITICAL",
+  "title": "Shell command execution functions in PHP (shell_exec/exec/system/passthru)",
+  "description": "Usage of shell_exec(), exec(), system(), or passthru() in PHP code. These functions execute system commands and are almost never safe in WordPress plugins/themes.",
+  "detection_type": "direct",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "php-shell-exec-functions.json"
 },
 {
   "id": "superglobal-with-nonce-context",
