@@ -54,7 +54,42 @@ This toolkit **automatically detects 30+ critical WordPress performance and secu
 
 **Key Feature:** You don't need to copy this tool into every project. Keep it in one location and point it at any codebase.
 
-### Installation (One-Time Setup)
+---
+
+### 🎯 **New to WP Code Check? Start Here!**
+
+👉 **[Shell Quick Start Guide](../SHELL-QUICKSTART.md)** - Complete guide for terminal users
+
+**The fastest way to get started:**
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+cd WP-Code-Check
+
+# 2. Run the installer (30 seconds)
+./install.sh
+
+# 3. Scan your plugin
+wp-check ~/my-plugin
+```
+
+**What the installer does:**
+- ✅ Makes scripts executable
+- ✅ Adds `wp-check` alias to your shell
+- ✅ Enables tab completion
+- ✅ Runs a test scan
+- ✅ Shows quick start examples
+
+**Time to first scan: 30 seconds** (vs. 5 minutes manual setup)
+
+---
+
+### 📖 Manual Installation (Advanced Users)
+
+If you prefer manual setup or need custom configuration:
+
+#### Installation (One-Time Setup)
 
 ```bash
 # Clone to a central location (anywhere on your machine)
@@ -64,7 +99,7 @@ git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git ~/dev/wp-anal
 cd ~/dev/wp-analyzer
 ```
 
-### Usage: Analyze Any Project
+#### Usage: Analyze Any Project
 
 ```bash
 # Analyze any WordPress project from anywhere
@@ -83,20 +118,22 @@ cd ~/Sites/my-plugin
 ~/dev/wp-analyzer/dist/bin/check-performance.sh --paths .
 ```
 
-### Pro Tip: Create an Alias
+#### Create an Alias (Recommended)
 
 Add to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
 # One-line analyzer - use from anywhere
-alias wp-analyze='~/dev/wp-analyzer/dist/bin/check-performance.sh --paths'
+alias wp-check='~/dev/wp-analyzer/dist/bin/check-performance.sh --paths'
 
 # Then use it anywhere:
-wp-analyze ~/Sites/my-plugin
-wp-analyze .
-wp-analyze ~/client-work/custom-theme --strict
-wp-analyze ~/projects/plugin --format json > report.json
+wp-check ~/Sites/my-plugin
+wp-check .
+wp-check ~/client-work/custom-theme --strict
+wp-check ~/projects/plugin --format json > report.json
 ```
+
+**💡 Tip:** The `install.sh` script does this automatically! See the [Shell Quick Start Guide](../SHELL-QUICKSTART.md).
 
 ### Alternative: Per-Project Installation
 
