@@ -1,9 +1,9 @@
 {
   "_metadata": {
-    "version": "1.3.8",
+	    "version": "1.3.9",
     "description": "WP Code Check - Severity Level Customization",
     "last_updated": "2026-01-14",
-    "total_checks": 36,
+	    "total_checks": 38,
     "instructions": "Copy this file and edit 'level' fields to customize severity. Leave 'factory_default' unchanged for reference. Use --severity-config <path> to apply customizations. Any field starting with underscore (_comment, _note, _reason, _ticket, etc.) is ignored by the parser and can be used for documentation.",
     "_comment": "Example: This comment field is ignored during parsing. Use it to document your configuration decisions."
   },
@@ -64,6 +64,22 @@
       "factory_default": "CRITICAL",
       "category": "security",
       "description": "Usage of shell_exec(), exec(), system(), or passthru() in PHP code. These functions execute system commands and are almost never safe in WordPress plugins/themes."
+    },
+    "php-user-controlled-file-write": {
+      "id": "php-user-controlled-file-write",
+      "name": "Direct file write with user-controlled path",
+      "level": "CRITICAL",
+      "factory_default": "CRITICAL",
+      "category": "security",
+      "description": "file_put_contents(), fopen(), or move_uploaded_file() where the target path is derived directly from PHP superglobals such as $_GET, $_POST, or $_REQUEST."
+    },
+    "php-hardcoded-credentials": {
+      "id": "php-hardcoded-credentials",
+      "name": "Hardcoded credentials in PHP",
+      "level": "CRITICAL",
+      "factory_default": "CRITICAL",
+      "category": "security",
+      "description": "API keys, secrets, tokens, or passwords hardcoded into PHP source files (variables, constants, or Authorization headers)."
     },
     "unbounded-posts-per-page": {
       "id": "unbounded-posts-per-page",

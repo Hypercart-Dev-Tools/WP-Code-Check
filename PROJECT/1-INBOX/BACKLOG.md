@@ -1,7 +1,7 @@
 # Backlog - Issues to Investigate
 
 ### Checklist - 2025-01-14
-- [ ] Continue with Tier 1 rules
+- [ ] Continue with Tier 1 rules - First 5 completed
 - [ ] Fix tty output for HTML reports (The commit added great new features (init, update, tab completion) with proper TTY detection. However, the original HTML generation code (lines 5848-5863) still writes to /dev/tty unconditionally)
 - [ ] Make a comment in main script to make rules in external files going forward
 - [ ] Breakout check-performance.sh into multiple files and external rule files
