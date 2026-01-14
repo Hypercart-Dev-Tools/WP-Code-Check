@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.6
+# Version: 1.3.11
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.10"
+SCRIPT_VERSION="1.3.11"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5896,27 +5896,41 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
     REPORT_TIMESTAMP=$(timestamp_filename)
     HTML_REPORT="$REPORTS_DIR/$REPORT_TIMESTAMP.html"
 
-    # Generate the HTML report using standalone Python converter
-    # This is more reliable than the inline bash function
-    # IMPORTANT: Redirect to /dev/tty to prevent output from being captured in JSON log
-    if command -v python3 &> /dev/null; then
-      if "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/tty 2>&1; then
-        echo "" > /dev/tty
-        echo "📊 HTML Report: $HTML_REPORT" > /dev/tty
-      else
-        echo "⚠ HTML report generation failed (Python converter error)" > /dev/tty
-      fi
-    else
-      echo "⚠ HTML report generation skipped (python3 not found)" > /dev/tty
-      echo "   Install Python 3 to enable HTML reports" > /dev/tty
-    fi
+	    # Generate the HTML report using standalone Python converter
+	    # This is more reliable than the inline bash function
+	    if command -v python3 &> /dev/null; then
+	      # When a TTY is available, send output to /dev/tty so JSON stays clean
+	      if [ -w /dev/tty ] 2>/dev/null; then
+	        if "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/tty 2>&1; then
+	          echo "" > /dev/tty
+	          echo "📊 HTML Report: $HTML_REPORT" > /dev/tty
+	        else
+	          echo "⚠ HTML report generation failed (Python converter error)" > /dev/tty
+	        fi
 
-    # Show GitHub issue creation hint if gh CLI is available and scan has AI triage data
-    if command -v gh &> /dev/null && jq -e '.ai_triage' "$LOG_FILE" > /dev/null 2>&1; then
-      echo "" > /dev/tty
-      echo "💡 Create GitHub issue from this scan:" > /dev/tty
-      echo "   $SCRIPT_DIR/create-github-issue.sh --scan-id $REPORT_TIMESTAMP --repo owner/repo" > /dev/tty
-    fi
+	        # Show GitHub issue creation hint if gh CLI is available and scan has AI triage data
+	        if command -v gh &> /dev/null && jq -e '.ai_triage' "$LOG_FILE" > /dev/null 2>&1; then
+	          echo "" > /dev/tty
+	          echo "💡 Create GitHub issue from this scan:" > /dev/tty
+	          echo "   $SCRIPT_DIR/create-github-issue.sh --scan-id $REPORT_TIMESTAMP --repo owner/repo" > /dev/tty
+	        fi
+	      else
+	        # No TTY available (CI/AI/subprocess environment) - run converter quietly
+	        if "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/null 2>&1; then
+	          debug_echo "HTML report generated (no TTY available, path: $HTML_REPORT)"
+	        else
+	          debug_echo "HTML report generation failed (Python converter error, no TTY available)"
+	        fi
+	      fi
+	    else
+	      # Python not available - avoid /dev/tty usage in non-interactive environments
+	      if [ -w /dev/tty ] 2>/dev/null; then
+	        echo "⚠ HTML report generation skipped (python3 not found)" > /dev/tty
+	        echo "   Install Python 3 to enable HTML reports" > /dev/tty
+	      else
+	        debug_echo "HTML report generation skipped (python3 not found, no TTY available)"
+	      fi
+	    fi
   fi
 else
   # Summary (text mode)

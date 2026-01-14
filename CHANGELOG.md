@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-01-14
+
+### Fixed
+- **HTML report generation TTY handling**
+  - Updated JSON-mode HTML report generation in `dist/bin/check-performance.sh` to detect TTY availability before writing to `/dev/tty`.
+  - In interactive environments with a TTY, HTML converter output and GitHub issue hints still go to `/dev/tty` so JSON logs remain clean.
+  - In non-interactive/CI/AI subprocess environments without a TTY, HTML reports are still generated while converter output is suppressed, eliminating `/dev/tty: Device not configured` errors from the HTML generation path.
+
 ## [1.3.10] - 2026-01-14
 
 ### Fixed
