@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-01-14
+
+### Fixed
+- **PHP Security Rules**
+  - `php-user-controlled-file-write`: Fixed a shell variable interpolation bug in the inline grep patterns that prevented detection when the file path was derived from PHP superglobals (e.g., `$_GET`, `$_POST`). The rule now reliably flags direct file writes with user-controlled paths.
+  - `spo-003-insecure-deserialization`: Hardened the pattern definitions to avoid accidental expansion of shell special variables while scanning for insecure deserialization of superglobal input.
+
+### Internal
+- Added an opt-in `DEBUG_PATTERN=1` environment flag for `dist/bin/check-performance.sh` that prints the resolved grep include arguments, patterns, and paths for pattern-based rules to aid future debugging.
+ 
+### Documentation
+- Updated `PROJECT/1-INBOX/RULES-2026-01-14.md` to:
+  - Reflect that `php-user-controlled-file-write` is hardened as of v1.3.10.
+  - Promote `spo-003-insecure-deserialization` to a Tier 1 PHP rule with clear rationale and examples.
+  - Document the `DEBUG_PATTERN=1` flag as a supported internal tool for auditing Tier 1 pattern behavior.
+
+## [1.3.9] - 2026-01-14
+
+### Added
+- **Tier 1 Security Rules (PHP)** - Direct file writes and hardcoded credentials
+  - New rule: `php-user-controlled-file-write` (**CRITICAL**, security)
+    - Detects `file_put_contents()`, `fopen()`, and `move_uploaded_file()` calls where the target path is derived directly from PHP superglobals (e.g., `$_GET`, `$_POST`)
+    - Pattern JSON: `dist/patterns/php-user-controlled-file-write.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+    - New fixture: `dist/tests/fixtures/php-user-controlled-file-write.php` with direct file write anti-patterns
+  - New rule: `php-hardcoded-credentials` (**CRITICAL**, security)
+    - Detects hardcoded API keys, secrets, tokens, and passwords in PHP variables, constants, and Authorization headers
+    - Pattern JSON: `dist/patterns/php-hardcoded-credentials.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+    - New fixture: `dist/tests/fixtures/php-hardcoded-credentials.php` with representative hardcoded credential patterns
+
+### Changed
+- **Severity Configuration** - Updated `dist/config/severity-levels.json`
+  - Incremented `total_checks` from 36 to 38
+  - Added severity entries for `php-user-controlled-file-write` and `php-hardcoded-credentials` (both CRITICAL, category: security)
+
+## [1.3.8] - 2026-01-14
+
+### Added
+- **Tier 1 Security Rules (PHP)** - Shell command execution detection
+  - New rule: `php-shell-exec-functions` (**CRITICAL**, security)
+    - Detects usage of `shell_exec()`, `exec()`, `system()`, and `passthru()` in PHP code
+    - Pattern JSON: `dist/patterns/php-shell-exec-functions.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+  - New fixture: `dist/tests/fixtures/shell-exec-antipatterns.php` with shell command execution anti-patterns
+
+### Changed
+- **Severity Configuration** - Updated `dist/config/severity-levels.json`
+  - Incremented `total_checks` from 35 to 36
+  - Added severity entry for `php-shell-exec-functions` (CRITICAL, category: security)
+
+## [1.3.7] - 2026-01-14
+
+### Added
+- **Tier 1 Security Rules (PHP)** - Dangerous eval() and dynamic include/require detection
+  - New rule: `php-eval-injection` (**CRITICAL**, security)
+    - Detects `eval()` calls in PHP files
+    - Pattern JSON: `dist/patterns/php-eval-injection.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+  - New rule: `php-dynamic-include` (**CRITICAL**, security)
+    - Detects `include`/`require` statements whose path expressions contain variables (dynamic includes)
+    - Pattern JSON: `dist/patterns/php-dynamic-include.json`
+    - Scanner integration: new `run_check` block in `dist/bin/check-performance.sh`
+  - New fixture: `dist/tests/fixtures/eval-and-include-antipatterns.php` with eval() and dynamic include/require anti-patterns
+
+### Changed
+- **Severity Configuration** - Updated `dist/config/severity-levels.json`
+  - Incremented `total_checks` from 33 to 35
+  - Added severity entries for `php-eval-injection` and `php-dynamic-include` (both CRITICAL, category: security)
+- **Pattern Library Registry** - Pattern library auto-regenerated to include new PHP security rules
+  - `dist/PATTERN-LIBRARY.json` and `dist/PATTERN-LIBRARY.md` refreshed by scanner run
+
 ## [1.3.6] - 2026-01-14
 
 ### Fixed

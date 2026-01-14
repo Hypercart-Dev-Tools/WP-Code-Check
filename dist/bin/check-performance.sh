@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.6"
+SCRIPT_VERSION="1.3.10"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -2670,11 +2670,19 @@ run_check() {
 
   text_echo "${BLUE}▸ $name ${impact_badge}${NC}"
 
-   # Run grep with all patterns
-   local result
-   local finding_count=0
-   local severity="error"
-   [ "$level" = "WARNING" ] && severity="warning"
+  # Run grep with all patterns
+  local result
+  local finding_count=0
+  local severity="error"
+  [ "$level" = "WARNING" ] && severity="warning"
+
+  # Optional debug for pattern-based checks (enable with DEBUG_PATTERN=1)
+  if [ "${DEBUG_PATTERN:-0}" = "1" ]; then
+    text_echo "DEBUG run_check: rule_id=$rule_id"
+    text_echo "  include_args: $include_args"
+    text_echo "  patterns: $patterns"
+    text_echo "  PATHS: $PATHS"
+  fi
 
   # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
   if result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns "$PATHS" 2>/dev/null); then
@@ -2774,6 +2782,13 @@ profile_start "CRITICAL_CHECKS"
 section_start "Critical Checks"
 text_echo "${RED}━━━ CRITICAL CHECKS (will fail build) ━━━${NC}"
 text_echo ""
+
+# NOTE (Rule Definition Strategy, v1.3.8):
+# - New rules SHOULD be defined in external JSON pattern files under dist/patterns
+#   and registered with the Pattern Library Manager.
+# - Inline run_check(...) blocks below are legacy and glue code; when adding
+#   new rules, prefer JSON + helper glue (see dist/patterns/php-eval-injection.json
+#   and dist/patterns/php-dynamic-include.json for examples).
 
 # Debug code in production (JS + PHP)
 OVERRIDE_GREP_INCLUDE="--include=*.php --include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
@@ -3108,12 +3123,52 @@ else
 fi
 text_echo ""
 
+# Dangerous eval() usage in PHP
+run_check "ERROR" "$(get_severity "php-eval-injection" "CRITICAL")" "Dangerous eval() usage in PHP" "php-eval-injection" \
+  "-E eval[[:space:]]*\\("
+
+# Dynamic PHP include/require with variables (LFI/RFI risk)
+run_check "ERROR" "$(get_severity "php-dynamic-include" "CRITICAL")" "Dynamic PHP include/require with variables" "php-dynamic-include" \
+  "-E include(_once)?[[:space:]]+[^;]*\\$" \
+  "-E require(_once)?[[:space:]]+[^;]*\\$"
+
+# Shell command execution functions (shell_exec/exec/system/passthru)
+run_check "ERROR" "$(get_severity "php-shell-exec-functions" "CRITICAL")" "Shell command execution functions in PHP" "php-shell-exec-functions" \
+  "-E shell_exec[[:space:]]*\\(" \
+  "-E exec[[:space:]]*\\(" \
+  "-E system[[:space:]]*\\(" \
+  "-E passthru[[:space:]]*\\("
+
 # Insecure data deserialization
 run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \
-  "-E unserialize[[:space:]]*\\(\\$_" \
-  "-E base64_decode[[:space:]]*\\(\\$_" \
-  "-E json_decode[[:space:]]*\\(\\$_" \
-  "-E maybe_unserialize[[:space:]]*\\(\\$_"
+	  '-E unserialize[[:space:]]*\(\$_' \
+	  '-E base64_decode[[:space:]]*\(\$_' \
+	  '-E json_decode[[:space:]]*\(\$_' \
+	  '-E maybe_unserialize[[:space:]]*\(\$_' 
+	
+	# Direct file write with user-controlled path
+	run_check "ERROR" "$(get_severity "php-user-controlled-file-write" "CRITICAL")" "Direct file write with user-controlled path" "php-user-controlled-file-write" \
+	  '-E file_put_contents[[:space:]]*\([^,]*\$_(GET|POST|REQUEST|COOKIE|SERVER|FILES)' \
+	  '-E fopen[[:space:]]*\([^,]*\$_(GET|POST|REQUEST|COOKIE|SERVER|FILES)' \
+	  '-E move_uploaded_file[[:space:]]*\([^,]+,[^,]*\$_(GET|POST|REQUEST|COOKIE|SERVER)'
+
+# Hardcoded credentials in PHP
+run_check "ERROR" "$(get_severity "php-hardcoded-credentials" "CRITICAL")" "Hardcoded credentials in PHP" "php-hardcoded-credentials" \
+  "-E \\$password[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$passwd[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$secret[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$token[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$api_key[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$apikey[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$auth_token[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$PASSWORD[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$PASSWD[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$SECRET[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$TOKEN[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$API_KEY[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \\$AUTH_TOKEN[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E define[[:space:]]*\\([[:space:]]*['\"][A-Z0-9_]*(SECRET|TOKEN|PASSWORD|KEY|API)[A-Z0-9_]*['\"][[:space:]]*,[[:space:]]*['\"][^'\"]{8,}['\"]" \
+  "-E \"Authorization\"[[:space:]]*=>[[:space:]]*\"Bearer[[:space:]]+[A-Za-z0-9._-]{16,}\"" 
 
 # Direct database queries without $wpdb->prepare() (SQL injection risk)
 # Note: This check requires custom implementation because we need to filter out lines
