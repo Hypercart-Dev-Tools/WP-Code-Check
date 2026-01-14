@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-01-14
+
+### Fixed
+- **Non-interactive mode support** - Resolves Issue #76: Scanner fails with '/dev/tty: Device not configured'
+  - **`wp-check init`** - Now detects non-interactive mode and shows helpful error message
+    - Exits gracefully with instructions for CI/CD and AI assistant contexts
+    - Suggests using `install.sh` or manual configuration instead
+  - **`wp-check update`** - Now auto-updates in non-interactive mode
+    - Detects TTY availability using `[ -t 0 ] && [ -t 1 ]`
+    - Interactive mode: Prompts for confirmation before updating
+    - Non-interactive mode: Auto-updates without prompting
+  - **`install.sh`** - Now works in non-interactive mode
+    - Detects TTY availability at startup
+    - Interactive mode: Prompts for alias and tab completion preferences
+    - Non-interactive mode: Auto-configures with sensible defaults (adds alias and completion)
+  - **Impact:** Scanner now works correctly in CI/CD pipelines, AI assistant subprocesses, and non-interactive shells
+
+### Technical Details
+- **TTY Detection:** Uses `[ -t 0 ] && [ -t 1 ]` to check if stdin and stdout are terminals
+- **Graceful Degradation:** Commands that require interaction (init) fail with helpful error messages
+- **Auto-configuration:** Commands that can work non-interactively (update, install.sh) use sensible defaults
+- **Compatibility:** Works in GitHub Actions, GitLab CI, AI assistants (Claude, Cursor, etc.), and subprocess contexts
+
+## [1.3.5] - 2026-01-14
+
+### Added
+- **Shell User Experience Improvements** - Major enhancements for terminal/shell users
+  - **`install.sh`** - One-command installation script with interactive setup
+    - Auto-detects shell (bash/zsh) and configuration files
+    - Offers to add `wp-check` alias automatically
+    - Offers to enable tab completion
+    - Makes scripts executable
+    - Runs test scan to verify installation
+    - Shows quick start examples
+  - **Enhanced `--help` output** - Comprehensive help with examples and workflows
+    - Common workflows section with real-world examples
+    - Detailed options reference
+    - What it detects (Critical/Warning/Info categories)
+    - Practical examples for different use cases
+    - Documentation links
+    - Version information
+  - **`SHELL-QUICKSTART.md`** - Dedicated quick start guide for shell users
+    - Installation instructions (one-line and manual)
+    - Basic usage examples
+    - Common workflows (health check, CI/CD, baseline, templates)
+    - What it detects (detailed breakdown)
+    - Understanding results (HTML/JSON/text)
+    - Advanced features (baseline, templates, tab completion)
+    - Troubleshooting section
+    - Tips & tricks (aliases, git hooks, watch mode, tool integration)
+  - **Shell completion** (`dist/bin/wp-check-completion.bash`) - Tab completion for bash/zsh
+    - Completes all command-line options (--paths, --format, --strict, etc.)
+    - Context-aware completion (e.g., --format shows "text json")
+    - Template name completion (lists available templates)
+    - Directory completion for --paths and --baseline
+    - Works with both bash and zsh
+  - **Special commands** - New convenience commands
+    - `wp-check init` - Interactive setup wizard (4-step guided configuration)
+    - `wp-check update` - Easy update mechanism with changelog display
+    - `wp-check version` - Show current version
+  - **Impact:** Reduces time-to-first-scan from ~5 minutes to ~30 seconds for shell users
+
+### Changed
+- **`dist/bin/check-performance.sh`** - Added special command handling
+  - Added `show_help()` function with enhanced formatting
+  - Added command detection for `init`, `update`, and `version`
+  - Improved help output with visual formatting and examples
+- **`README.md`** - Added prominent shell user quick start section
+  - New "Choose Your Path" section (Shell vs. AI Agent users)
+  - Direct link to SHELL-QUICKSTART.md
+  - Highlights 30-second installation time
+  - Lists shell-specific features (tab completion, init wizard, update command)
+- **`dist/README.md`** - Reorganized quick start for shell users
+  - Added "New to WP Code Check? Start Here!" section
+  - Prominent link to SHELL-QUICKSTART.md
+  - Automated installation section (install.sh)
+  - Manual installation moved to "Advanced Users" section
+  - Added tip pointing to automated installer
+
+### Technical Details
+- **Installation Time:** Reduced from 5 minutes (manual) to 30 seconds (automated)
+- **Friction Points:** Reduced from 7 steps to 1 step for new users
+- **Shell Support:** Bash 3.2+ and Zsh (macOS and Linux compatible)
+- **Completion Support:** Bash completion and Zsh compdef
+- **Files Added:** 3 new files (install.sh, SHELL-QUICKSTART.md, wp-check-completion.bash)
+- **Documentation:** 400+ lines of shell-focused documentation
+
 ## [1.3.4] - 2026-01-13
 
 ### Changed

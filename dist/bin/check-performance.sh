@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.3
+# Version: 1.3.6
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.2.4"
+SCRIPT_VERSION="1.3.6"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -287,6 +287,317 @@ declare -a JSON_CHECKS=()
 declare -a DRY_VIOLATIONS=()
 DRY_VIOLATIONS_COUNT=0
 
+# Show enhanced help message
+show_help() {
+  cat << 'EOF'
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                    WP Code Check - WordPress Performance Analyzer         ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Fast, zero-dependency WordPress performance analyzer
+Catches critical issues before they crash your site
+
+USAGE:
+  wp-check [options]
+  ./dist/bin/check-performance.sh [options]
+
+COMMON WORKFLOWS:
+
+  # Quick scan of a plugin or theme
+  wp-check ~/my-plugin
+
+  # Scan current directory
+  wp-check .
+
+  # Strict mode - fail on warnings (great for CI/CD)
+  wp-check ~/my-plugin --strict
+
+  # Generate baseline for legacy code (suppress existing issues)
+  wp-check ~/my-plugin --generate-baseline
+
+  # Use a saved template configuration
+  wp-check --project my-plugin-name
+
+  # CI/CD integration with JSON output
+  wp-check ~/my-plugin --format json --strict --no-log
+
+OPTIONS:
+
+  --project <name>         Load configuration from TEMPLATES/<name>.txt
+  --paths "dir1 dir2"      Paths to scan (default: current directory)
+  --format text|json       Output format (default: json, generates HTML report)
+  --strict                 Fail on warnings (N+1 patterns)
+  --verbose                Show all matches, not just first occurrence
+  --no-log                 Disable logging to file
+  --no-context             Disable context lines around findings
+  --context-lines N        Number of context lines to show (default: 3)
+  --severity-config <path> Use custom severity levels from JSON config file
+  --generate-baseline      Generate .hcc-baseline from current findings
+  --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
+  --ignore-baseline        Ignore baseline file even if present
+  --skip-clone-detection   Skip function clone detection (faster scans)
+  --help                   Show this help message
+
+WHAT IT DETECTS:
+
+  🔴 CRITICAL (Errors)
+    • Unbound database queries (no LIMIT clause)
+    • Direct $_GET/$_POST access without sanitization
+    • Missing nonce verification in forms
+    • SQL injection vulnerabilities
+    • Unsafe file operations
+
+  🟡 WARNING (Performance Issues)
+    • N+1 query patterns (queries in loops)
+    • Missing transient caching
+    • Inefficient WP_Query usage
+    • Large array operations in loops
+
+  🔵 INFO (Best Practices)
+    • Magic strings (hardcoded values that should be constants)
+    • Function clones (duplicate code)
+    • Missing error handling
+
+EXAMPLES:
+
+  # Scan a WooCommerce extension
+  wp-check ~/wp-content/plugins/my-woo-extension
+
+  # Scan multiple directories
+  wp-check --paths "~/plugin1 ~/plugin2"
+
+  # Generate baseline, then scan for new issues only
+  wp-check ~/legacy-plugin --generate-baseline
+  wp-check ~/legacy-plugin  # Only shows new issues
+
+  # Use template for frequently-scanned projects
+  wp-check --project woocommerce-subscriptions
+
+  # CI/CD pipeline integration
+  wp-check . --format json --strict --no-log || exit 1
+
+DOCUMENTATION:
+
+  User Guide:       dist/README.md
+  Shell Quick Start: SHELL-QUICKSTART.md
+  Templates Guide:  dist/HOWTO-TEMPLATES.md
+  Changelog:        CHANGELOG.md
+
+SUPPORT:
+
+  Issues:  https://github.com/Hypercart-Dev-Tools/WP-Code-Check/issues
+  Docs:    https://github.com/Hypercart-Dev-Tools/WP-Code-Check
+
+VERSION:
+  WP Code Check v$SCRIPT_VERSION
+
+EOF
+}
+
+# Handle special commands (update, init, version) before argument parsing
+if [ $# -eq 1 ]; then
+  case "$1" in
+    update)
+      echo ""
+      echo "╔════════════════════════════════════════════════════════════╗"
+      echo "║         WP Code Check - Update                             ║"
+      echo "╚════════════════════════════════════════════════════════════╝"
+      echo ""
+
+      # Check if we're in a git repository
+      if [ ! -d "$REPO_ROOT/../.git" ]; then
+        echo "Error: Not a git repository. Cannot update."
+        echo "Please update manually or reinstall from GitHub."
+        exit 1
+      fi
+
+      cd "$REPO_ROOT/.." || exit 1
+
+      # Fetch latest changes
+      echo "Checking for updates..."
+      git fetch origin --quiet
+
+      # Get current and latest versions
+      CURRENT_COMMIT=$(git rev-parse HEAD)
+      LATEST_COMMIT=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master 2>/dev/null)
+
+      if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
+        echo "✓ Already up to date (version $SCRIPT_VERSION)"
+        exit 0
+      fi
+
+      # Show what's new
+      echo ""
+      echo "Updates available:"
+      echo ""
+      git log --oneline --decorate --color=always HEAD..origin/main 2>/dev/null || \
+        git log --oneline --decorate --color=always HEAD..origin/master 2>/dev/null
+      echo ""
+
+      # Check if running in interactive mode (TTY available)
+      if [ -t 0 ] && [ -t 1 ]; then
+        # Interactive mode - ask for confirmation
+        read -p "Update now? (y/n) " -n 1 -r
+        echo ""
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+          echo "Updating..."
+          git pull origin main 2>/dev/null || git pull origin master 2>/dev/null
+
+          if [ $? -eq 0 ]; then
+            echo ""
+            echo "✓ Update complete!"
+            echo ""
+            echo "Run 'wp-check --help' to see what's new."
+          else
+            echo ""
+            echo "✗ Update failed. Please update manually:"
+            echo "  cd $REPO_ROOT/.."
+            echo "  git pull"
+          fi
+        else
+          echo "Update cancelled."
+        fi
+      else
+        # Non-interactive mode - auto-update
+        echo "Non-interactive mode detected. Auto-updating..."
+        git pull origin main 2>/dev/null || git pull origin master 2>/dev/null
+
+        if [ $? -eq 0 ]; then
+          echo "✓ Update complete!"
+        else
+          echo "✗ Update failed. Please update manually:"
+          echo "  cd $REPO_ROOT/.."
+          echo "  git pull"
+          exit 1
+        fi
+      fi
+
+      exit 0
+      ;;
+    version|--version|-v)
+      echo "WP Code Check v$SCRIPT_VERSION"
+      exit 0
+      ;;
+    init)
+      echo ""
+      echo "╔════════════════════════════════════════════════════════════╗"
+      echo "║         WP Code Check - Interactive Setup                 ║"
+      echo "╚════════════════════════════════════════════════════════════╝"
+      echo ""
+
+      # Check if running in interactive mode (TTY available)
+      if [ ! -t 0 ] || [ ! -t 1 ]; then
+        echo "Error: 'wp-check init' requires an interactive terminal (TTY)."
+        echo ""
+        echo "This command cannot run in:"
+        echo "  • CI/CD pipelines"
+        echo "  • AI assistant subprocesses"
+        echo "  • Non-interactive shells"
+        echo ""
+        echo "Alternative: Use the install.sh script or configure manually."
+        echo "See: SHELL-QUICKSTART.md for manual setup instructions."
+        exit 1
+      fi
+
+      echo "This wizard will help you configure WP Code Check."
+      echo ""
+
+      # Question 1: Default scan path
+      echo "[1/4] Where should we scan by default?"
+      echo "  1. Current directory (.)"
+      echo "  2. Specific path"
+      echo "  3. Ask every time (no default)"
+      read -p "> " -n 1 -r
+      echo ""
+
+      DEFAULT_PATH="."
+      case $REPLY in
+        1) DEFAULT_PATH="." ;;
+        2)
+          echo "Enter path:"
+          read -r DEFAULT_PATH
+          ;;
+        3) DEFAULT_PATH="" ;;
+      esac
+
+      # Question 2: Output format
+      echo ""
+      echo "[2/4] What output format do you prefer?"
+      echo "  1. JSON (generates HTML report)"
+      echo "  2. Text (terminal output)"
+      read -p "> " -n 1 -r
+      echo ""
+
+      DEFAULT_FORMAT="json"
+      case $REPLY in
+        1) DEFAULT_FORMAT="json" ;;
+        2) DEFAULT_FORMAT="text" ;;
+      esac
+
+      # Question 3: Create alias
+      echo ""
+      echo "[3/4] Create a shell alias?"
+      echo "  Alias: wp-check"
+      echo "  Command: $SCRIPT_DIR/check-performance.sh"
+      read -p "> (y/n) " -n 1 -r
+      echo ""
+
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        # Detect shell config
+        SHELL_RC=""
+        if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == */zsh ]]; then
+          SHELL_RC="$HOME/.zshrc"
+        elif [ -n "$BASH_VERSION" ] || [[ "$SHELL" == */bash ]]; then
+          SHELL_RC="$HOME/.bashrc"
+          [ ! -f "$SHELL_RC" ] && SHELL_RC="$HOME/.bash_profile"
+        fi
+
+        if [ -n "$SHELL_RC" ]; then
+          if grep -q "alias wp-check=" "$SHELL_RC" 2>/dev/null; then
+            echo "  ⚠ Alias already exists in $SHELL_RC"
+          else
+            echo "" >> "$SHELL_RC"
+            echo "# WP Code Check alias" >> "$SHELL_RC"
+            echo "alias wp-check='$SCRIPT_DIR/check-performance.sh --paths'" >> "$SHELL_RC"
+            echo "  ✓ Alias added to $SHELL_RC"
+            echo "  Run: source $SHELL_RC"
+          fi
+        else
+          echo "  ⚠ Could not detect shell config file"
+        fi
+      fi
+
+      # Question 4: Test scan
+      echo ""
+      echo "[4/4] Run a test scan?"
+      read -p "> (y/n) " -n 1 -r
+      echo ""
+
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        TEST_PATH="${DEFAULT_PATH:-.}"
+        echo ""
+        echo "Running test scan on $TEST_PATH..."
+        echo ""
+        "$SCRIPT_DIR/check-performance.sh" --paths "$TEST_PATH" --format "$DEFAULT_FORMAT"
+      fi
+
+      echo ""
+      echo "✓ Setup complete!"
+      echo ""
+      echo "Quick start:"
+      echo "  wp-check ~/my-plugin"
+      echo "  wp-check --help"
+      echo ""
+
+      exit 0
+      ;;
+  esac
+fi
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -379,7 +690,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --help)
-      head -30 "$0" | tail -25
+      show_help
       exit 0
       ;;
     *)

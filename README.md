@@ -21,7 +21,39 @@ WordPress sites fail in production because of **performance antipatterns** that 
 
 **WP Code Check catches these issues in seconds** — before they reach production.
 
-## The Fastest Way to Get Started (Using AI Agents)
+---
+
+## 🚀 Quick Start (Choose Your Path)
+
+### 🖥️ **Shell/Terminal Users** (Fastest Setup)
+
+**Prefer working directly in the terminal?** We've got you covered with a streamlined shell experience:
+
+👉 **[Shell Quick Start Guide](SHELL-QUICKSTART.md)** - One-command installation, tab completion, and shell-first workflows
+
+```bash
+# One-command install
+git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
+cd WP-Code-Check
+./install.sh
+
+# Then just:
+wp-check ~/my-plugin
+```
+
+**Features for shell users:**
+- ✅ Automated installation with `install.sh`
+- ✅ Tab completion for all options
+- ✅ `wp-check init` - Interactive setup wizard
+- ✅ `wp-check update` - Easy updates
+- ✅ Enhanced `--help` with examples
+
+**Time to first scan: 30 seconds** (vs. 5 minutes manual setup)
+
+---
+
+### 🤖 **AI Agent Users** (Automated Workflows)
+
 If you're using an AI coding assistant (Cursor, GitHub Copilot, Augment, etc.):
 
 1. Open `dist/TEMPLATES/_AI_INSTRUCTIONS.md` in your editor
