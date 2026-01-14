@@ -170,13 +170,13 @@ def main():
     
     # Create clickable links for scanned paths
     abs_path = os.path.abspath(paths) if not os.path.isabs(paths) else paths
-    paths_link = f'<a href="file://{abs_path}" style="color: #667eea;">{paths}</a>'
+    paths_link = f'<a href="file://{abs_path}" class="ide-link" data-file="{abs_path}" style="color: #667eea;">{paths}</a>'
 
     # Create clickable link for JSON log file
     json_log_link = ""
     if os.path.isfile(input_json):
         abs_json_path = os.path.abspath(input_json)
-        log_link = f'<a href="file://{abs_json_path}" style="color: #667eea;">{input_json}</a>'
+        log_link = f'<a href="file://{abs_json_path}" class="ide-link" data-file="{abs_json_path}" style="color: #667eea;">{input_json}</a>'
         json_log_link = f'<div style="margin-top: 8px;">JSON Log: {log_link} <button class="copy-btn" onclick="copyLogPath()" title="Copy JSON log path to clipboard">📋 Copy Path</button></div>'
 
     # Determine status
@@ -217,7 +217,7 @@ def main():
         <span class="badge {impact}">{impact.upper()}</span>
       </div>
       <div class="finding-details">
-        <div class="file-path"><a href="file://{abs_file}" style="color: #667eea; text-decoration: none;" title="Click to open file">{file_path}</a>:{line}</div>
+        <div class="file-path"><a href="file://{abs_file}" class="ide-link" data-file="{abs_file}" data-line="{line}" style="color: #667eea; text-decoration: none;" title="Click to open in IDE">{file_path}</a>:{line}</div>
         <div class="code-snippet">{code_escaped}</div>
       </div>
     </div>'''
