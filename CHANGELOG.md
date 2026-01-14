@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-01-13
+
+### Changed
+- **Documentation Improvements** - Enhanced cross-referencing and clarity across all documentation
+  - **README.md:**
+    - Added "end-to-end execution mode" explanation in AI Agent quick start section
+    - Expanded Phase 2 (AI Triage) section with workflow steps and TL;DR format details
+    - Enhanced GitHub Issue Creation section with multi-platform support emphasis
+    - Added cross-references to AI Instructions for detailed workflows
+    - Improved Project Templates section with AI auto-completion features
+    - Added MCP section cross-reference to AI Instructions for triage workflow
+  - **dist/TEMPLATES/_AI_INSTRUCTIONS.md:**
+    - Added workflow decision tree diagram for quick navigation
+    - Added template naming best practices section (lowercase-with-hyphens convention)
+    - Enhanced template detection logic with variation examples
+    - Expanded GitHub repository detection with regex patterns and validation rules
+    - Added "How to Verify" column to false positive patterns table
+    - Enhanced troubleshooting section with common errors and solutions
+    - Added comprehensive "Quick Reference for AI Agents" section with:
+      - Phase-by-phase checklists
+      - End-to-end execution script
+      - Key file locations table
+      - Cross-reference map linking to README sections
+    - Added confidence level guidance for AI triage assessments
+    - Enhanced manual JSON to HTML conversion section with features and troubleshooting
+    - Added multi-platform workflow for GitHub issue bodies (Jira, Linear, Asana, etc.)
+    - Added quick links to related documentation at top of file
+  - **Impact:** AI agents and users can now navigate documentation more efficiently with clear cross-references and decision trees
+
+### Technical Details
+- **Documentation Version:** AI Instructions now at v2.0
+- **Cross-References Added:** 15+ bidirectional links between README and AI Instructions
+- **New Sections:** 8 new subsections in AI Instructions for improved clarity
+- **Tables Enhanced:** 6 tables expanded with additional columns and examples
+
 ## [1.3.3] - 2026-01-13
 
 ### Added
