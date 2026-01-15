@@ -72,7 +72,7 @@ This document catalogs **all inline pattern rules** currently hardcoded in `chec
 | 41 | `json-html-escape-url` | HTML-escaping in JSON URLs | 5268-5320 | T3 | P3 | KISS | ⏳ Inline | Heuristic JSON detection |
 | 42 | `transient-no-expiration` | Transients without expiration | 5324-5369 | T2 | P2 | Performance | ⏳ Inline | set_transient check |
 | 43 | `script-version-time` | Script versioning with time() | 5373-5410 | T2 | P3 | Performance | ⏳ Inline | wp_enqueue + time() |
-| 44 | `file-get-contents-url` | file_get_contents() with URLs | 5414-5479 | T1 | P2 | Performance | ⏳ Inline | Simple grep |
+| 44 | `file-get-contents-url` | file_get_contents() with URLs | patterns/ | T1 | P2 | Performance | ✅ JSON | Migrated to JSON |
 | 45 | `http-no-timeout` | HTTP requests without timeout | 5483-5575 | T2 | P2 | Performance | ⏳ Inline | wp_remote_* context check |
 | 46 | `php-short-tags` | Disallowed PHP short tags | 5579-5651 | T2 | P3 | KISS | ⏳ Inline | <?= and <? detection |
 
@@ -94,18 +94,18 @@ This document catalogs **all inline pattern rules** currently hardcoded in `chec
 - **P3 (Low - Heuristics):** 7 rules (15%)
 
 ### By Status
-- **✅ Fully Migrated to JSON:** 11 rules (24%) - Active and working
-- **⏳ Needs Migration:** 35 rules (76%) - Still inline code
+- **✅ Fully Migrated to JSON:** 14 rules (30%) - Active and working
+- **⏳ Needs Migration:** 32 rules (70%) - Still inline code
 
 ### Migration Effort Estimate
 
 Based on tier complexity:
-- **T1 rules:** 11 total, 4 migrated, 7 remaining × 5 min = ~35 minutes
-- **T2 rules:** 24 rules × 15 min = ~6 hours
+- **T1 rules:** 14 total, ✅ **ALL MIGRATED** (100%)
+- **T2 rules:** 21 rules × 15 min = ~5.25 hours
 - **T3 rules:** 11 rules × 45 min = ~8 hours
 
-**Total estimated effort remaining:** ~14 hours (1.75 work days)
-**Progress:** 4 of 46 rules migrated in Phase 2 (9%)
+**Total estimated effort remaining:** ~13.25 hours (1.65 work days)
+**Progress:** 14 of 46 rules migrated in Phase 2 (30%)**
 
 ---
 

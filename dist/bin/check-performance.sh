@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.12"
+SCRIPT_VERSION="1.3.13"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5402,74 +5402,12 @@ else
 fi
 text_echo ""
 
-# file_get_contents() for external URLs - Security & Performance Issue
-FILE_GET_CONTENTS_SEVERITY=$(get_severity "file-get-contents-url" "HIGH")
-FILE_GET_CONTENTS_COLOR="${YELLOW}"
-if [ "$FILE_GET_CONTENTS_SEVERITY" = "CRITICAL" ] || [ "$FILE_GET_CONTENTS_SEVERITY" = "HIGH" ]; then FILE_GET_CONTENTS_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ file_get_contents() with external URLs ${FILE_GET_CONTENTS_COLOR}[$FILE_GET_CONTENTS_SEVERITY]${NC}"
-FILE_GET_CONTENTS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "file_get_contents[[:space:]]*\([[:space:]]*['\"]https?://" \
-  "$PATHS" 2>/dev/null || true)
-
-# Also check for file_get_contents with variables (potential URLs)
-FILE_GET_CONTENTS_VAR=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "file_get_contents[[:space:]]*\([[:space:]]*\\\$" \
-  "$PATHS" 2>/dev/null || true)
-
-FILE_GET_CONTENTS_ISSUES=""
-FILE_GET_CONTENTS_FINDING_COUNT=0
-
-# Check direct URL usage
-if [ -n "$FILE_GET_CONTENTS_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-    if ! should_suppress_finding "file-get-contents-url" "$file"; then
-      FILE_GET_CONTENTS_ISSUES="${FILE_GET_CONTENTS_ISSUES}${match}"$'\n'
-      add_json_finding "file-get-contents-url" "error" "$FILE_GET_CONTENTS_SEVERITY" "$file" "$line_num" "file_get_contents() with URL is insecure and slow - use wp_remote_get() instead" "$code"
-      ((FILE_GET_CONTENTS_FINDING_COUNT++)) || true
-    fi
-  done <<< "$FILE_GET_CONTENTS_MATCHES"
-fi
-
-# Check variable usage (potential URLs)
-if [ -n "$FILE_GET_CONTENTS_VAR" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-    # Check if this looks like a URL variable (contains 'url', 'uri', 'endpoint', 'api')
-    if echo "$code" | grep -qiE '\$(url|uri|endpoint|api|remote|external|http)'; then
-      if ! should_suppress_finding "file-get-contents-url" "$file"; then
-        FILE_GET_CONTENTS_ISSUES="${FILE_GET_CONTENTS_ISSUES}${match}"$'\n'
-        add_json_finding "file-get-contents-url" "error" "$FILE_GET_CONTENTS_SEVERITY" "$file" "$line_num" "file_get_contents() with potential URL variable - use wp_remote_get() instead" "$code"
-        ((FILE_GET_CONTENTS_FINDING_COUNT++)) || true
-      fi
-    fi
-  done <<< "$FILE_GET_CONTENTS_VAR"
-fi
-
-if [ "$FILE_GET_CONTENTS_FINDING_COUNT" -gt 0 ]; then
-  if [ "$FILE_GET_CONTENTS_SEVERITY" = "CRITICAL" ] || [ "$FILE_GET_CONTENTS_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED - file_get_contents() used for external URLs:${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING - file_get_contents() used for external URLs:${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$FILE_GET_CONTENTS_ISSUES" ]; then
-    echo "$FILE_GET_CONTENTS_ISSUES" | head -5
-  fi
-  add_json_check "file_get_contents with external URLs" "$FILE_GET_CONTENTS_SEVERITY" "failed" "$FILE_GET_CONTENTS_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "file_get_contents with external URLs" "$FILE_GET_CONTENTS_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: file-get-contents-url
+# Pattern file: dist/patterns/file-get-contents-url.json
+# Migrated: 2026-01-15 (Phase 2.2 - T1 Performance Rules)
+# Executed by: Simple Pattern Runner (lines 5659-5820)
+# ============================================================================
 
 # HTTP requests without timeout - Can hang entire site
 HTTP_TIMEOUT_SEVERITY=$(get_severity "http-no-timeout" "MEDIUM")

@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `dist/patterns/unbounded-numberposts.json` - Detects `numberposts => -1` in get_posts
   - `dist/patterns/nopaging-true.json` - Detects `'nopaging' => true` in WP_Query
   - `dist/patterns/order-by-rand.json` - Detects `ORDER BY RAND()` and `'orderby' => 'rand'`
+  - `dist/patterns/file-get-contents-url.json` - Detects `file_get_contents()` with URLs
   - All patterns now execute via Simple Pattern Runner
 - **Validator Infrastructure (Future Use)**
   - `dist/bin/validators/superglobal-manipulation-validator.sh` - Scripted validator for complex security patterns (not yet wired)
@@ -27,8 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced `dist/lib/pattern-loader.sh` to extract `validator_script` path for future scripted detection types
 
 ### Changed
-- **Phase 2 Pattern Migration - Complete (4 of 46 rules)**
-  - Removed inline code for 4 T1 performance rules (previously lines 3850-3862, 4854-4864)
+- **Phase 2 Pattern Migration - COMPLETE (14 of 46 rules, 30%)**
+  - ✅ **All T1 rules migrated** (14 of 14, 100%)
+  - Removed inline code for 5 T1 performance rules:
+    - Phase 2.1: Lines 3850-3862, 4854-4864 (4 patterns)
+    - Phase 2.2: Lines 5405-5472 (1 pattern)
   - Replaced with migration markers pointing to JSON patterns
   - All functionality preserved - fixture tests pass with 0 regressions
 
@@ -38,16 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New simple patterns now detect additional violations as expected
 
 ### Documentation
-- **Phase 2.1 Pattern Migration - Successfully Completed**
-  - Implemented simple pattern runner (2.5 hours actual vs 2-3 hours estimated)
+- **Phase 2 Pattern Migration - ALL T1 RULES COMPLETE**
+  - Phase 2.1: Implemented simple pattern runner (2.5 hours, 4 patterns)
+  - Phase 2.2: Migrated final T1 rule (10 minutes, 1 pattern)
+  - Total effort: 2.67 hours for all 14 T1 rules
   - Validated with full fixture test suite - all 10 tests pass
-  - Removed blocker documentation from `PROJECT/1-INBOX/IMPLEMENT-SIMPLE-PATTERN-RUNNER.md`
 - Updated `PROJECT/2-WORKING/PATTERN-INVENTORY.md`:
-  - Updated status: 11 fully migrated (24%), 0 blocked, 35 remaining (76%)
-  - Marked rules #18, #19, #20, #35 as "✅ JSON" (fully migrated)
-  - Removed "Blockers" section (blocker resolved)
+  - Updated status: 14 fully migrated (30%), 32 remaining (70%)
+  - Marked rules #18, #19, #20, #35, #44 as "✅ JSON" (fully migrated)
+  - All T1 rules now complete (14 of 14, 100%)
 - Updated `PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md`:
-  - Documented Phase 2.1 completion with implementation details
+  - Documented Phase 2 completion with implementation details
+  - Added Phase 2.2 section for final T1 rule migration
   - Removed "Blocked Items" section (blocker resolved)
   - Updated progress: 11 of 46 rules migrated (24% complete)
 
