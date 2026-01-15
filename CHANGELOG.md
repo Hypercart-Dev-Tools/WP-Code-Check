@@ -8,14 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **JSON Pattern Files (T2 Simple Patterns) - Phase 3.1 Started**
+- **JSON Pattern Files (T2 Simple Patterns) - Phase 3.1 Complete**
   - `dist/patterns/disallowed-php-short-tags.json` - Detects PHP short tags (`<?=` and `<? `)
+  - `dist/patterns/asset-version-time.json` - Detects `wp_enqueue_*` with `time()` versioning
 
 ### Changed
-- **Phase 3.1 Pattern Migration - In Progress (1 of 5 simple T2 rules)**
-  - Migrated `disallowed-php-short-tags` (rule #46)
-  - Removed inline code (lines 5508-5574)
-  - Pattern uses multi-pattern array format with two detection patterns
+- **Phase 3.1 Pattern Migration - Complete (2 of 2 simple T2 rules)**
+  - Migrated `disallowed-php-short-tags` (rule #46, lines 5508-5574)
+  - Migrated `asset-version-time` (rule #43, lines 5364-5403)
+  - Both patterns use simple grep-based detection
+  - Pattern count increased from 40 to 42
+
+### Notes
+- **Remaining T2 patterns require scripted validators:**
+  - `timezone-sensitive-patterns` - needs phpcs:ignore comment checking
+  - `transient-no-expiration` - needs comma counting for parameter validation
+  - `array-merge-in-loop` - needs context analysis for loop detection
+  - These will be migrated in Phase 3.2 (Scripted Validators)
 
 ## [1.3.13] - 2026-01-15
 

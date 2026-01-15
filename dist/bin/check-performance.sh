@@ -5361,46 +5361,12 @@ else
 fi
 text_echo ""
 
-# Script/style versioning with time() - prevents browser caching
-SCRIPT_TIME_SEVERITY=$(get_severity "asset-version-time" "MEDIUM")
-SCRIPT_TIME_COLOR="${YELLOW}"
-if [ "$SCRIPT_TIME_SEVERITY" = "CRITICAL" ] || [ "$SCRIPT_TIME_SEVERITY" = "HIGH" ]; then SCRIPT_TIME_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Script/style versioning with time() ${SCRIPT_TIME_COLOR}[$SCRIPT_TIME_SEVERITY]${NC}"
-SCRIPT_TIME_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "wp_(register|enqueue)_(script|style)[[:space:]]*\([^)]*,[[:space:]]*time[[:space:]]*\(" \
-  $PATHS 2>/dev/null || true)
-SCRIPT_TIME_ISSUES=false
-SCRIPT_TIME_FINDING_COUNT=0
-
-if [ -n "$SCRIPT_TIME_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-    if ! should_suppress_finding "script-versioning-time" "$file"; then
-      text_echo "  $file:$line_num - using time() as version"
-      add_json_finding "asset-version-time" "warning" "$SCRIPT_TIME_SEVERITY" "$file" "$line_num" "Using time() as script/style version prevents browser caching - use plugin version instead" "$code"
-      SCRIPT_TIME_ISSUES=true
-      ((SCRIPT_TIME_FINDING_COUNT++)) || true
-    fi
-  done <<< "$SCRIPT_TIME_MATCHES"
-fi
-
-if [ "$SCRIPT_TIME_ISSUES" = true ]; then
-  if [ "$SCRIPT_TIME_SEVERITY" = "CRITICAL" ] || [ "$SCRIPT_TIME_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED - Scripts/styles using time() as version:${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING - Scripts/styles using time() as version:${NC}"
-    ((WARNINGS++))
-  fi
-  add_json_check "Script/style versioning with time()" "$SCRIPT_TIME_SEVERITY" "failed" "$SCRIPT_TIME_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Script/style versioning with time()" "$SCRIPT_TIME_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: asset-version-time
+# Pattern file: dist/patterns/asset-version-time.json
+# Migrated: 2026-01-15 (Phase 3.1 - T2 Simple Patterns)
+# Executed by: Simple Pattern Runner (lines 5527-5670)
+# ============================================================================
 
 # ============================================================================
 # MIGRATED TO JSON: file-get-contents-url

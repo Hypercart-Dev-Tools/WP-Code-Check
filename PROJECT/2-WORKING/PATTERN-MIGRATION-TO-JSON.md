@@ -397,8 +397,25 @@ This expands on the high-level plan in `BACKLOG.md`.
 - ✅ **Zero regressions** - all tests passing
 - ✅ **30% of total migration** complete (14 of 46 rules)
 
+---
+
+## 🚀 Phase 3.1 Complete - T2 Simple Patterns Migrated
+
+**Achievement Summary:**
+- ✅ **2 of 2 truly simple T2 rules** migrated to JSON (100%)
+- ✅ **Multi-pattern format** validated and working
+- ✅ **Zero regressions** - all tests passing (11 errors, 3 warnings)
+- ✅ **35% of total migration** complete (16 of 46 rules)
+- ✅ **Pattern count:** 42 (up from 40)
+
+**Discovered During Phase 3.1:**
+- 3 patterns initially classified as "simple T2" actually require scripted validators
+- These patterns have post-processing logic (comment detection, parameter counting, context analysis)
+- Need to implement scripted validator framework before migrating these
+
 **Next Steps:**
-- **Phase 3:** Migrate T2 rules (21 remaining, ~5.25 hours estimated)
+- **Phase 3.2:** Implement scripted validator framework + migrate 3 T2 patterns (~6 hours)
+- **Phase 3.3:** Migrate remaining T2 rules (19 remaining, ~5 hours estimated)
 - **Phase 4:** Migrate T3 rules (11 remaining, ~8 hours estimated)
 - **Alternative:** Prioritize P1 security rules (5 remaining, all T2/T3)
 
@@ -426,6 +443,94 @@ This expands on the high-level plan in `BACKLOG.md`.
 **Success criteria:**
 - Only internal/debug patterns remain inline (if any).
 - All production rules listed in `PATTERN-LIBRARY-SUMMARY.md` show `Definition Source: json`.
+
+**STATUS:** ⏳ IN PROGRESS - Phase 3.1 Complete (2026-01-15)
+
+---
+
+#### Phase 3.1 – T2 Simple Patterns (COMPLETE)
+
+**Objective:** Migrate T2 patterns that can use simple grep-based detection without post-processing.
+
+**Completed Migrations (2 rules):**
+
+✅ **Rule #46: `disallowed-php-short-tags`**
+- Pattern file: `dist/patterns/disallowed-php-short-tags.json`
+- Detection: Multi-pattern array with 2 patterns
+  - `<?=` - PHP short echo tag
+  - `<? ` - PHP short open tag (with whitespace)
+- Removed: Lines 5508-5574
+- Notes: Uses multi-pattern format; pattern naturally excludes `<?php` and `<?xml`
+
+✅ **Rule #43: `asset-version-time`**
+- Pattern file: `dist/patterns/asset-version-time.json`
+- Detection: `wp_(register|enqueue)_(script|style)` with `time()` versioning
+- Removed: Lines 5364-5403
+- Notes: Simple single-pattern format
+
+**Implementation Summary:**
+- ✅ Both patterns use existing Simple Pattern Runner (lines 5527-5670)
+- ✅ All fixture tests pass (11 errors, 3 warnings)
+- ✅ Pattern count: 42 (up from 40)
+- ✅ Zero regressions
+
+**Effort:** ~30 minutes (2 patterns)
+
+**Key Learnings:**
+1. Multi-pattern format works perfectly - pattern loader combines with OR (`|`)
+2. Field naming is critical - use `pattern` (not `search`) in patterns array
+3. Many "simple" T2 patterns have hidden complexity in post-processing
+
+**Patterns Requiring Scripted Validators (Phase 3.2):**
+
+The following T2 patterns were initially classified as "simple" but require post-processing:
+
+1. **`timezone-sensitive-patterns`** (Rule #34, lines 4760-4847)
+   - **Post-processing:** Checks for `phpcs:ignore` comments on current/previous line
+   - **Complexity:** Reads file context with `sed` to check for suppression
+   - **Migration path:** Needs scripted validator
+
+2. **`transient-no-expiration`** (Rule #42, lines 5315-5362)
+   - **Post-processing:** Counts commas to validate parameter count
+   - **Complexity:** Determines if expiration parameter exists
+   - **Migration path:** Needs scripted validator
+
+3. **`array-merge-in-loop`** (Rule #32, lines 4555-4622)
+   - **Post-processing:** Heuristic check for loop keywords in ±15 line context
+   - **Complexity:** Reads surrounding lines to detect loop keywords
+   - **Migration path:** Needs scripted validator
+
+---
+
+#### Phase 3.2 – T2 Scripted Validators (NOT STARTED)
+
+**Objective:** Implement scripted validator framework and migrate T2 patterns requiring post-processing.
+
+**Framework Requirements:**
+- [ ] Create `dist/validators/` directory for validator scripts
+- [ ] Extend pattern JSON schema to support `detection.type: "scripted"`
+- [ ] Add `detection.validator_script` field pointing to validator file
+- [ ] Implement validator runner in main script
+- [ ] Define validator interface (inputs: file, line, code, context; outputs: 0=issue, 1=false positive)
+
+**Target Patterns (3 rules):**
+- [ ] `timezone-sensitive-patterns` - phpcs:ignore comment detection
+- [ ] `transient-no-expiration` - parameter count validation
+- [ ] `array-merge-in-loop` - context-based loop detection
+
+**Estimated Effort:** 2-3 hours for framework + 1 hour per pattern = ~6 hours total
+
+**STATUS:** NOT STARTED
+
+---
+
+#### Phase 3.3 – Remaining T2 Patterns (NOT STARTED)
+
+**Objective:** Migrate remaining T2 patterns (moderate complexity, may need aggregated or contextual detection).
+
+**Target Patterns:** 19 remaining T2 rules (see PATTERN-INVENTORY.md)
+
+**Estimated Effort:** ~5 hours
 
 **STATUS:** NOT STARTED
 
