@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.18] - 2026-01-15
+
+### Added
+- **Phase 3.5: Complex T2 Pattern Migration (1/3 Complete)**
+  - `dist/patterns/pre-get-posts-unbounded.json` - Detects pre_get_posts hooks with unbounded queries
+  - `dist/validators/pre-get-posts-unbounded-check.sh` - Validates file-level unbounded query settings
+  - `dist/tests/fixtures/pre-get-posts-unbounded.php` - Test fixture with 4 test cases
+  - Pattern detects files that hook pre_get_posts and set posts_per_page => -1 or nopaging => true
+
+### Changed
+- **Pattern Count:** 51 → 52 (+1)
+- **Code Reduction:** Removed ~40 lines of inline detection code (lines 3908-3947)
+- **Migration Progress:** 16/19 T2 patterns migrated (84%)
+
+### Testing
+- ✅ Validator correctly detects unbounded queries in test fixture
+- ✅ Pattern detection working via scripted pattern runner
+- ✅ All existing tests passing
+
 ## [1.3.17] - 2026-01-15
 
 ### Added

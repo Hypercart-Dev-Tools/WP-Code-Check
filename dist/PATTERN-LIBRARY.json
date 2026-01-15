@@ -1,28 +1,28 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T04:33:51Z",
+  "generated": "2026-01-15T04:56:45Z",
   "summary": {
-    "total_patterns": 51,
-    "enabled": 47,
+    "total_patterns": 52,
+    "enabled": 48,
     "disabled": 4,
     "by_severity": {
-      "CRITICAL": 18,
+      "CRITICAL": 19,
       "HIGH": 16,
       "MEDIUM": 13,
       "LOW": 4
     },
     "by_category": {
-      "performance": 19,"Performance": 5,"duplication": 5,"reliability": 5,"security": 14
+      "performance": 20,"Performance": 5,"duplication": 5,"reliability": 5,"security": 14
     },
     "by_pattern_type": {
-      "php": 40,
+      "php": 41,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 7,
     "heuristic_patterns": 17,
-    "definitive_patterns": 34
+    "definitive_patterns": 35
   },
   "patterns": [
     {
@@ -472,6 +472,20 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "php-user-controlled-file-write.json"
+},
+{
+  "id": "pre-get-posts-unbounded",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "CRITICAL",
+  "title": "pre_get_posts Hook Sets Unbounded Query",
+  "description": "Detects files that hook into pre_get_posts and set posts_per_page => -1 or nopaging => true, which can cause memory exhaustion on sites with many posts.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "pre-get-posts-unbounded.json"
 },
 {
   "id": "rest-no-pagination",

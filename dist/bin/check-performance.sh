@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.17
+# Version: 1.3.18
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -3905,46 +3905,13 @@ else
 fi
 text_echo ""
 
-# pre_get_posts unbounded check - files that hook pre_get_posts and set unbounded queries
-PRE_GET_POSTS_SEVERITY=$(get_severity "pre-get-posts-unbounded" "CRITICAL")
-PRE_GET_POSTS_COLOR="${YELLOW}"
-if [ "$PRE_GET_POSTS_SEVERITY" = "CRITICAL" ] || [ "$PRE_GET_POSTS_SEVERITY" = "HIGH" ]; then PRE_GET_POSTS_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ pre_get_posts forcing unbounded queries ${PRE_GET_POSTS_COLOR}[$PRE_GET_POSTS_SEVERITY]${NC}"
-PRE_GET_POSTS_UNBOUNDED=false
-PRE_GET_POSTS_FINDING_COUNT=0
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-PRE_GET_POSTS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "add_action.*pre_get_posts\|add_filter.*pre_get_posts" "$PATHS" 2>/dev/null || true)
-if [ -n "$PRE_GET_POSTS_FILES" ]; then
-  # SAFEGUARD: Use safe_file_iterator() instead of "for file in $PRE_GET_POSTS_FILES"
-  # File paths with spaces will break the loop without this helper (see common-helpers.sh)
-  safe_file_iterator "$PRE_GET_POSTS_FILES" | while IFS= read -r file; do
-    # Check if file sets posts_per_page to -1 or nopaging to true
-	    if grep -q "set[[:space:]]*([[:space:]]*['\"]posts_per_page['\"][[:space:]]*,[[:space:]]*-1" "$file" 2>/dev/null || \
-	       grep -q "set[[:space:]]*([[:space:]]*['\"]nopaging['\"][[:space:]]*,[[:space:]]*true" "$file" 2>/dev/null; then
-	      if ! should_suppress_finding "pre-get-posts-unbounded" "$file"; then
-	        text_echo "  $file: pre_get_posts hook sets unbounded query"
-	        lineno=$(grep -n "pre_get_posts" "$file" 2>/dev/null | head -1 | cut -d: -f1)
-	        add_json_finding "pre-get-posts-unbounded" "error" "$PRE_GET_POSTS_SEVERITY" "$file" "${lineno:-0}" "pre_get_posts hook sets unbounded query" "pre_get_posts"
-	        PRE_GET_POSTS_UNBOUNDED=true
-	        ((PRE_GET_POSTS_FINDING_COUNT++))
-	      fi
-	    fi
-  done
-fi
-if [ "$PRE_GET_POSTS_UNBOUNDED" = true ]; then
-  if [ "$PRE_GET_POSTS_SEVERITY" = "CRITICAL" ] || [ "$PRE_GET_POSTS_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING${NC}"
-    ((WARNINGS++))
-  fi
-  add_json_check "pre_get_posts forcing unbounded queries" "$PRE_GET_POSTS_SEVERITY" "failed" "$PRE_GET_POSTS_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "pre_get_posts forcing unbounded queries" "$PRE_GET_POSTS_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: pre-get-posts-unbounded.json (Phase 3.5 - v1.3.17)
+# Pattern: pre_get_posts hooks that set unbounded queries
+# Location: dist/patterns/pre-get-posts-unbounded.json
+# Validator: dist/validators/pre-get-posts-unbounded-check.sh
+# Executed by: Scripted Pattern Runner (lines 5576-5795)
+# ============================================================================
 
 # ============================================================================
 # MIGRATED TO JSON: unbounded-sql-terms.json (Phase 3.3 - v1.3.16)

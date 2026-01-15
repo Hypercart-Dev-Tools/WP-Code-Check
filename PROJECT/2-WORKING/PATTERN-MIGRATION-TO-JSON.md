@@ -1,9 +1,43 @@
 # Pattern Migration to JSON – Detailed Plan
 
-**Created:** 2026-01-02  
-**Status:** Planning  
-**Owner:** Core maintainer  
+**Created:** 2026-01-02
+**Updated:** 2026-01-15
+**Status:** In Progress (Phase 3.5)
+**Owner:** Core maintainer
 **Related:** `PROJECT/BACKLOG.md` ("Migrate Inline Patterns to External JSON Rules"), `PATTERN-LIBRARY-SUMMARY.md`
+
+---
+
+## 🎯 Current Status (2026-01-15)
+
+### Phase 3 Progress: T2 Pattern Migration
+
+**Completed Phases:**
+- ✅ **Phase 3.1** - Simple T1 patterns (5 patterns) - v1.3.14
+- ✅ **Phase 3.2** - T2 Scripted validators (3 patterns) - v1.3.15
+- ✅ **Phase 3.3** - Simple T2 patterns (7 patterns) - v1.3.16
+- ✅ **Phase 3.4** - Mitigation detection infrastructure - v1.3.17
+
+**Current Phase:**
+- 🔨 **Phase 3.5** - Complex T2 patterns (3 patterns) - In Progress
+  - `pre-get-posts-unbounded` - 2-step detection
+  - `query-limit-multiplier` - Mitigation detection (hard cap)
+  - `n1-meta-in-loop` - Mitigation detection (meta cache)
+
+**Metrics:**
+- **Patterns migrated:** 15/19 T2 patterns (79%)
+- **Remaining:** 3 complex T2 patterns + 1 deferred (wp-user-query-no-cache)
+- **Pattern count:** 51 → 54 (after Phase 3.5)
+- **Code reduction:** ~700 lines removed from inline code
+
+**Infrastructure Built:**
+- ✅ Scripted validator framework
+- ✅ Parameterized validators (validator_args)
+- ✅ Mitigation detection framework
+- ✅ Security guard detection
+- ✅ Context analysis validators (6 reusable validators)
+
+**Next:** Complete Phase 3.5, then move to Phase 4 (T3 Heuristic Patterns)
 
 ---
 
