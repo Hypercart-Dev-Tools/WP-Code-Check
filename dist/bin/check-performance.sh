@@ -3428,67 +3428,11 @@ else
 fi
 text_echo ""
 
-AJAX_POLLING_SEVERITY=$(get_severity "ajax-polling-unbounded" "HIGH")
-AJAX_POLLING_COLOR="${YELLOW}"
-if [ "$AJAX_POLLING_SEVERITY" = "CRITICAL" ] || [ "$AJAX_POLLING_SEVERITY" = "HIGH" ]; then AJAX_POLLING_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Unbounded AJAX polling (setInterval + fetch/ajax) ${AJAX_POLLING_COLOR}[$AJAX_POLLING_SEVERITY]${NC}"
-AJAX_POLLING=false
-AJAX_POLLING_FINDING_COUNT=0
-AJAX_POLLING_VISIBLE=""
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-POLLING_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.js" -E "setInterval[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
-if [ -n "$POLLING_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    lineno=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-    if ! [[ "$lineno" =~ ^[0-9][0-9]*$ ]]; then
-      continue
-    fi
-
-    start_line=$lineno
-    end_line=$((lineno + 5))
-    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null)
-
-    if echo "$context" | grep -qiE "\\.ajax|fetch\\(|axios\\(|XMLHttpRequest|wp\\.apiFetch"; then
-      if should_suppress_finding "ajax-polling-setinterval" "$file"; then
-        continue
-      fi
-
-      AJAX_POLLING=true
-      ((AJAX_POLLING_FINDING_COUNT++))
-      add_json_finding "ajax-polling-unbounded" "error" "$AJAX_POLLING_SEVERITY" "$file" "${lineno:-0}" "AJAX polling via setInterval without rate limits" "$code"
-      if [ -z "$AJAX_POLLING_VISIBLE" ]; then
-        AJAX_POLLING_VISIBLE="$match"
-      else
-        AJAX_POLLING_VISIBLE="${AJAX_POLLING_VISIBLE}
-$match"
-      fi
-    fi
-  done <<< "$POLLING_MATCHES"
-fi
-if [ "$AJAX_POLLING" = true ]; then
-  if [ "$AJAX_POLLING_SEVERITY" = "CRITICAL" ] || [ "$AJAX_POLLING_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$AJAX_POLLING_VISIBLE" ]; then
-    while IFS= read -r match; do
-      [ -z "$match" ] && continue
-      format_finding "$match"
-    done <<< "$(echo "$AJAX_POLLING_VISIBLE" | head -5)"
-  fi
-  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "$AJAX_POLLING_SEVERITY" "failed" "$AJAX_POLLING_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unbounded AJAX polling (setInterval + fetch/ajax)" "$AJAX_POLLING_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: ajax-polling-unbounded.json (Phase 3.3 - v1.3.16)
+# Pattern: Unbounded AJAX polling (setInterval + fetch/ajax)
+# Location: dist/patterns/ajax-polling-unbounded.json
+# ============================================================================
 
 # HCC-005: Expensive WordPress functions in polling intervals
 HCC005_SEVERITY=$(get_severity "hcc-005-expensive-polling" "HIGH")

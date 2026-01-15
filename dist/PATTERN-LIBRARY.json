@@ -1,31 +1,45 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T03:43:03Z",
+  "generated": "2026-01-15T03:49:00Z",
   "summary": {
-    "total_patterns": 44,
-    "enabled": 40,
+    "total_patterns": 48,
+    "enabled": 44,
     "disabled": 4,
     "by_severity": {
       "CRITICAL": 17,
-      "HIGH": 13,
-      "MEDIUM": 10,
+      "HIGH": 16,
+      "MEDIUM": 11,
       "LOW": 4
     },
     "by_category": {
-      "Performance": 5,"duplication": 5,"security": 15,"reliability": 5,"performance": 8
+      "performance": 16,"Performance": 5,"duplication": 5,"reliability": 5,"security": 14
     },
     "by_pattern_type": {
-      "php": 33,
+      "php": 37,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 7,
-    "heuristic_patterns": 14,
-    "definitive_patterns": 30
+    "heuristic_patterns": 15,
+    "definitive_patterns": 33
   },
   "patterns": [
     {
+  "id": "ajax-polling-unbounded",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "HIGH",
+  "title": "Unbounded AJAX polling (setInterval + fetch/ajax)",
+  "description": "Detects setInterval() calls that perform AJAX requests without rate limiting, which can cause excessive server load.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "ajax-polling-unbounded.json"
+},
+{
   "id": "array-merge-in-loop",
   "version": "1.0.0",
   "enabled": true,
@@ -150,6 +164,20 @@
   "mitigation_detection": true,
   "heuristic": false,
   "file": "get-users-no-limit.json"
+},
+{
+  "id": "hcc-005-expensive-polling",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "HIGH",
+  "title": "Expensive WP functions in polling intervals (HCC-005)",
+  "description": "Detects expensive WordPress functions (get_plugins, get_themes, WP_Query, etc.) called within setInterval polling loops, which can cause severe performance degradation.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "hcc-005-expensive-polling.json"
 },
 {
   "id": "headless-api-key-exposure",
@@ -502,6 +530,20 @@
   "file": "unbounded-posts-per-page.json"
 },
 {
+  "id": "unbounded-sql-terms",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "HIGH",
+  "title": "Unbounded SQL on wp_terms/wp_term_taxonomy",
+  "description": "Detects direct SQL queries on wp_terms or wp_term_taxonomy tables without LIMIT clauses, which can cause performance issues on sites with many terms.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "unbounded-sql-terms.json"
+},
+{
   "id": "unbounded-wc-get-orders",
   "version": "1.0.0",
   "enabled": true,
@@ -584,6 +626,20 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "wc-smart-coupons-thankyou-perf.json"
+},
+{
+  "id": "wcs-get-subscriptions-no-limit",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "MEDIUM",
+  "title": "WooCommerce Subscriptions queries without limits",
+  "description": "Detects wcs_get_subscriptions*() calls without a 'limit' parameter, which can fetch ALL subscriptions and cause performance issues.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": true,
+  "file": "wcs-no-limit.json"
 },
 {
   "id": "wp-json-html-escape",
