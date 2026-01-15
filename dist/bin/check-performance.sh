@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.18
+# Version: 1.3.20
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -22,7 +22,7 @@
 #   --generate-baseline      Generate .hcc-baseline from current findings
 #   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
 #   --ignore-baseline        Ignore baseline file even if present
-#   --skip-clone-detection   Skip function clone detection (faster scans)
+#   --enable-clone-detection Enable function clone detection (disabled by default for performance)
 #   --help                   Show this help message
 
 # Note: We intentionally do NOT use 'set -e' here because:
@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.13"
+SCRIPT_VERSION="1.3.20"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -122,7 +122,7 @@ CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disa
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
 DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
-SKIP_CLONE_DETECTION=false  # Skip clone detection for faster scans
+SKIP_CLONE_DETECTION=true  # Clone detection is opt-in (use --enable-clone-detection to enable)
 
 # ============================================================
 # PHASE 1 STABILITY SAFEGUARDS (v1.0.82)
@@ -343,7 +343,7 @@ OPTIONS:
   --generate-baseline      Generate .hcc-baseline from current findings
   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
   --ignore-baseline        Ignore baseline file even if present
-  --skip-clone-detection   Skip function clone detection (faster scans)
+  --enable-clone-detection Enable function clone detection (disabled by default for performance)
   --help                   Show this help message
 
 WHAT IT DETECTS:
@@ -674,7 +674,12 @@ while [[ $# -gt 0 ]]; do
       IGNORE_BASELINE=true
       shift
       ;;
+    --enable-clone-detection)
+      SKIP_CLONE_DETECTION=false
+      shift
+      ;;
     --skip-clone-detection)
+      # Legacy flag for backwards compatibility
       SKIP_CLONE_DETECTION=true
       shift
       ;;
@@ -2195,6 +2200,9 @@ process_aggregated_pattern() {
   # Create temp files for aggregation
   local temp_matches=$(mktemp)
 
+  # PROFILING: Track time for each step
+  local step_start_time=$(date +%s%N 2>/dev/null || echo "0")
+
   # Run grep to find all matches using the pattern's search pattern
   # Note: pattern_search is set by load_pattern
   # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
@@ -2210,9 +2218,17 @@ process_aggregated_pattern() {
   done
 
   # Run grep with timeout (don't use || true here - it swallows exit codes)
+  # PERFORMANCE: Use cached file list instead of grep -r
   local matches
   local grep_exit_code=0
-  matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null) || grep_exit_code=$?
+
+  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+    # Single file - use direct grep
+    matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -Hn $include_args -E "$pattern_search" "$PHP_FILE_LIST" 2>/dev/null) || grep_exit_code=$?
+  else
+    # Multiple files - use cached list with xargs
+    matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E '$pattern_search' 2>/dev/null") || grep_exit_code=$?
+  fi
 
   # Check for timeout (exit code 124)
   if [ "$grep_exit_code" -eq 124 ]; then
@@ -2227,6 +2243,16 @@ process_aggregated_pattern() {
   # Ensure match_count is a valid integer (default to 0 if empty/invalid)
   match_count=${match_count:-0}
   debug_echo "Found $match_count raw matches"
+
+  # PROFILING: Log grep time
+  if [ "$PROFILE" = "1" ] && [ "$step_start_time" != "0" ]; then
+    local grep_end_time=$(date +%s%N 2>/dev/null || echo "0")
+    if [ "$grep_end_time" != "0" ]; then
+      local grep_duration=$(( (grep_end_time - step_start_time) / 1000000 ))
+      debug_echo "  [PROFILE] Grep step: ${grep_duration}ms"
+    fi
+    step_start_time=$(date +%s%N 2>/dev/null || echo "0")
+  fi
 
   # SAFETY: Check if match count exceeds file limit (rough proxy for file count)
   if [ "$MAX_FILES" -gt 0 ] && [ "$match_count" -gt "$((MAX_FILES * 10))" ]; then
@@ -2263,6 +2289,16 @@ process_aggregated_pattern() {
         echo "$escaped_captured|$file|$line" >> "$temp_matches"
       fi
     done <<< "$matches"
+
+    # PROFILING: Log extraction time
+    if [ "$PROFILE" = "1" ] && [ "$step_start_time" != "0" ]; then
+      local extract_end_time=$(date +%s%N 2>/dev/null || echo "0")
+      if [ "$extract_end_time" != "0" ]; then
+        local extract_duration=$(( (extract_end_time - step_start_time) / 1000000 ))
+        debug_echo "  [PROFILE] String extraction: ${extract_duration}ms"
+      fi
+      step_start_time=$(date +%s%N 2>/dev/null || echo "0")
+    fi
 
     # Aggregate by captured string
     if [ -f "$temp_matches" ] && [ -s "$temp_matches" ]; then
@@ -2307,6 +2343,15 @@ process_aggregated_pattern() {
           add_dry_violation "$pattern_title" "$pattern_severity" "$unescaped_string" "$file_count" "$total_count" "$locations_json"
         fi
       done <<< "$unique_strings"
+
+      # PROFILING: Log aggregation time
+      if [ "$PROFILE" = "1" ] && [ "$step_start_time" != "0" ]; then
+        local agg_end_time=$(date +%s%N 2>/dev/null || echo "0")
+        if [ "$agg_end_time" != "0" ]; then
+          local agg_duration=$(( (agg_end_time - step_start_time) / 1000000 ))
+          debug_echo "  [PROFILE] Aggregation: ${agg_duration}ms"
+        fi
+      fi
     fi
   fi
 
@@ -2387,6 +2432,19 @@ process_clone_detection() {
     return 1
   fi
 
+  # OPTIMIZATION: Use sampling for large codebases (50-100 files)
+  local use_sampling=false
+  local sample_rate=1
+  if [ "$file_count" -gt 50 ] && [ "$file_count" -le 100 ]; then
+    use_sampling=true
+    sample_rate=2  # Check every 2nd file
+    text_echo "  ${BLUE}ℹ Large codebase detected ($file_count files) - using sampling (every ${sample_rate}nd file)${NC}"
+  elif [ "$file_count" -gt 100 ]; then
+    use_sampling=true
+    sample_rate=3  # Check every 3rd file
+    text_echo "  ${BLUE}ℹ Very large codebase detected ($file_count files) - using sampling (every ${sample_rate}rd file)${NC}"
+  fi
+
   # Show warning if approaching limit
   if [ "$MAX_CLONE_FILES" -gt 0 ] && [ "$file_count" -gt $((MAX_CLONE_FILES * 80 / 100)) ]; then
     text_echo "  ${YELLOW}⚠ Processing $file_count files (limit: $MAX_CLONE_FILES) - this may take a while...${NC}"
@@ -2406,6 +2464,14 @@ process_clone_detection() {
     if [ "$MAX_CLONE_FILES" -gt 0 ] && [ "$file_iteration" -gt "$MAX_CLONE_FILES" ]; then
       debug_echo "Max clone file limit reached, stopping extraction"
       break
+    fi
+
+    # OPTIMIZATION: Skip files based on sampling rate
+    if [ "$use_sampling" = true ]; then
+      local remainder=$((file_iteration % sample_rate))
+      if [ "$remainder" -ne 0 ]; then
+        continue  # Skip this file
+      fi
     fi
 
     # PROGRESS: Show progress every 10 seconds
@@ -2472,6 +2538,17 @@ process_clone_detection() {
   debug_echo "Aggregating by hash..."
   local unique_hashes=$(cut -d'|' -f1 "$temp_functions" | sort -u)
   local total_hashes=$(echo "$unique_hashes" | wc -l | tr -d ' ')
+  local total_functions=$(wc -l < "$temp_functions" | tr -d ' ')
+
+  # OPTIMIZATION: Early exit if no duplicates possible
+  if [ "$total_functions" -eq "$total_hashes" ]; then
+    debug_echo "No duplicate hashes found (all functions are unique)"
+    text_echo "  ${GREEN}✓ No duplicates found (all $total_functions functions are unique)${NC}"
+    rm -f "$temp_functions" "$temp_hashes"
+    return 0
+  fi
+
+  debug_echo "Found $total_hashes unique hashes from $total_functions functions"
 
   local hash_iteration=0
   local last_hash_progress_time=$(date +%s 2>/dev/null || echo "0")
@@ -2707,8 +2784,14 @@ run_check() {
     text_echo "  PATHS: $PATHS"
   fi
 
-  # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-  if result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns "$PATHS" 2>/dev/null); then
+  # PERFORMANCE: Use cached file list instead of grep -r
+  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+    result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+  else
+    result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+  fi
+
+  if [ -n "$result" ]; then
 	    local visible_result=""
 	    local visible_count=0
 
@@ -2856,6 +2939,94 @@ cleanup_php_cache() {
 }
 trap cleanup_php_cache EXIT
 
+# ============================================================================
+# OPTIMIZED GREP FUNCTION
+# ============================================================================
+# Replacement for `grep -rHn` that uses the cached file list for performance.
+# Usage: fast_grep [grep_options] pattern
+# Example: fast_grep -E "pattern" instead of grep -rHn -E "pattern" "$PATHS"
+#
+# This function automatically:
+# - Uses cached file list for directories (10-50x faster)
+# - Falls back to single file for file paths
+# - Handles all grep options (--include, -E, etc.)
+# - Preserves exit codes and output format
+# ============================================================================
+fast_grep() {
+  local grep_args=()
+  local pattern=""
+
+  # Parse arguments to extract pattern (last non-option argument)
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -*)
+        # It's an option, add to grep_args
+        grep_args+=("$1")
+        shift
+        ;;
+      *)
+        # It's the pattern
+        pattern="$1"
+        shift
+        break
+        ;;
+    esac
+  done
+
+  # If single file, use it directly
+  if [ -f "$PATHS" ]; then
+    grep -Hn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+  else
+    # Use cached file list with xargs for performance
+    # -Hn gives us filename:line_number: format (same as -rHn)
+    if [ -f "$PHP_FILE_LIST" ]; then
+      cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+    else
+      # Fallback to recursive grep if cache not available
+      grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+    fi
+  fi
+}
+
+# Export for use in subshells
+export -f fast_grep 2>/dev/null || true
+
+# ============================================================================
+# OPTIMIZED GREP HELPER: Use cached file list instead of grep -r
+# ============================================================================
+# Usage: cached_grep [grep_options] pattern
+# Example: cached_grep -E "pattern" instead of grep -rHn -E "pattern" "$PATHS"
+#
+# This function uses the cached PHP file list (PHP_FILE_LIST) to avoid
+# repeated directory traversals. It's 10-50x faster than grep -r on large dirs.
+# ============================================================================
+cached_grep() {
+  local grep_args=()
+  local pattern=""
+
+  # Parse arguments to extract pattern (last arg) and options
+  while [ $# -gt 0 ]; do
+    if [ $# -eq 1 ]; then
+      # Last argument is the pattern
+      pattern="$1"
+      shift
+    else
+      # All other arguments are grep options
+      grep_args+=("$1")
+      shift
+    fi
+  done
+
+  # If single file mode, just use regular grep
+  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+    grep -Hn "${grep_args[@]}" "$pattern" "$PHP_FILE_LIST" 2>/dev/null || true
+  else
+    # Use cached file list with xargs for parallel processing
+    # -Hn adds filename and line number (like -rHn but without recursion)
+    cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+  fi
+}
+
 profile_start "CRITICAL_CHECKS"
 section_start "Critical Checks"
 text_echo "${RED}━━━ CRITICAL CHECKS (will fail build) ━━━${NC}"
@@ -2937,7 +3108,8 @@ SUPERGLOBAL_FINDING_COUNT=0
 SUPERGLOBAL_VISIBLE=""
 
 # Find all superglobal manipulation patterns
-SUPERGLOBAL_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" "$PATHS" 2>/dev/null | \
+# PERFORMANCE: Use cached file list instead of grep -r
+SUPERGLOBAL_MATCHES=$(cached_grep -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
   grep -v '//.*\$_' || true)
 
 if [ -n "$SUPERGLOBAL_MATCHES" ]; then
@@ -3041,8 +3213,8 @@ UNSANITIZED_VISIBLE=""
 # Exclude lines with: sanitize_*, esc_*, absint, intval, floatval, wc_clean, wp_unslash, $allowed_keys
 # Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
 # We'll filter those out in a more sophisticated way below
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-UNSANITIZED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$_(GET|POST|REQUEST)\[' "$PATHS" 2>/dev/null | \
+# PERFORMANCE: Use cached file list instead of grep -r
+UNSANITIZED_MATCHES=$(cached_grep -E '\$_(GET|POST|REQUEST)\[' | \
   grep -v 'sanitize_' | \
   grep -v 'esc_' | \
   grep -v 'absint' | \
@@ -3263,8 +3435,8 @@ WPDB_VISIBLE=""
 
 # Find all $wpdb->query, $wpdb->get_var, $wpdb->get_row, $wpdb->get_results, $wpdb->get_col
 # that don't have $wpdb->prepare in the same statement
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-WPDB_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(query|get_var|get_row|get_results|get_col)[[:space:]]*\(' "$PATHS" 2>/dev/null | \
+# PERFORMANCE: Use cached file list instead of grep -r
+WPDB_MATCHES=$(cached_grep --include="*.php" -E '\$wpdb->(query|get_var|get_row|get_results|get_col)[[:space:]]*\(' | \
   grep -v '\$wpdb->prepare' | \
   grep -v '//.*\$wpdb->' || true)
 
@@ -3390,8 +3562,8 @@ group_count=0
 group_first_code=""
 group_threshold=10
 
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-ADMIN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "function[[:space:]]+[a-zA-Z0-9_]*admin[a-zA-Z0-9_]*[[:space:]]*\\(|add_action[[:space:]]*\\([^)]*admin|add_menu_page[[:space:]]*\\(|add_submenu_page[[:space:]]*\\(|add_options_page[[:space:]]*\\(|add_management_page[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+ADMIN_MATCHES=$(cached_grep --include="*.php" -E "function[[:space:]]+[a-zA-Z0-9_]*admin[a-zA-Z0-9_]*[[:space:]]*\\(|add_action[[:space:]]*\\([^)]*admin|add_menu_page[[:space:]]*\\(|add_submenu_page[[:space:]]*\\(|add_options_page[[:space:]]*\\(|add_management_page[[:space:]]*\\(" || true)
 if [ -n "$ADMIN_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -3767,7 +3939,8 @@ WC_UNBOUNDED_FINDING_COUNT=0
 WC_UNBOUNDED_VISIBLE=""
 
 # Find all unbounded WooCommerce queries
-WC_UNBOUNDED_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "'limit'[[:space:]]*=>[[:space:]]*-1" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+WC_UNBOUNDED_MATCHES=$(cached_grep --include="*.php" -E "'limit'[[:space:]]*=>[[:space:]]*-1" || true)
 
 if [ -n "$WC_UNBOUNDED_MATCHES" ]; then
   while IFS= read -r match; do
@@ -3850,8 +4023,8 @@ USERS_FINDING_COUNT=0
 USERS_VISIBLE=""
 
 # Find all get_users() calls with line numbers
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-USERS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -e "get_users[[:space:]]*(" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+USERS_MATCHES=$(cached_grep --include="*.php" -e "get_users[[:space:]]*(" || true)
 
 if [ -n "$USERS_MATCHES" ]; then
   while IFS= read -r match; do
@@ -4006,8 +4179,8 @@ WC_ORDERS_UNBOUNDED=false
 WC_ORDERS_FINDING_COUNT=0
 WC_ORDERS_VISIBLE=""
 
-# SAFEGUARD: "$PATHS" MUST be quoted
-WC_ORDERS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" "wc_get_orders" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+WC_ORDERS_MATCHES=$(cached_grep --include="*.php" "wc_get_orders" || true)
 if [ -n "$WC_ORDERS_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -4063,7 +4236,8 @@ WC_PROD_UNBOUNDED=false
 WC_PROD_FINDING_COUNT=0
 WC_PROD_VISIBLE=""
 
-WC_PROD_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" "wc_get_products" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+WC_PROD_MATCHES=$(cached_grep --include="*.php" "wc_get_products" || true)
 if [ -n "$WC_PROD_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -4117,7 +4291,8 @@ WPQ_UNBOUNDED=false
 WPQ_FINDING_COUNT=0
 WPQ_VISIBLE=""
 
-WPQ_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "new WP_Query|get_posts" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+WPQ_MATCHES=$(cached_grep --include="*.php" -E "new WP_Query|get_posts" || true)
 if [ -n "$WPQ_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -4184,7 +4359,8 @@ WUQ_UNBOUNDED=false
 WUQ_FINDING_COUNT=0
 WUQ_VISIBLE=""
 
-WUQ_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" "new WP_User_Query" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+WUQ_MATCHES=$(cached_grep --include="*.php" "new WP_User_Query" || true)
 if [ -n "$WUQ_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -4256,8 +4432,8 @@ MULT_FOUND=false
 MULT_FINDING_COUNT=0
 MULT_VISIBLE=""
 
-# SAFEGUARD: "$PATHS" MUST be quoted
-MULT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "count\([^)]*\)[[:space:]]*\*[[:space:]]*[0-9]{1,}" "$PATHS" 2>/dev/null || true)
+# PERFORMANCE: Use cached file list instead of grep -r
+MULT_MATCHES=$(cached_grep --include="*.php" -E "count\([^)]*\)[[:space:]]*\*[[:space:]]*[0-9]{1,}" || true)
 if [ -n "$MULT_MATCHES" ]; then
   while IFS= read -r match; do
     [ -z "$match" ] && continue
@@ -4560,8 +4736,8 @@ WC_N1_VISIBLE=""
 
 # Find files with WC-specific N+1 patterns
 # Strategy: Find foreach/while loops, then check if loop body contains WC N+1 patterns
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-WC_N1_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "foreach[[:space:]]*\\(|while[[:space:]]*\\(" "$PATHS" 2>/dev/null | \
+# PERFORMANCE: Use cached file list instead of grep -r
+WC_N1_MATCHES=$(cached_grep --include="*.php" -E "foreach[[:space:]]*\\(|while[[:space:]]*\\(" | \
   while IFS= read -r match; do
     [ -z "$match" ] && continue
     file=$(echo "$match" | cut -d: -f1)
@@ -4960,9 +5136,10 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
       fi
 
       # Run grep with the pattern
+      # PERFORMANCE: Use cached file list instead of grep -r
       matches=""
       match_count=0
-      matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+      matches=$(cached_grep $include_args -E "$pattern_search" || true)
 
       if [ -n "$matches" ]; then
         match_count=$(echo "$matches" | grep -c . 2>/dev/null)
@@ -5099,9 +5276,10 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
       done
 
       # Run grep to find candidate matches
+      # PERFORMANCE: Use cached file list instead of grep -r
       matches=""
       match_count=0
-      matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+      matches=$(cached_grep $include_args -E "$pattern_search" || true)
 
       if [ -n "$matches" ]; then
         match_count=$(echo "$matches" | grep -c . 2>/dev/null)
@@ -5285,9 +5463,10 @@ if [ -n "$DIRECT_PATTERNS" ]; then
       done
 
       # Run grep with the pattern
+      # PERFORMANCE: Use cached file list instead of grep -r
       matches=""
       match_count=0
-      matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+      matches=$(cached_grep $include_args -E "$pattern_search" || true)
 
       if [ -n "$matches" ]; then
         match_count=$(echo "$matches" | grep -c . 2>/dev/null)

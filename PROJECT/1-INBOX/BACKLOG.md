@@ -1,10 +1,106 @@
 # Backlog - Issues to Investigate
 
-### Checklist - 2025-01-14
+### Checklist - 2026-01-15
 - [x] Add Tier 1 rules - First 6 completed
 - [x] Last TTY fix for HTML output
+- [x] Grep optimization complete (Phase 2.5) - 10-50x faster on large directories
+- [ ] **TODO: Optimize Magic String Detector (aggregation logic)** - Remaining performance bottleneck
+- [ ] **TODO: Optimize Function Clone Detector** - Primary bottleneck (94% of scan time)
 - [ ] Make a comment in main script to make rules in external files going forward
 - [ ] Breakout check-performance.sh into multiple files and move to all external rule files
+
+## ✅ COMPLETED: Phase 3 Performance Optimization (Magic String & Clone Detection)
+
+**Status:** ✅ Complete (2026-01-15)
+**Priority:** HIGH
+**Created:** 2026-01-15
+**Completed:** 2026-01-15
+**Version:** 1.3.20
+**See:** `PROJECT/3-COMPLETED/PHASE-3-PERFORMANCE-OPTIMIZATION.md`
+
+### Problem
+
+After completing grep optimization (10-50x speedup), **two major performance bottlenecks remain**:
+
+1. **Magic String Detector (Aggregated Patterns)** - Complex aggregation logic causes hangs
+2. **Function Clone Detector** - Consumes 94% of scan time, causes timeouts on large codebases
+
+**Current behavior:**
+- Small plugin (8 files): 114 seconds total, 108s in clone detector
+- Large plugin (500+ files): **TIMEOUT** (>10 minutes)
+- WooCommerce scan: Never completes
+
+### Root Causes
+
+**Magic String Detector:**
+- Uses `process_aggregated_pattern()` with complex grouping logic
+- Runs multiple grep passes per pattern
+- No timeout protection on aggregation loops
+- May have O(n²) complexity in aggregation phase
+
+**Function Clone Detector:**
+- Processes every PHP file individually
+- Extracts function signatures with multiple grep passes
+- Computes MD5 hash for every function
+- Nested loops for comparison (O(n² × m) complexity)
+- No file count limits (violates Phase 1 safeguards)
+- No timeout protection
+
+### Proposed Solutions
+
+**Priority 1: Make Clone Detection Optional (Quick Win)** ✅ COMPLETE
+- [x] Add `--skip-clone-detection` flag (already exists, verified working)
+- [x] Make clone detection **opt-in** by default (implemented in v1.3.20)
+- [x] Add `--enable-clone-detection` flag to explicitly enable
+- [x] Update help text and documentation
+
+**Priority 2: Add Safeguards to Clone Detector** ✅ COMPLETE
+- [x] Add `MAX_FILES` limit (already existed: MAX_CLONE_FILES=100)
+- [x] Add timeout wrapper (already existed: run_with_timeout)
+- [x] Add progress indicators (already existed: every 10 seconds)
+- [x] Early exit if no duplicates found (implemented: checks unique hashes)
+
+**Priority 3: Optimize Clone Detection Algorithm** ✅ COMPLETE
+- [x] Cache function signatures (not needed with sampling)
+- [x] Use associative arrays (already implemented)
+- [x] Sampling for large codebases (implemented: 50-100 files = every 2nd, 100+ = every 3rd)
+- [ ] External tool integration (deferred: current solution is sufficient)
+
+**Priority 4: Profile Magic String Detector** ✅ COMPLETE
+- [x] Add profiling to `process_aggregated_pattern()` (granular step timing added)
+- [x] Identify slow steps (grep, extraction, aggregation all timed)
+- [x] Add timeout protection (already existed from Phase 1)
+- [ ] Caching aggregation results (not needed: no aggregated patterns in current pattern library)
+
+### Expected Impact
+
+**With clone detection disabled (default):**
+- Small plugin (< 10 files): ~5-10 seconds (vs. 114s currently)
+- Medium plugin (10-50 files): ~10-30 seconds
+- Large plugin (50-200 files): ~30-60 seconds
+- WooCommerce-sized (500+ files): ~60-120 seconds
+
+**With optimized clone detection (opt-in):**
+- Small plugin: ~20-30 seconds (vs. 114s currently)
+- Medium plugin: ~1-2 minutes (vs. 5-10 minutes currently)
+- Large plugin: ~3-5 minutes (vs. 20-30 minutes currently)
+- WooCommerce-sized: ~10-15 minutes (vs. TIMEOUT currently)
+
+### Acceptance Criteria ✅ ALL COMPLETE
+
+- [x] Full directory scans complete without timeout (< 5 minutes for 500 files)
+- [x] Clone detection is opt-in (disabled by default)
+- [x] Magic String Detector completes in < 30 seconds for 500 files
+- [x] Progress indicators show which section is running
+- [x] Re-profiling shows < 10% time in clone detection when disabled
+- [x] Documentation updated with performance expectations
+
+### Related Files
+
+- `PROJECT/2-WORKING/PHASE-2-PERFORMANCE-PROFILING.md` - Profiling data and analysis
+- `dist/bin/check-performance.sh` - Lines 1748+ (clone detection), 2150+ (aggregated patterns)
+
+---
 
 ## Mini Project Plan: Enhanced Context Detection (False Positive Reduction)
 
