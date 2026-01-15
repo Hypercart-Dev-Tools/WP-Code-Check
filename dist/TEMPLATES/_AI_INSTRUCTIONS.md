@@ -38,7 +38,7 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 
 1. **Run scan** → Generate JSON log (Phase 1c)
 2. **AI triage** → Analyze findings and update JSON (Phase 2)
-3. **Generate HTML** → Create final report with AI summary (Phase 2)
+3. **Generate HTML** → Create final report with AI summary (Phase 2) ⚠️ **MUST happen AFTER triage**
 4. **Create GitHub issue** → Automated or manual (Phase 3)
 
 **No manual intervention required** - the AI agent handles all phases automatically.
@@ -49,12 +49,32 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 - "Run gravityforms complete workflow"
 - "Scan, triage, and create GitHub issue for hypercart-helper"
 
-**AI Agent Actions:**
+### ⚠️ CRITICAL: Orchestration Sequence
+
+**The HTML report MUST be regenerated AFTER AI triage is complete.** This is the most important rule to prevent missing AI triage data in the final report.
+
+**Correct Sequence:**
+```
+1. Run scan → JSON created
+2. AI triage → JSON updated with ai_triage section
+3. Regenerate HTML → HTML includes AI triage data
+4. Create GitHub issue → Issue includes AI classifications
+```
+
+**Incorrect Sequence (DO NOT DO THIS):**
+```
+❌ 1. Run scan → JSON created
+❌ 2. Generate HTML → HTML created WITHOUT ai_triage data
+❌ 3. AI triage → JSON updated, but HTML is stale
+❌ 4. Create GitHub issue → Issue missing AI classifications
+```
+
+**AI Agent Actions (Correct Order):**
 1. Execute scan: `dist/bin/run [template-name]` (wait for completion)
 2. Locate generated JSON: `dist/logs/[TIMESTAMP].json`
 3. Perform AI triage analysis (read JSON, analyze findings)
 4. Update JSON with `ai_triage` section
-5. Regenerate HTML: `python3 dist/bin/json-to-html.py [json] [html]`
+5. **Regenerate HTML: `python3 dist/bin/json-to-html.py [json] [html]`** ← Must happen AFTER step 4
 6. Create GitHub issue: `dist/bin/create-github-issue.sh --scan-id [TIMESTAMP]`
 7. Report completion with final HTML report and GitHub issue URL (if created)
 
@@ -63,6 +83,13 @@ When a user requests **"Run template [name] end to end"**, execute the complete 
 - If triage fails → generate basic HTML without AI summary, report issue to user
 - If GitHub issue creation fails → issue body saved to `dist/issues/` for manual use
 - Provide progress updates as each phase completes
+
+**Verification Checklist:**
+- [ ] JSON log created and contains findings
+- [ ] AI triage analysis completed
+- [ ] JSON updated with `ai_triage` section (verify with `jq '.ai_triage' dist/logs/[TIMESTAMP].json`)
+- [ ] HTML regenerated AFTER triage (verify with `grep -c 'ai_triage\|AI Triage\|False Positives' dist/reports/[TIMESTAMP].html`)
+- [ ] HTML report opened in browser to confirm AI summary is visible
 
 ---
 
@@ -666,6 +693,47 @@ python3 dist/bin/json-to-html.py "$latest_json" dist/reports/manual-report.html
 | `gh auth required` | Not authenticated with GitHub | Run: `gh auth login` |
 | `Scan hangs or times out` | Large codebase or slow disk | Use `--exclude-pattern` to skip vendor/node_modules |
 
+### AI Triage Data Missing from HTML Report
+
+**Symptom:** HTML report generated but doesn't show AI triage summary, false positives, or confidence levels.
+
+**Root Cause:** HTML was regenerated BEFORE AI triage was performed, or HTML was not regenerated AFTER triage updated the JSON.
+
+**Solution:**
+
+1. **Verify AI triage data exists in JSON:**
+   ```bash
+   jq '.ai_triage' dist/logs/[TIMESTAMP].json
+   ```
+   - If output is `null` → AI triage hasn't been performed yet
+   - If output shows triage data → JSON is correct, HTML needs regeneration
+
+2. **Regenerate HTML after triage:**
+   ```bash
+   python3 dist/bin/json-to-html.py dist/logs/[TIMESTAMP].json dist/reports/[TIMESTAMP].html
+   ```
+
+3. **Verify AI triage is now in HTML:**
+   ```bash
+   grep -c 'AI Triage\|False Positives\|Needs Review' dist/reports/[TIMESTAMP].html
+   ```
+   - Should return a count > 0
+   - If 0, check that JSON has `ai_triage` section
+
+4. **Open HTML in browser:**
+   ```bash
+   open dist/reports/[TIMESTAMP].html  # macOS
+   xdg-open dist/reports/[TIMESTAMP].html  # Linux
+   ```
+
+**Prevention:** Always follow the correct sequence:
+1. Run scan → JSON created
+2. Perform AI triage → JSON updated with `ai_triage` section
+3. Regenerate HTML → HTML includes AI summary
+4. Create GitHub issue → Issue includes AI classifications
+
+**Remember:** The HTML converter reads the JSON file at the time it runs. If you regenerate HTML before updating the JSON with AI triage data, the HTML will not include the triage information.
+
 ### Getting Help
 
 If you encounter issues not covered here:
@@ -700,12 +768,13 @@ If you encounter issues not covered here:
 - [ ] Verify JSON log created: `dist/logs/[TIMESTAMP].json`
 - [ ] Verify HTML report created: `dist/reports/[TIMESTAMP].html`
 
-**Phase 2: AI Triage**
+**Phase 2: AI Triage** ⚠️ **CRITICAL: HTML regeneration must happen AFTER triage**
 - [ ] Read JSON log: `cat dist/logs/[TIMESTAMP].json`
 - [ ] Analyze findings for false positives (check context, safeguards)
 - [ ] Update JSON with `ai_triage` section (summary stats + recommendations)
-- [ ] Regenerate HTML: `python3 dist/bin/json-to-html.py [json] [html]`
-- [ ] Verify AI summary appears at top of HTML report
+- [ ] **VERIFY JSON was updated:** `jq '.ai_triage' dist/logs/[TIMESTAMP].json`
+- [ ] **THEN regenerate HTML:** `python3 dist/bin/json-to-html.py [json] [html]`
+- [ ] Verify AI summary appears at top of HTML report: `grep -c 'AI Triage\|False Positives' dist/reports/[TIMESTAMP].html`
 
 **Phase 3: GitHub Issue**
 - [ ] Determine scan ID from JSON filename
