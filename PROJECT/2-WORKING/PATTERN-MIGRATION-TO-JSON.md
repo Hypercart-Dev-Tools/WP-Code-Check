@@ -339,7 +339,80 @@ This expands on the high-level plan in `BACKLOG.md`.
 - No change in rule IDs, severities, or messages.
 
 
-**STATUS:** NOT STARTED
+**STATUS:** IN PROGRESS (2026-01-15)
+
+**Completed Migrations (Phase 2.1 - T1 Performance Rules):**
+
+✅ **JSON Patterns Created (4 rules):**
+1. `unbounded-posts-per-page.json` - Detects `posts_per_page => -1`
+2. `unbounded-numberposts.json` - Detects `numberposts => -1`
+3. `nopaging-true.json` - Detects `'nopaging' => true`
+4. `order-by-rand.json` - Detects `ORDER BY RAND()` and `'orderby' => 'rand'`
+
+**Current Status:**
+- ✅ JSON pattern files created and validated (load correctly)
+- ⚠️ **BLOCKED: Patterns not yet active** - Scanner lacks "simple pattern runner"
+- ✅ Inline code remains active with TODO markers (lines 3850-3862, 4854-4864)
+
+---
+
+### 🚧 BLOCKED ITEMS - MUST IMPLEMENT BEFORE PHASE 2 COMPLETE
+
+**Blocker:** Scanner does not execute "simple" detection type patterns
+
+**Current Behavior:**
+- Scanner has runners for `aggregated` (line 5757) and `clone_detection` (line 5813) patterns
+- No runner exists for `simple` or `direct` detection type patterns
+- JSON patterns load correctly but are never executed
+
+**Required Implementation:**
+
+1. **Add Simple Pattern Runner Section** (in `check-performance.sh` around line 2700-2800)
+   ```bash
+   # ============================================================================
+   # Simple Pattern Checks - JSON-Defined Rules
+   # ============================================================================
+
+   # Find all simple/direct detection patterns
+   SIMPLE_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f | while read -r pattern_file; do
+     detection_type=$(grep '"type"' "$pattern_file" | head -1 | sed 's/.*"type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+     if [ "$detection_type" = "simple" ] || [ "$detection_type" = "direct" ]; then
+       echo "$pattern_file"
+     fi
+   done)
+
+   # Process each simple pattern
+   while IFS= read -r pattern_file; do
+     [ -z "$pattern_file" ] && continue
+     if load_pattern "$pattern_file"; then
+       run_check "ERROR" "$pattern_severity" "$pattern_title" "$pattern_id" \
+         "-E $pattern_search"
+     fi
+   done <<< "$SIMPLE_PATTERNS"
+   ```
+
+2. **Remove Inline Checks** (after runner is implemented)
+   - Lines 3850-3862: `unbounded-posts-per-page`, `unbounded-numberposts`, `nopaging-true`
+   - Lines 4854-4864: `order-by-rand`
+
+3. **Test Validation**
+   - Run fixture tests to ensure identical behavior
+   - Verify rule IDs, severities, and finding counts match
+   - Confirm baseline suppression works
+
+**Estimated Effort:** 2-3 hours (implementation + testing)
+
+**Priority:** HIGH - Blocks completion of Phase 2 migration
+
+**Tracking:**
+- See also: `PROJECT/1-INBOX/IMPLEMENT-SIMPLE-PATTERN-RUNNER.md` (to be created)
+- Inline code markers: Search for "TODO: Implement simple pattern runner"
+
+---
+
+**Next Steps After Blocker Resolved:**
+- Continue with remaining T1 rules (7 remaining)
+- OR tackle P1 security rules (5 remaining, all T2/T3)
 
 
 

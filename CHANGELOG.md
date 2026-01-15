@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-01-15
+
+### Added
+- **JSON Pattern Files (Performance) - Awaiting Runner Implementation**
+  - `dist/patterns/unbounded-posts-per-page.json` - Full pattern definition with remediation examples
+  - `dist/patterns/unbounded-numberposts.json` - Full pattern definition with remediation examples
+  - `dist/patterns/nopaging-true.json` - Full pattern definition with remediation examples
+  - `dist/patterns/order-by-rand.json` - Full pattern definition with remediation examples and performance rationale
+  - **Note:** Patterns load correctly but are not yet active (scanner lacks "simple pattern runner")
+- **Validator Infrastructure (Future Use)**
+  - `dist/bin/validators/superglobal-manipulation-validator.sh` - Scripted validator for complex security patterns (not yet wired)
+- **Pattern Loader Enhancement**
+  - Enhanced `dist/lib/pattern-loader.sh` to extract `validator_script` path for future scripted detection types
+
+### Documentation
+- **Phase 2 Pattern Migration - Validation & Blocker Identified**
+  - Created 4 JSON patterns for T1 performance rules
+  - Validation revealed scanner lacks runner for "simple" detection type patterns
+  - Inline code remains active with TODO markers (lines 3850-3862, 4854-4864)
+  - Created `PROJECT/1-INBOX/IMPLEMENT-SIMPLE-PATTERN-RUNNER.md` to track blocker
+- Updated `PROJECT/2-WORKING/PATTERN-INVENTORY.md`:
+  - Added "Blockers" section documenting simple pattern runner requirement
+  - Updated status: 7 fully migrated, 4 blocked (JSON exists), 35 remaining
+  - Marked affected rules (#18, #19, #20, #35) as "JSON (blocked)"
+- Updated `PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md`:
+  - Documented Phase 2.1 validation results
+  - Added detailed "Blocked Items" section with implementation requirements
+  - Estimated effort: 2-3 hours to implement simple pattern runner
+
 ## [1.3.12] - 2026-01-15
 
 ### Documentation

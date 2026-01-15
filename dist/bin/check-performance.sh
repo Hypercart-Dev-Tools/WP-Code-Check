@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.12
+# Version: 1.3.13
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -3847,6 +3847,11 @@ debug_echo "Running fixture validation..."
 run_fixture_validation
 debug_echo "Fixture validation complete"
 
+# NOTE: JSON patterns exist (unbounded-posts-per-page.json, unbounded-numberposts.json, nopaging-true.json)
+# but are not yet active because the scanner lacks a "simple pattern runner".
+# These inline checks remain active until the runner is implemented.
+# TODO: Implement simple pattern runner and remove these inline checks.
+# See: PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md (Phase 2 - Blocked Items)
 run_check "ERROR" "$(get_severity "unbounded-posts-per-page" "CRITICAL")" "Unbounded posts_per_page" "unbounded-posts-per-page" \
   "-e posts_per_page[[:space:]]*=>[[:space:]]*-1"
 
@@ -4848,6 +4853,10 @@ else
 fi
 text_echo ""
 
+# NOTE: JSON pattern exists (order-by-rand.json) but is not yet active.
+# Scanner lacks a "simple pattern runner". Inline check remains active.
+# TODO: Implement simple pattern runner and remove this inline check.
+# See: PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md (Phase 2 - Blocked Items)
 run_check "WARNING" "$(get_severity "order-by-rand" "HIGH")" "Randomized ordering (ORDER BY RAND)" "order-by-rand" \
   "-e orderby[[:space:]]*=>[[:space:]]*['\"]rand['\"]" \
   "-E ORDER[[:space:]]+BY[[:space:]]+RAND\("
