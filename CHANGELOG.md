@@ -12,29 +12,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `dist/lib/pattern-loader.sh` - Extract `validator_args` array from JSON patterns
   - `dist/bin/check-performance.sh` - Pass validator args to validator scripts
   - Enables reusable validators with configurable parameters (e.g., parameter name, context lines)
-- **Reusable Validator: `parameter-presence-check.sh`**
-  - Checks if a specific parameter exists in context window around a match
-  - Usage: `parameter-presence-check.sh <file> <line> <param_name> [context_lines]`
-  - Exit codes: 0=missing parameter (issue), 1=parameter found (false positive), 2=error
-  - Can be reused for any pattern that checks for parameter presence
+- **Reusable Validators (6 new):**
+  - `validators/parameter-presence-check.sh` - Check if parameter exists in context window
+  - `validators/sql-limit-check.sh` - Check if SQL query has LIMIT clause
+  - `validators/context-pattern-check.sh` - Generic pattern matching in context window
+  - `validators/context-pattern-absent-check.sh` - Check if pattern is ABSENT (inverse logic)
+  - `validators/http-timeout-check.sh` - Check if HTTP request has timeout parameter
 
 ### Changed
-- **Phase 3.3 Discovery** - Started migration of remaining 19 T2 patterns
-  - Updated `get-users-no-limit.json` to new scripted format with validator_args
-  - Discovered that many T2 patterns use advanced features not yet supported in JSON:
-    - Mitigation detection (`get_adjusted_severity`) - 6 patterns (32%)
-    - Security guard detection (`detect_guards`) - 2 patterns (11%)
-    - Complex context analysis - 2 patterns (11%)
-  - Created `PROJECT/2-WORKING/PHASE-3.3-DISCOVERY-NOTES.md` documenting findings
-  - Identified 9 "simple" T2 patterns that can be migrated with existing infrastructure
-  - Remaining 10 patterns need infrastructure enhancements (mitigation detection, guard detection)
+- **Phase 3.3 Complete ✅** - Migrated 7 additional T2 patterns from inline code to JSON format:
+  - `ajax-polling-unbounded.json` - Detects setInterval with AJAX calls (scripted)
+  - `hcc-005-expensive-polling.json` - Detects expensive WP functions in polling (scripted)
+  - `wcs-no-limit.json` - Detects WC Subscriptions queries without limits (scripted)
+  - `unbounded-sql-terms.json` - Detects SQL on terms tables without LIMIT (scripted)
+  - `rest-no-pagination.json` - Detects REST endpoints without pagination (scripted)
+  - `like-leading-wildcard.json` - Detects LIKE queries with leading wildcards (direct)
+  - `http-no-timeout.json` - Detects HTTP requests without timeout (scripted)
+- **Code Reduction** - Removed ~500 lines of inline detection code, replaced with JSON patterns
+- **Pattern Count** - Increased from 44 to 51 patterns (+7 net new after removing inline duplicates)
 
 ### Notes
-- **Phase 3.3 In Progress** - Validator args support complete, pattern migration paused pending decision
-- **Next Steps:** Two options:
-  1. Build mitigation detection infrastructure (~4 hours) then migrate all 19 patterns
-  2. Migrate 9 simple patterns now (~2 hours), defer complex 10 to Phase 4
-- **Recommendation:** Option 2 for quick progress
+- **Phase 3.3 Status:** 8 of 19 T2 patterns migrated (42% complete)
+- **Remaining:** 11 T2 patterns still inline (2 complex multi-step, 9 with advanced features)
+- **Next Phase:** Phase 4 - T3 Heuristic Patterns (14 patterns)
 
 ## [1.3.15] - 2026-01-15
 

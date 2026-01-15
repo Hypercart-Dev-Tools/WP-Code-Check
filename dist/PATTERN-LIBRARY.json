@@ -1,28 +1,28 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T03:49:00Z",
+  "generated": "2026-01-15T04:14:15Z",
   "summary": {
-    "total_patterns": 48,
-    "enabled": 44,
+    "total_patterns": 51,
+    "enabled": 47,
     "disabled": 4,
     "by_severity": {
-      "CRITICAL": 17,
+      "CRITICAL": 18,
       "HIGH": 16,
-      "MEDIUM": 11,
+      "MEDIUM": 13,
       "LOW": 4
     },
     "by_category": {
-      "performance": 16,"Performance": 5,"duplication": 5,"reliability": 5,"security": 14
+      "performance": 19,"Performance": 5,"duplication": 5,"reliability": 5,"security": 14
     },
     "by_pattern_type": {
-      "php": 37,
+      "php": 40,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 7,
-    "heuristic_patterns": 15,
-    "definitive_patterns": 33
+    "heuristic_patterns": 17,
+    "definitive_patterns": 34
   },
   "patterns": [
     {
@@ -264,6 +264,20 @@
   "file": "nextjs-missing-revalidate.json"
 },
 {
+  "id": "http-no-timeout",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "MEDIUM",
+  "title": "HTTP requests without timeout",
+  "description": "Detects wp_remote_get/post/request/head calls without explicit timeout parameters, which can hang the entire site if the remote server doesn't respond.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": true,
+  "file": "http-no-timeout.json"
+},
+{
   "id": "duplicate-storage-keys",
   "version": "1.0.0",
   "enabled": true,
@@ -276,6 +290,20 @@
   "mitigation_detection": false,
   "heuristic": true,
   "file": "duplicate-storage-keys.json"
+},
+{
+  "id": "like-leading-wildcard",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "MEDIUM",
+  "title": "LIKE queries with leading wildcards",
+  "description": "Detects SQL LIKE queries with leading wildcards (LIKE '%...'), which prevent database index usage and cause full table scans.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": true,
+  "file": "like-leading-wildcard.json"
 },
 {
   "id": "limit-multiplier-from-count",
@@ -444,6 +472,20 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "php-user-controlled-file-write.json"
+},
+{
+  "id": "rest-no-pagination",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "CRITICAL",
+  "title": "REST endpoints without pagination/limits",
+  "description": "Detects register_rest_route() calls without pagination parameters (per_page, limit, page), which can cause unbounded queries and memory exhaustion.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": false,
+  "file": "rest-no-pagination.json"
 },
 {
   "id": "spo-002-superglobals",

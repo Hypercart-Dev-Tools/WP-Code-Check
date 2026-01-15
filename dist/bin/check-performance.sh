@@ -3434,133 +3434,17 @@ text_echo ""
 # Location: dist/patterns/ajax-polling-unbounded.json
 # ============================================================================
 
-# HCC-005: Expensive WordPress functions in polling intervals
-HCC005_SEVERITY=$(get_severity "hcc-005-expensive-polling" "HIGH")
-HCC005_COLOR="${YELLOW}"
-if [ "$HCC005_SEVERITY" = "CRITICAL" ] || [ "$HCC005_SEVERITY" = "HIGH" ]; then HCC005_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Expensive WP functions in polling intervals (HCC-005) ${HCC005_COLOR}[$HCC005_SEVERITY]${NC}"
-EXPENSIVE_POLLING=false
-EXPENSIVE_POLLING_FINDING_COUNT=0
-EXPENSIVE_POLLING_VISIBLE=""
-# Scan both JS and PHP files for setInterval (PHP files may have inline <script> tags)
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-POLLING_MATCHES_HCC005=$(grep -rHn $EXCLUDE_ARGS --include="*.js" --include="*.php" -E "setInterval[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
-if [ -n "$POLLING_MATCHES_HCC005" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    lineno=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
+# ============================================================================
+# MIGRATED TO JSON: hcc-005-expensive-polling.json (Phase 3.3 - v1.3.16)
+# Pattern: Expensive WP functions in polling intervals (HCC-005)
+# Location: dist/patterns/hcc-005-expensive-polling.json
+# ============================================================================
 
-    if ! [[ "$lineno" =~ ^[0-9][0-9]*$ ]]; then
-      continue
-    fi
-
-    # Check for expensive WP functions in a wider context (20 lines after setInterval)
-    start_line=$lineno
-    end_line=$((lineno + 20))
-    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null)
-
-    # Detect expensive WordPress functions
-    if echo "$context" | grep -qE "get_plugins\\(|get_themes\\(|get_posts\\(|WP_Query|get_users\\(|wp_get_recent_posts\\(|get_categories\\(|get_terms\\("; then
-      if should_suppress_finding "hcc-005-expensive-polling" "$file"; then
-        continue
-      fi
-
-      EXPENSIVE_POLLING=true
-      ((EXPENSIVE_POLLING_FINDING_COUNT++))
-      add_json_finding "hcc-005-expensive-polling" "error" "$HCC005_SEVERITY" "$file" "${lineno:-0}" "Expensive WordPress function called in polling interval" "$code"
-      if [ -z "$EXPENSIVE_POLLING_VISIBLE" ]; then
-        EXPENSIVE_POLLING_VISIBLE="$match"
-      else
-        EXPENSIVE_POLLING_VISIBLE="${EXPENSIVE_POLLING_VISIBLE}
-$match"
-      fi
-    fi
-  done <<< "$POLLING_MATCHES_HCC005"
-fi
-if [ "$EXPENSIVE_POLLING" = true ]; then
-  if [ "$HCC005_SEVERITY" = "CRITICAL" ] || [ "$HCC005_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$EXPENSIVE_POLLING_VISIBLE" ]; then
-    while IFS= read -r match; do
-      [ -z "$match" ] && continue
-      format_finding "$match"
-    done <<< "$(echo "$EXPENSIVE_POLLING_VISIBLE" | head -5)"
-  fi
-  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "$HCC005_SEVERITY" "failed" "$EXPENSIVE_POLLING_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Expensive WP functions in polling intervals (HCC-005)" "$HCC005_SEVERITY" "passed" 0
-fi
-text_echo ""
-
-REST_SEVERITY=$(get_severity "rest-no-pagination" "CRITICAL")
-REST_COLOR="${YELLOW}"
-if [ "$REST_SEVERITY" = "CRITICAL" ] || [ "$REST_SEVERITY" = "HIGH" ]; then REST_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ REST endpoints without pagination/limits ${REST_COLOR}[$REST_SEVERITY]${NC}"
-REST_UNBOUNDED=false
-REST_FINDING_COUNT=0
-REST_VISIBLE=""
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-REST_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "register_rest_route[[:space:]]*\\(" "$PATHS" 2>/dev/null || true)
-if [ -n "$REST_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    lineno=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-    if ! [[ "$lineno" =~ ^[0-9][0-9]*$ ]]; then
-      continue
-    fi
-
-    start_line=$lineno
-    end_line=$((lineno + 15))
-    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null)
-
-    if ! echo "$context" | grep -qiE "'per_page'|\"per_page\"|'page'|\"page\"|'limit'|\"limit\"|pagination|paged|per_page"; then
-      if should_suppress_finding "rest-endpoint-unbounded" "$file"; then
-        continue
-      fi
-
-      REST_UNBOUNDED=true
-      ((REST_FINDING_COUNT++))
-      add_json_finding "rest-no-pagination" "error" "$REST_SEVERITY" "$file" "${lineno:-0}" "register_rest_route without per_page/limit pagination guard" "$code"
-      if [ -z "$REST_VISIBLE" ]; then
-        REST_VISIBLE="$match"
-      else
-        REST_VISIBLE="${REST_VISIBLE}
-$match"
-      fi
-    fi
-  done <<< "$REST_MATCHES"
-fi
-if [ "$REST_UNBOUNDED" = true ]; then
-  if [ "$REST_SEVERITY" = "CRITICAL" ] || [ "$REST_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$REST_VISIBLE" ]; then
-    while IFS= read -r match; do
-      [ -z "$match" ] && continue
-      format_finding "$match"
-    done <<< "$(echo "$REST_VISIBLE" | head -5)"
-  fi
-  add_json_check "REST endpoints without pagination/limits" "$REST_SEVERITY" "failed" "$REST_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "REST endpoints without pagination/limits" "$REST_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: rest-no-pagination.json (Phase 3.3 - v1.3.16)
+# Pattern: REST endpoints without pagination/limits
+# Location: dist/patterns/rest-no-pagination.json
+# ============================================================================
 
 AJAX_NONCE_SEVERITY=$(get_severity "ajax-no-nonce" "HIGH")
 AJAX_NONCE_COLOR="${YELLOW}"
@@ -3872,69 +3756,11 @@ text_echo ""
 
 # WooCommerce Subscriptions queries without limits
 text_echo ""
-WCS_SEVERITY=$(get_severity "wcs-get-subscriptions-no-limit" "MEDIUM")
-WCS_COLOR="${YELLOW}"
-if [ "$WCS_SEVERITY" = "CRITICAL" ] || [ "$WCS_SEVERITY" = "HIGH" ]; then WCS_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ WooCommerce Subscriptions queries without limits ${WCS_COLOR}[$WCS_SEVERITY]${NC}"
-WCS_FAILED=false
-WCS_FINDING_COUNT=0
-WCS_VISIBLE=""
-
-# Find wcs_get_subscriptions* functions called without 'limit' parameter
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-WCS_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "wcs_get_subscriptions[a-zA-Z_]*[[:space:]]*\\(" "$PATHS" 2>/dev/null | \
-  grep -v "'limit'" | \
-  grep -v '"limit"' | \
-  grep -v '//.*wcs_get_subscriptions' || true)
-
-if [ -n "$WCS_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    lineno=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
-      continue
-    fi
-
-    if should_suppress_finding "wcs-get-subscriptions-no-limit" "$file"; then
-      continue
-    fi
-
-    WCS_FAILED=true
-    ((WCS_FINDING_COUNT++))
-    add_json_finding "wcs-get-subscriptions-no-limit" "warning" "$WCS_SEVERITY" "$file" "$lineno" "WooCommerce Subscriptions query without limit parameter" "$code"
-
-    if [ -z "$WCS_VISIBLE" ]; then
-      WCS_VISIBLE="$match"
-    else
-      WCS_VISIBLE="${WCS_VISIBLE}
-$match"
-    fi
-  done <<< "$WCS_MATCHES"
-fi
-
-if [ "$WCS_FAILED" = true ]; then
-  if [ "$WCS_SEVERITY" = "CRITICAL" ] || [ "$WCS_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$WCS_VISIBLE" ]; then
-    while IFS= read -r match; do
-      [ -z "$match" ] && continue
-      format_finding "$match"
-    done <<< "$(echo "$WCS_VISIBLE" | head -5)"
-  fi
-  add_json_check "WooCommerce Subscriptions queries without limits" "$WCS_SEVERITY" "failed" "$WCS_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "WooCommerce Subscriptions queries without limits" "$WCS_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: wcs-no-limit.json (Phase 3.3 - v1.3.16)
+# Pattern: WooCommerce Subscriptions queries without limits
+# Location: dist/patterns/wcs-no-limit.json
+# ============================================================================
 
 # get_users check - unbounded user queries (can crash sites with many users)
 USERS_SEVERITY=$(get_severity "get-users-no-limit" "CRITICAL")
@@ -4120,63 +3946,11 @@ else
 fi
 text_echo ""
 
-# Unbounded direct SQL on terms tables
-# Look for lines with wpdb->terms or wpdb->term_taxonomy that don't have LIMIT on the same line
-TERMS_SQL_SEVERITY=$(get_severity "unbounded-sql-terms" "HIGH")
-TERMS_SQL_COLOR="${YELLOW}"
-if [ "$TERMS_SQL_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SQL_SEVERITY" = "HIGH" ]; then TERMS_SQL_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Unbounded SQL on wp_terms/wp_term_taxonomy ${TERMS_SQL_COLOR}[$TERMS_SQL_SEVERITY]${NC}"
-TERMS_SQL_UNBOUNDED=false
-TERMS_SQL_FINDING_COUNT=0
-# Find lines referencing terms tables in SQL context
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-TERMS_SQL_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E '\$wpdb->(terms|term_taxonomy)' "$PATHS" 2>/dev/null || true)
-	if [ -n "$TERMS_SQL_MATCHES" ]; then
-	  # Filter out lines that have LIMIT (case-insensitive to catch both 'LIMIT' and 'limit')
-	  UNBOUNDED_MATCHES=$(echo "$TERMS_SQL_MATCHES" | grep -vi "LIMIT" || true)
-	  if [ -n "$UNBOUNDED_MATCHES" ]; then
-	    VISIBLE_MATCHES=""
-	    while IFS= read -r line; do
-	      [ -z "$line" ] && continue
-	      _file=$(echo "$line" | cut -d: -f1)
-	      _lineno=$(echo "$line" | cut -d: -f2)
-	      _code=$(echo "$line" | cut -d: -f3-)
-
-	      if ! should_suppress_finding "unbounded-terms-sql" "$_file"; then
-	        TERMS_SQL_UNBOUNDED=true
-	        ((TERMS_SQL_FINDING_COUNT++))
-	        add_json_finding "unbounded-sql-terms" "error" "$TERMS_SQL_SEVERITY" "$_file" "${_lineno:-0}" "Unbounded SQL on wp_terms/wp_term_taxonomy" "$_code"
-	        if [ -z "$VISIBLE_MATCHES" ]; then
-	          VISIBLE_MATCHES="$line"
-	        else
-	          VISIBLE_MATCHES="${VISIBLE_MATCHES}
-$line"
-	        fi
-	      fi
-	    done <<< "$UNBOUNDED_MATCHES"
-
-	    if [ "$TERMS_SQL_UNBOUNDED" = true ] && [ "$OUTPUT_FORMAT" = "text" ]; then
-	      while IFS= read -r match; do
-	        [ -z "$match" ] && continue
-	        echo "  $(format_finding "$match")"
-	      done <<< "$(echo "$VISIBLE_MATCHES" | head -5)"
-	    fi
-	  fi
-	fi
-if [ "$TERMS_SQL_UNBOUNDED" = true ]; then
-  if [ "$TERMS_SQL_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SQL_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING${NC}"
-    ((WARNINGS++))
-  fi
-  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "$TERMS_SQL_SEVERITY" "failed" "$TERMS_SQL_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Unbounded SQL on wp_terms/wp_term_taxonomy" "$TERMS_SQL_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: unbounded-sql-terms.json (Phase 3.3 - v1.3.16)
+# Pattern: Unbounded SQL on wp_terms/wp_term_taxonomy
+# Location: dist/patterns/unbounded-sql-terms.json
+# ============================================================================
 
 # Unbounded wc_get_orders check (explicit limit -1)
 WC_ORDERS_SEVERITY=$(get_severity "unbounded-wc-get-orders" "CRITICAL")
@@ -4658,101 +4432,12 @@ text_echo ""
 # This check is now handled by the Simple Pattern Runner (see line ~5659)
 # JSON pattern: dist/patterns/order-by-rand.json
 
-# LIKE queries with leading wildcards
-LIKE_SEVERITY=$(get_severity "like-leading-wildcard" "MEDIUM")
-LIKE_COLOR="${YELLOW}"
-if [ "$LIKE_SEVERITY" = "CRITICAL" ] || [ "$LIKE_SEVERITY" = "HIGH" ]; then LIKE_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ LIKE queries with leading wildcards ${LIKE_COLOR}[$LIKE_SEVERITY]${NC}"
-LIKE_WARNINGS=0
-LIKE_ISSUES=""
-LIKE_FINDING_COUNT=0
-
-# Pattern 1: WP_Query meta_query with compare => 'LIKE' and value starting with %
-# Look for 'compare' => 'LIKE' patterns in meta_query context
-META_LIKE=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "'compare'[[:space:]]*=>[[:space:]]*['\"]LIKE['\"]" \
-  $PATHS 2>/dev/null || true)
-
-	if [ -n "$META_LIKE" ]; then
-	  # Check each match for nearby % wildcard at start of value
-	  while IFS= read -r match; do
-	    [ -z "$match" ] && continue
-	    file=$(echo "$match" | cut -d: -f1)
-	      line_num=$(echo "$match" | cut -d: -f2)
-	      code=$(echo "$match" | cut -d: -f3-)
-
-	      # Defensive: ensure line number is numeric before doing arithmetic.
-	      # On some platforms/tools, unexpected grep output can sneak in here,
-	      # which would make "$line_num" non-numeric and break $((...)).
-	      if ! [[ "$line_num" =~ ^[0-9][0-9]*$ ]]; then
-	        if [ "${NEOCHROME_DEBUG:-}" = "1" ] && [ "$OUTPUT_FORMAT" = "text" ]; then
-	          text_echo "  [DEBUG] Skipping non-numeric LIKE match: $match"
-	        fi
-	        continue
-	      fi
-
-	      # Look at surrounding lines (5 before and after) for value starting with %
-	      start_line=$((line_num - 5))
-	      [ "$start_line" -lt 1 ] && start_line=1
-	      end_line=$((line_num + 5))
-
-	    # Check for 'value' => '%... pattern nearby
-	    if sed -n "${start_line},${end_line}p" "$file" 2>/dev/null | grep -qE "'value'[[:space:]]*=>[[:space:]]*['\"]%"; then
-	      if ! should_suppress_finding "like-leading-wildcard" "$file"; then
-	        LIKE_ISSUES="${LIKE_ISSUES}${match}"$'\n'
-	        add_json_finding "like-leading-wildcard" "warning" "$LIKE_SEVERITY" "$file" "$line_num" "LIKE query with leading wildcard prevents index use" "$code"
-	        ((LIKE_WARNINGS++)) || true
-	        ((LIKE_FINDING_COUNT++)) || true
-	      fi
-	    fi
-	  done <<< "$META_LIKE"
-	fi
-
-# Pattern 2: Raw SQL with LIKE '%... (leading wildcard)
-# Only match actual code, not comments (lines starting with * or //)
-SQL_LIKE=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "LIKE[[:space:]]+['\"]%" \
-  $PATHS 2>/dev/null | grep -v "^[^:]*:[0-9]*:[[:space:]]*//" | grep -v "^[^:]*:[0-9]*:[[:space:]]*\*" || true)
-
-	if [ -n "$SQL_LIKE" ]; then
-	  while IFS= read -r match; do
-	    [ -z "$match" ] && continue
-	    file=$(echo "$match" | cut -d: -f1)
-	    line_num=$(echo "$match" | cut -d: -f2)
-	    code=$(echo "$match" | cut -d: -f3-)
-	    if ! should_suppress_finding "like-leading-wildcard" "$file"; then
-	      LIKE_ISSUES="${LIKE_ISSUES}${match}"$'\n'
-	      add_json_finding "like-leading-wildcard" "warning" "$LIKE_SEVERITY" "$file" "$line_num" "LIKE query with leading wildcard prevents index use" "$code"
-	      ((LIKE_WARNINGS++)) || true
-	      ((LIKE_FINDING_COUNT++)) || true
-	    fi
-	  done <<< "$SQL_LIKE"
-	fi
-
-if [ "$LIKE_WARNINGS" -gt 0 ]; then
-  if [ "$LIKE_SEVERITY" = "CRITICAL" ] || [ "$LIKE_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED - LIKE queries with leading wildcards prevent index use:${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING - LIKE queries with leading wildcards prevent index use:${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ]; then
-    if [ "$VERBOSE" = "true" ]; then
-      echo "$LIKE_ISSUES"
-    else
-      echo "$LIKE_ISSUES" | head -5
-      if [ "$LIKE_WARNINGS" -gt 5 ]; then
-        echo "  ... and $((LIKE_WARNINGS - 5)) more (use --verbose to see all)"
-      fi
-    fi
-  fi
-  add_json_check "LIKE queries with leading wildcards" "$LIKE_SEVERITY" "failed" "$LIKE_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "LIKE queries with leading wildcards" "$LIKE_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: like-leading-wildcard.json (Phase 3.3 - v1.3.16)
+# Pattern: LIKE queries with leading wildcards
+# Location: dist/patterns/like-leading-wildcard.json
+# Note: Simplified to detect SQL LIKE '%...' pattern only
+# ============================================================================
 
 # Helper: Check if file uses WordPress meta caching APIs
 # Returns 0 (true) if file contains update_meta_cache() or similar functions
@@ -5145,101 +4830,11 @@ text_echo ""
 # Executed by: Simple Pattern Runner (lines 5659-5820)
 # ============================================================================
 
-# HTTP requests without timeout - Can hang entire site
-HTTP_TIMEOUT_SEVERITY=$(get_severity "http-no-timeout" "MEDIUM")
-HTTP_TIMEOUT_COLOR="${YELLOW}"
-if [ "$HTTP_TIMEOUT_SEVERITY" = "CRITICAL" ] || [ "$HTTP_TIMEOUT_SEVERITY" = "HIGH" ]; then HTTP_TIMEOUT_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ HTTP requests without timeout ${HTTP_TIMEOUT_COLOR}[$HTTP_TIMEOUT_SEVERITY]${NC}"
-HTTP_NO_TIMEOUT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "wp_remote_(get|post|request|head)[[:space:]]*\(" \
-  "$PATHS" 2>/dev/null || true)
-
-HTTP_NO_TIMEOUT_ISSUES=""
-HTTP_NO_TIMEOUT_FINDING_COUNT=0
-
-if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-    # Check if line number is numeric
-    if ! [[ "$line_num" =~ ^[0-9]+$ ]]; then
-      continue
-    fi
-
-    # PHASE 1 ENHANCEMENT: Skip if line is in comment/docblock
-    # This eliminates false positives from PHPDoc @uses annotations
-    if is_line_in_comment "$file" "$line_num"; then
-      continue
-    fi
-
-    # Look at next 5 lines for 'timeout' parameter (inline args)
-    # But only within the same statement (until we hit a semicolon)
-    start_line=$line_num
-    end_line=$((line_num + 5))
-    has_timeout=false
-
-    # Extract the statement (until semicolon) from next 5 lines
-    statement=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null | \
-                awk '/;/{print; exit} {print}')
-
-    # Check if timeout is present in THIS statement only
-    if echo "$statement" | grep -qE "'timeout'|\"timeout\""; then
-      has_timeout=true
-    fi
-
-    # If not found inline, check if using $args variable and look backward for its definition
-    if [ "$has_timeout" = false ]; then
-      # Check if the call uses a variable (e.g., $args, $options, $params)
-      if echo "$code" | grep -qE '\$[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\)'; then
-        # Extract variable name (e.g., $args from "wp_remote_get($url, $args)")
-        var_name=$(echo "$code" | grep -oE '\$[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\)' | sed 's/[[:space:]]*)//' | head -1)
-
-        if [ -n "$var_name" ]; then
-          # Look backward up to 20 lines for variable definition with timeout
-          backward_start=$((line_num - 20))
-          [ "$backward_start" -lt 1 ] && backward_start=1
-
-          # Check if variable is defined with 'timeout' in previous lines
-          if sed -n "${backward_start},${line_num}p" "$file" 2>/dev/null | \
-             grep -A 10 "^[[:space:]]*${var_name}[[:space:]]*=" | \
-             grep -qE "'timeout'|\"timeout\""; then
-            has_timeout=true
-          fi
-        fi
-      fi
-    fi
-
-    # Only flag if no timeout found (inline or in variable definition)
-    if [ "$has_timeout" = false ]; then
-      if ! should_suppress_finding "http-no-timeout" "$file"; then
-        HTTP_NO_TIMEOUT_ISSUES="${HTTP_NO_TIMEOUT_ISSUES}${match}"$'\n'
-        add_json_finding "http-no-timeout" "warning" "$HTTP_TIMEOUT_SEVERITY" "$file" "$line_num" "HTTP request without explicit timeout can hang site if remote server doesn't respond" "$code"
-        ((HTTP_NO_TIMEOUT_FINDING_COUNT++)) || true
-      fi
-    fi
-  done <<< "$HTTP_NO_TIMEOUT_MATCHES"
-fi
-
-if [ "$HTTP_NO_TIMEOUT_FINDING_COUNT" -gt 0 ]; then
-  if [ "$HTTP_TIMEOUT_SEVERITY" = "CRITICAL" ] || [ "$HTTP_TIMEOUT_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED - HTTP requests without timeout:${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING - HTTP requests without timeout:${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$HTTP_NO_TIMEOUT_ISSUES" ]; then
-    echo "$HTTP_NO_TIMEOUT_ISSUES" | head -5
-  fi
-  add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "failed" "$HTTP_NO_TIMEOUT_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: http-no-timeout.json (Phase 3.3 - v1.3.16)
+# Pattern: HTTP requests without timeout
+# Location: dist/patterns/http-no-timeout.json
+# ============================================================================
 
 # ============================================================================
 # MIGRATED TO JSON: disallowed-php-short-tags
