@@ -5505,73 +5505,12 @@ else
 fi
 text_echo ""
 
-# Disallowed PHP short tags - WordPress Coding Standards violation
-PHP_SHORT_TAGS_SEVERITY=$(get_severity "disallowed-php-short-tags" "MEDIUM")
-PHP_SHORT_TAGS_COLOR="${YELLOW}"
-if [ "$PHP_SHORT_TAGS_SEVERITY" = "CRITICAL" ] || [ "$PHP_SHORT_TAGS_SEVERITY" = "HIGH" ]; then PHP_SHORT_TAGS_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Disallowed PHP short tags ${PHP_SHORT_TAGS_COLOR}[$PHP_SHORT_TAGS_SEVERITY]${NC}"
-
-# Find short echo tags (<?=)
-SHORT_ECHO_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -F "<?=" \
-  $PATHS 2>/dev/null || true)
-
-# Find short open tags (<? followed by space/tab/newline, but not <?php or <?xml)
-# We'll use a simple approach: find all "<? " and filter out "<?php" and "<?xml"
-SHORT_OPEN_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "<\?[[:space:]]" \
-  $PATHS 2>/dev/null | grep -v "<?php" | grep -v "<?xml" || true)
-
-PHP_SHORT_TAGS_ISSUES=""
-PHP_SHORT_TAGS_FINDING_COUNT=0
-
-# Process short echo tags (<?=)
-if [ -n "$SHORT_ECHO_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-    if ! should_suppress_finding "disallowed-php-short-tags" "$file"; then
-      PHP_SHORT_TAGS_ISSUES="${PHP_SHORT_TAGS_ISSUES}${match}"$'\n'
-      add_json_finding "disallowed-php-short-tags" "warning" "$PHP_SHORT_TAGS_SEVERITY" "$file" "$line_num" "PHP short echo tag (<?=) used - WordPress requires full <?php tags" "$code"
-      ((PHP_SHORT_TAGS_FINDING_COUNT++)) || true
-    fi
-  done <<< "$SHORT_ECHO_MATCHES"
-fi
-
-# Process short open tags (<? )
-if [ -n "$SHORT_OPEN_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-    if ! should_suppress_finding "disallowed-php-short-tags" "$file"; then
-      PHP_SHORT_TAGS_ISSUES="${PHP_SHORT_TAGS_ISSUES}${match}"$'\n'
-      add_json_finding "disallowed-php-short-tags" "warning" "$PHP_SHORT_TAGS_SEVERITY" "$file" "$line_num" "PHP short open tag (<? ) used - WordPress requires full <?php tags" "$code"
-      ((PHP_SHORT_TAGS_FINDING_COUNT++)) || true
-    fi
-  done <<< "$SHORT_OPEN_MATCHES"
-fi
-
-if [ "$PHP_SHORT_TAGS_FINDING_COUNT" -gt 0 ]; then
-  if [ "$PHP_SHORT_TAGS_SEVERITY" = "CRITICAL" ] || [ "$PHP_SHORT_TAGS_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED - PHP short tags found:${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING - PHP short tags found:${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$PHP_SHORT_TAGS_ISSUES" ]; then
-    echo "$PHP_SHORT_TAGS_ISSUES" | head -5
-  fi
-  add_json_check "Disallowed PHP short tags" "$PHP_SHORT_TAGS_SEVERITY" "failed" "$PHP_SHORT_TAGS_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Disallowed PHP short tags" "$PHP_SHORT_TAGS_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: disallowed-php-short-tags
+# Pattern file: dist/patterns/disallowed-php-short-tags.json
+# Migrated: 2026-01-15 (Phase 3.1 - T2 Simple Patterns)
+# Executed by: Simple Pattern Runner (lines 5589-5720)
+# ============================================================================
 
 section_end
 profile_end "WARNING_CHECKS"

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **JSON Pattern Files (T2 Simple Patterns) - Phase 3.1 Started**
+  - `dist/patterns/disallowed-php-short-tags.json` - Detects PHP short tags (`<?=` and `<? `)
+
+### Changed
+- **Phase 3.1 Pattern Migration - In Progress (1 of 5 simple T2 rules)**
+  - Migrated `disallowed-php-short-tags` (rule #46)
+  - Removed inline code (lines 5508-5574)
+  - Pattern uses multi-pattern array format with two detection patterns
+
 ## [1.3.13] - 2026-01-15
 
 ### Added
