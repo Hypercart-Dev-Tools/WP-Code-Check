@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.14
+# Version: 1.3.15
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -4555,70 +4555,13 @@ fi
 
 text_echo ""
 
-# Heuristic: array_merge inside loops (can cause quadratic memory usage)
-ARRAY_MERGE_SEVERITY=$(get_severity "array-merge-in-loop" "LOW")
-ARRAY_MERGE_COLOR="${YELLOW}"
-if [ "$ARRAY_MERGE_SEVERITY" = "CRITICAL" ] || [ "$ARRAY_MERGE_SEVERITY" = "HIGH" ]; then ARRAY_MERGE_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ array_merge() inside loops (heuristic) ${ARRAY_MERGE_COLOR}[$ARRAY_MERGE_SEVERITY]${NC}"
-ARRAY_MERGE_FOUND=false
-ARRAY_MERGE_FINDING_COUNT=0
-ARRAY_MERGE_VISIBLE=""
-
-# Target the expensive form: $x = array_merge($x, ...)
-ARRAY_MERGE_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "\$[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*=[[:space:]]*array_merge\([[:space:]]*\$[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*," "$PATHS" 2>/dev/null || true)
-if [ -n "$ARRAY_MERGE_MATCHES" ]; then
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    file=$(echo "$match" | cut -d: -f1)
-    lineno=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-    if ! [[ "$lineno" =~ ^[0-9]+$ ]]; then
-      continue
-    fi
-
-    # Only flag when we see a loop keyword nearby.
-    start_line=$((lineno - 15))
-    [ "$start_line" -lt 1 ] && start_line=1
-    end_line=$((lineno + 2))
-    context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || true)
-
-    if ! echo "$context" | grep -q -E "\b(foreach|for|while)\b"; then
-      continue
-    fi
-
-    if should_suppress_finding "array-merge-in-loop" "$file"; then
-      continue
-    fi
-
-    ARRAY_MERGE_FOUND=true
-    ((ARRAY_MERGE_FINDING_COUNT++))
-    add_json_finding "array-merge-in-loop" "warning" "$ARRAY_MERGE_SEVERITY" "$file" "$lineno" "array_merge() inside loop can balloon memory; prefer [] append or preallocation" "$code"
-
-    match_output="$file:$lineno:$code"
-    if [ -z "$ARRAY_MERGE_VISIBLE" ]; then
-      ARRAY_MERGE_VISIBLE="$match_output"
-    else
-      ARRAY_MERGE_VISIBLE="${ARRAY_MERGE_VISIBLE}
-$match_output"
-    fi
-  done <<< "$ARRAY_MERGE_MATCHES"
-fi
-
-if [ "$ARRAY_MERGE_FOUND" = true ]; then
-  text_echo "${YELLOW}  ⚠ WARNING${NC}"
-  ((WARNINGS++))
-  if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$ARRAY_MERGE_VISIBLE" ]; then
-    echo -e "$ARRAY_MERGE_VISIBLE" | head -5 | while IFS= read -r line; do
-      [ -z "$line" ] && continue
-      text_echo "  $line"
-    done
-  fi
-  add_json_check "array_merge() inside loops (heuristic)" "$ARRAY_MERGE_SEVERITY" "failed" "$ARRAY_MERGE_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "array_merge() inside loops (heuristic)" "$ARRAY_MERGE_SEVERITY" "passed" 0
-fi
+# ============================================================================
+# MIGRATED TO JSON: array-merge-in-loop
+# Pattern file: dist/patterns/array-merge-in-loop.json
+# Migrated: 2026-01-15 (Phase 3.2 - T2 Scripted Validators)
+# Executed by: Scripted Pattern Runner (lines 5576-5795)
+# Validator: dist/validators/loop-context-check.sh
+# ============================================================================
 
 # Unvalidated cron intervals - can cause infinite loops or silent failures
 CRON_SEVERITY=$(get_severity "cron-interval-unvalidated" "HIGH")
@@ -5236,54 +5179,13 @@ else
 fi
 text_echo ""
 
-# Transient abuse check - transients without expiration
-TRANSIENT_SEVERITY=$(get_severity "transient-no-expiration" "MEDIUM")
-TRANSIENT_COLOR="${YELLOW}"
-if [ "$TRANSIENT_SEVERITY" = "CRITICAL" ] || [ "$TRANSIENT_SEVERITY" = "HIGH" ]; then TRANSIENT_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Transients without expiration ${TRANSIENT_COLOR}[$TRANSIENT_SEVERITY]${NC}"
-# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-TRANSIENT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" -E "set_transient[[:space:]]*\(" "$PATHS" 2>/dev/null || true)
-TRANSIENT_ABUSE=false
-TRANSIENT_ISSUES=""
-TRANSIENT_FINDING_COUNT=0
-
-if [ -n "$TRANSIENT_MATCHES" ]; then
-  while IFS= read -r match; do
-    # Check if line contains a third parameter (expiration)
-    # set_transient( $key, $value, $expiration ) - needs 3 params
-    # Count commas in the line - should have at least 2 for proper usage
-    comma_count=$(echo "$match" | tr -cd ',' | wc -c)
-	    if [ "$comma_count" -lt 2 ]; then
-	      file=$(echo "$match" | cut -d: -f1)
-	      line_num=$(echo "$match" | cut -d: -f2)
-	      code=$(echo "$match" | cut -d: -f3-)
-	      if ! should_suppress_finding "transient-no-expiration" "$file"; then
-	        TRANSIENT_ISSUES="${TRANSIENT_ISSUES}${match}"$'\n'
-	        add_json_finding "transient-no-expiration" "warning" "$TRANSIENT_SEVERITY" "$file" "$line_num" "Transient may be missing expiration parameter" "$code"
-	        TRANSIENT_ABUSE=true
-	        ((TRANSIENT_FINDING_COUNT++)) || true
-	      fi
-	    fi
-  done <<< "$TRANSIENT_MATCHES"
-fi
-
-if [ "$TRANSIENT_ABUSE" = true ]; then
-  if [ "$TRANSIENT_SEVERITY" = "CRITICAL" ] || [ "$TRANSIENT_SEVERITY" = "HIGH" ]; then
-    text_echo "${RED}  ✗ FAILED - Transients may be missing expiration parameter:${NC}"
-    ((ERRORS++))
-  else
-    text_echo "${YELLOW}  ⚠ WARNING - Transients may be missing expiration parameter:${NC}"
-    ((WARNINGS++))
-  fi
-  if [ "$OUTPUT_FORMAT" = "text" ]; then
-    echo "$TRANSIENT_ISSUES" | head -5
-  fi
-  add_json_check "Transients without expiration" "$TRANSIENT_SEVERITY" "failed" "$TRANSIENT_FINDING_COUNT"
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Transients without expiration" "$TRANSIENT_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: transient-no-expiration
+# Pattern file: dist/patterns/transient-no-expiration.json
+# Migrated: 2026-01-15 (Phase 3.2 - T2 Scripted Validators)
+# Executed by: Scripted Pattern Runner (lines 5576-5795)
+# Validator: dist/validators/transient-expiration-check.sh
+# ============================================================================
 
 # ============================================================================
 # MIGRATED TO JSON: asset-version-time

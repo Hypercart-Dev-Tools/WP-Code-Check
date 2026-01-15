@@ -1,27 +1,27 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T03:05:20Z",
+  "generated": "2026-01-15T03:18:48Z",
   "summary": {
-    "total_patterns": 43,
-    "enabled": 39,
+    "total_patterns": 44,
+    "enabled": 40,
     "disabled": 4,
     "by_severity": {
       "CRITICAL": 17,
       "HIGH": 13,
-      "MEDIUM": 9,
+      "MEDIUM": 10,
       "LOW": 4
     },
     "by_category": {
-      "performance": 13,"Performance": 3,"KISS": 1,"duplication": 5,"reliability": 5,"security": 14
+      "Performance": 5,"duplication": 5,"security": 15,"reliability": 5,"performance": 8
     },
     "by_pattern_type": {
-      "php": 32,
+      "php": 33,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 7,
-    "heuristic_patterns": 13,
+    "heuristic_patterns": 14,
     "definitive_patterns": 30
   },
   "patterns": [
@@ -29,11 +29,11 @@
   "id": "array-merge-in-loop",
   "version": "1.0.0",
   "enabled": true,
-  "category": "performance",
+  "category": "Performance",
   "severity": "LOW",
-  "title": "array_merge() inside loops (potential OOM)",
-  "description": "Detects patterns like $arr = array_merge($arr, $new) inside loops, which can cause quadratic memory/time growth.",
-  "detection_type": "grep",
+  "title": "array_merge() inside loops (heuristic)",
+  "description": "Detects array_merge() calls inside loops that can cause quadratic memory usage and performance degradation. The pattern $x = array_merge($x, ...) inside a loop creates a new array on each iteration.",
+  "detection_type": "",
   "pattern_type": "php",
   "mitigation_detection": false,
   "heuristic": true,
@@ -458,6 +458,20 @@
   "mitigation_detection": false,
   "heuristic": true,
   "file": "timezone-sensitive-code.json"
+},
+{
+  "id": "transient-no-expiration",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "Performance",
+  "severity": "MEDIUM",
+  "title": "Transients without expiration",
+  "description": "Detects set_transient() calls that may be missing the expiration parameter. Transients without expiration can accumulate in the database and cause performance issues.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": true,
+  "file": "transient-no-expiration.json"
 },
 {
   "id": "unbounded-numberposts",

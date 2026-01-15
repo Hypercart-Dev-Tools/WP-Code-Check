@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.15] - 2026-01-15
+
+### Added
+- **JSON Pattern Files (T2 Scripted Patterns) - Phase 3.2 Complete ✅**
+  - `dist/patterns/timezone-sensitive-code.json` - Detects timezone-sensitive functions with validator
+  - `dist/patterns/transient-no-expiration.json` - Detects set_transient() without expiration parameter
+  - `dist/patterns/array-merge-in-loop.json` - Detects array_merge() inside loops (updated from old format)
+  - `dist/validators/phpcs-ignore-check.sh` - Reusable validator for phpcs:ignore suppression comments
+  - `dist/validators/transient-expiration-check.sh` - Validates transient expiration parameters via comma counting
+  - `dist/validators/loop-context-check.sh` - Detects loop context by searching for loop keywords
+
+### Changed
+- **Phase 3.2 Pattern Migration - All T2 Scripted Validators Complete (3 of 3)**
+  - Migrated `timezone-sensitive-code` (formerly lines 4762-4844)
+  - Migrated `transient-no-expiration` (formerly lines 5239-5286)
+  - Migrated `array-merge-in-loop` (formerly lines 4558-4621)
+  - Created 3 reusable validators:
+    1. **phpcs-ignore-check.sh** - Checks for phpcs:ignore suppression comments, filters comment lines, excludes gmdate()
+    2. **transient-expiration-check.sh** - Counts commas to validate set_transient() has 3 parameters
+    3. **loop-context-check.sh** - Searches for loop keywords (foreach, for, while) within context window
+  - Pattern count: 44 total (timezone-sensitive-code and transient-no-expiration added, array-merge-in-loop updated)
+  - Fixed scripted pattern detection in check-performance.sh (grep -A2 instead of -A1)
+  - Updated pattern-loader.sh to support both old (`detection_type`) and new (`detection.type`) formats
+  - Added test cases to antipatterns.php for array_merge validation
+
+### Notes
+- **Phase 3.2 Complete!** All T2 patterns requiring scripted validators have been migrated
+- **Next Phase:** T1 patterns (high-complexity patterns requiring advanced analysis)
+- All 3 validators are reusable for future patterns with similar validation needs
+
 ## [1.3.14] - 2026-01-15
 
 ### Added
