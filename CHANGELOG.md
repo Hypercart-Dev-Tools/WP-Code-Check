@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.17] - 2026-01-15
 
 ### Added
+- **AGENTS.md v2.2.0 - Standardized Data Analysis Pattern**
+  - New section: "🛠️ Standardized Data Analysis Pattern" (~260 lines)
+  - 4-step workflow: Capture → Validate → Display → Analyze → Iterate
+  - 4 comprehensive examples (WordPress DB, API testing, log debugging, webhook validation)
+  - Best practices, file management, troubleshooting guides
+  - When to use / when not to use decision framework
+  - `.gitignore` entries for data-stream files (data-stream.json, data-stream-*.json, etc.)
+  - Prevents AI hallucination by forcing raw data display before analysis
+  - Standardizes debugging workflow for APIs, databases, logs, scrapers
+
 - **Mitigation Detection Infrastructure (Phase 3.4) ✅**
   - `validators/mitigation-check.sh` - Generic mitigation detector for performance patterns
     - Detects caching (get_transient, wp_cache_get, update_meta_cache)

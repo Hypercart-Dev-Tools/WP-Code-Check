@@ -43,6 +43,13 @@ dist/tests/irl/*
 dist/PATTERN-LIBRARY.json
 dist/PATTERN-LIBRARY.md
 
+# Data analysis temporary files (from STANDARDIZED DATA ANALYSIS PATTERN)
+# See AGENTS.md for usage guidelines
+data-stream.json
+data-stream-*.json
+data-stream.txt
+data-stream.csv
+
 # ============================================
 # DEVELOPMENT & TESTING
 # ============================================
