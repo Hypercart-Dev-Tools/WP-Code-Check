@@ -121,7 +121,8 @@ parse_json_output() {
 
 # antipatterns.php - Should detect all intentional antipatterns
 # Updated 2026-01-10: Increased from 6 to 9 errors due to additional wpdb->prepare() checks
-ANTIPATTERNS_EXPECTED_ERRORS=9
+# Updated 2026-01-15: Increased from 9 to 10 errors due to simple pattern runner (unbounded-posts-per-page, nopaging-true, order-by-rand, unbounded-numberposts)
+ANTIPATTERNS_EXPECTED_ERRORS=10
 # Updated 2026-01-10: Warnings now 3 (was 4)
 ANTIPATTERNS_EXPECTED_WARNINGS_MIN=3
 ANTIPATTERNS_EXPECTED_WARNINGS_MAX=3

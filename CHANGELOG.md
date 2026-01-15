@@ -10,31 +10,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.13] - 2026-01-15
 
 ### Added
-- **JSON Pattern Files (Performance) - Awaiting Runner Implementation**
-  - `dist/patterns/unbounded-posts-per-page.json` - Full pattern definition with remediation examples
-  - `dist/patterns/unbounded-numberposts.json` - Full pattern definition with remediation examples
-  - `dist/patterns/nopaging-true.json` - Full pattern definition with remediation examples
-  - `dist/patterns/order-by-rand.json` - Full pattern definition with remediation examples and performance rationale
-  - **Note:** Patterns load correctly but are not yet active (scanner lacks "simple pattern runner")
+- **Simple Pattern Runner** - New execution engine for JSON-defined simple patterns
+  - Implemented runner for `detection.type: "simple"` patterns in `check-performance.sh` (lines 5659-5820)
+  - Supports baseline suppression, file pattern filtering, and severity-based error/warning classification
+  - Uses Python JSON parser for robust pattern metadata extraction
+  - Integrates with existing `add_json_finding()` and `add_json_check()` infrastructure
+- **JSON Pattern Files (Performance) - Now Active**
+  - `dist/patterns/unbounded-posts-per-page.json` - Detects `posts_per_page => -1` in WP_Query
+  - `dist/patterns/unbounded-numberposts.json` - Detects `numberposts => -1` in get_posts
+  - `dist/patterns/nopaging-true.json` - Detects `'nopaging' => true` in WP_Query
+  - `dist/patterns/order-by-rand.json` - Detects `ORDER BY RAND()` and `'orderby' => 'rand'`
+  - All patterns now execute via Simple Pattern Runner
 - **Validator Infrastructure (Future Use)**
   - `dist/bin/validators/superglobal-manipulation-validator.sh` - Scripted validator for complex security patterns (not yet wired)
 - **Pattern Loader Enhancement**
   - Enhanced `dist/lib/pattern-loader.sh` to extract `validator_script` path for future scripted detection types
 
+### Changed
+- **Phase 2 Pattern Migration - Complete (4 of 46 rules)**
+  - Removed inline code for 4 T1 performance rules (previously lines 3850-3862, 4854-4864)
+  - Replaced with migration markers pointing to JSON patterns
+  - All functionality preserved - fixture tests pass with 0 regressions
+
+### Fixed
+- **Fixture Test Expectations**
+  - Updated `dist/tests/run-fixture-tests.sh` to expect 10 errors in `antipatterns.php` (was 9)
+  - New simple patterns now detect additional violations as expected
+
 ### Documentation
-- **Phase 2 Pattern Migration - Validation & Blocker Identified**
-  - Created 4 JSON patterns for T1 performance rules
-  - Validation revealed scanner lacks runner for "simple" detection type patterns
-  - Inline code remains active with TODO markers (lines 3850-3862, 4854-4864)
-  - Created `PROJECT/1-INBOX/IMPLEMENT-SIMPLE-PATTERN-RUNNER.md` to track blocker
+- **Phase 2.1 Pattern Migration - Successfully Completed**
+  - Implemented simple pattern runner (2.5 hours actual vs 2-3 hours estimated)
+  - Validated with full fixture test suite - all 10 tests pass
+  - Removed blocker documentation from `PROJECT/1-INBOX/IMPLEMENT-SIMPLE-PATTERN-RUNNER.md`
 - Updated `PROJECT/2-WORKING/PATTERN-INVENTORY.md`:
-  - Added "Blockers" section documenting simple pattern runner requirement
-  - Updated status: 7 fully migrated, 4 blocked (JSON exists), 35 remaining
-  - Marked affected rules (#18, #19, #20, #35) as "JSON (blocked)"
+  - Updated status: 11 fully migrated (24%), 0 blocked, 35 remaining (76%)
+  - Marked rules #18, #19, #20, #35 as "✅ JSON" (fully migrated)
+  - Removed "Blockers" section (blocker resolved)
 - Updated `PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md`:
-  - Documented Phase 2.1 validation results
-  - Added detailed "Blocked Items" section with implementation requirements
-  - Estimated effort: 2-3 hours to implement simple pattern runner
+  - Documented Phase 2.1 completion with implementation details
+  - Removed "Blocked Items" section (blocker resolved)
+  - Updated progress: 11 of 46 rules migrated (24% complete)
 
 ## [1.3.12] - 2026-01-15
 

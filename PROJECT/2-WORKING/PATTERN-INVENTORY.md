@@ -25,30 +25,6 @@ This document catalogs **all inline pattern rules** currently hardcoded in `chec
 
 ---
 
-## 🚧 BLOCKERS - MUST RESOLVE BEFORE PHASE 2 COMPLETE
-
-### Simple Pattern Runner Not Implemented
-
-**Status:** BLOCKED
-**Impact:** 4 JSON patterns created but not active
-**Affected Rules:** #18, #19, #20, #35 (unbounded-posts-per-page, unbounded-numberposts, nopaging-true, order-by-rand)
-
-**Problem:**
-- JSON pattern files exist and load correctly
-- Scanner has no runner for `detection.type: "simple"` patterns
-- Inline code remains active as workaround
-
-**Solution Required:**
-- Implement simple pattern runner in `check-performance.sh` (see lines 5757-5850 for reference)
-- Estimated effort: 2-3 hours
-- See: `PROJECT/1-INBOX/IMPLEMENT-SIMPLE-PATTERN-RUNNER.md`
-
-**Tracking:**
-- Inline code markers: Search for "TODO: Implement simple pattern runner" in `check-performance.sh`
-- Lines 3850-3862, 4854-4864
-
----
-
 ## Inventory Table
 
 | # | Rule ID | Title | Lines | Tier | Priority | Category | Status | Notes |
@@ -70,9 +46,9 @@ This document catalogs **all inline pattern rules** currently hardcoded in `chec
 | 15 | `hcc-005-expensive-polling` | Expensive WP functions in polling | 3497-3558 | T2 | P2 | Performance | ⏳ Inline | Context-aware polling check |
 | 16 | `rest-no-pagination` | REST endpoints without pagination | 3562-3620 | T2 | P2 | Performance | ⏳ Inline | register_rest_route analysis |
 | 17 | `ajax-nonce-missing` | wp_ajax handlers without nonce | 3624-3846 | T3 | P1 | Security | ⏳ Inline | Complex callback + nonce detection |
-| 18 | `unbounded-posts-per-page` | Unbounded posts_per_page | 3850-3862 | T1 | P2 | Performance | ⏳ JSON (blocked) | JSON exists, needs runner |
-| 19 | `unbounded-numberposts` | Unbounded numberposts | 3850-3862 | T1 | P2 | Performance | ⏳ JSON (blocked) | JSON exists, needs runner |
-| 20 | `nopaging-true` | nopaging => true | 3850-3862 | T1 | P2 | Performance | ⏳ JSON (blocked) | JSON exists, needs runner |
+| 18 | `unbounded-posts-per-page` | Unbounded posts_per_page | patterns/ | T1 | P2 | Performance | ✅ JSON | Migrated to JSON |
+| 19 | `unbounded-numberposts` | Unbounded numberposts | patterns/ | T1 | P2 | Performance | ✅ JSON | Migrated to JSON |
+| 20 | `nopaging-true` | nopaging => true | patterns/ | T1 | P2 | Performance | ✅ JSON | Migrated to JSON |
 | 21 | `wc-unbounded-limit` | Unbounded WC limit=-1 | 3863-3935 | T2 | P2 | Performance | ⏳ Inline | Mitigation detection |
 | 22 | `wcs-no-limit` | WC Subscriptions without limits | 3939-4000 | T2 | P2 | Performance | ⏳ Inline | wcs_get_subscriptions check |
 | 23 | `get-users-no-limit` | get_users without number | 4004-4085 | T2 | P2 | Performance | ⏳ Inline | Context window check |
@@ -87,7 +63,7 @@ This document catalogs **all inline pattern rules** currently hardcoded in `chec
 | 32 | `array-merge-in-loop` | array_merge() inside loops | 4567-4628 | T2 | P3 | Performance | ⏳ Inline | Heuristic pattern |
 | 33 | `cron-interval-unvalidated` | Unvalidated cron intervals | 4632-4768 | T3 | P2 | KISS | ⏳ Inline | Complex interval validation |
 | 34 | `timezone-sensitive-patterns` | Timezone patterns (current_time) | 4772-4847 | T2 | P3 | KISS | ⏳ Inline | current_time/date detection |
-| 35 | `order-by-rand` | Randomized ordering (RAND) | 4854-4864 | T1 | P2 | Performance | ⏳ JSON (blocked) | JSON exists, needs runner |
+| 35 | `order-by-rand` | Randomized ordering (RAND) | patterns/ | T1 | P2 | Performance | ✅ JSON | Migrated to JSON |
 | 36 | `like-leading-wildcard` | LIKE with leading wildcards | 4859-4959 | T2 | P2 | Performance | ⏳ Inline | Meta_query LIKE detection |
 | 37 | `n1-meta-in-loop` | N+1 patterns (meta in loops) | 4963-5016 | T2 | P2 | Performance | ⏳ Inline | Loop + meta detection |
 | 38 | `wc-n1-in-loop` | WC N+1 patterns (WC in loops) | 5020-5113 | T3 | P2 | Performance | ⏳ Inline | Complex WC context detection |
@@ -118,8 +94,7 @@ This document catalogs **all inline pattern rules** currently hardcoded in `chec
 - **P3 (Low - Heuristics):** 7 rules (15%)
 
 ### By Status
-- **✅ Fully Migrated to JSON:** 7 rules (15%) - Active and working
-- **⏳ JSON Created (Blocked):** 4 rules (9%) - Waiting for simple pattern runner
+- **✅ Fully Migrated to JSON:** 11 rules (24%) - Active and working
 - **⏳ Needs Migration:** 35 rules (76%) - Still inline code
 
 ### Migration Effort Estimate
