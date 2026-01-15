@@ -1,27 +1,27 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T02:44:05Z",
+  "generated": "2026-01-15T03:05:20Z",
   "summary": {
-    "total_patterns": 42,
-    "enabled": 38,
+    "total_patterns": 43,
+    "enabled": 39,
     "disabled": 4,
     "by_severity": {
       "CRITICAL": 17,
       "HIGH": 13,
       "MEDIUM": 9,
-      "LOW": 3
+      "LOW": 4
     },
     "by_category": {
-      "performance": 13,"Performance": 2,"KISS": 1,"duplication": 5,"reliability": 5,"security": 14
+      "performance": 13,"Performance": 3,"KISS": 1,"duplication": 5,"reliability": 5,"security": 14
     },
     "by_pattern_type": {
-      "php": 31,
+      "php": 32,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 7,
-    "heuristic_patterns": 12,
+    "heuristic_patterns": 13,
     "definitive_patterns": 30
   },
   "patterns": [
@@ -444,6 +444,20 @@
   "mitigation_detection": false,
   "heuristic": false,
   "file": "superglobal-with-nonce-context.json"
+},
+{
+  "id": "timezone-sensitive-code",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "Performance",
+  "severity": "LOW",
+  "title": "Timezone-sensitive patterns (current_time/date)",
+  "description": "Detects timezone-sensitive functions that may cause inconsistent behavior across different server configurations. Uses current_time('timestamp') or date() without proper timezone handling.",
+  "detection_type": "",
+  "pattern_type": "php",
+  "mitigation_detection": false,
+  "heuristic": true,
+  "file": "timezone-sensitive-code.json"
 },
 {
   "id": "unbounded-numberposts",

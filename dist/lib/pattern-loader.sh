@@ -22,7 +22,13 @@ load_pattern() {
 
   pattern_id=$(grep '"id"' "$pattern_file" | head -1 | sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
   pattern_enabled=$(grep '"enabled"' "$pattern_file" | head -1 | sed 's/.*"enabled"[[:space:]]*:[[:space:]]*\([^,]*\).*/\1/' | tr -d ' ')
-  pattern_detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+
+  # Try new format first (detection.type), then fall back to old format (detection_type at root)
+  pattern_detection_type=$(grep -A2 '"detection"' "$pattern_file" | grep '"type"' | head -1 | sed 's/.*"type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ -z "$pattern_detection_type" ]; then
+    pattern_detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  fi
+
   pattern_category=$(grep '"category"' "$pattern_file" | head -1 | sed 's/.*"category"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
   pattern_severity=$(grep '"severity"' "$pattern_file" | head -1 | sed 's/.*"severity"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
   pattern_title=$(grep '"title"' "$pattern_file" | head -1 | sed 's/.*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')

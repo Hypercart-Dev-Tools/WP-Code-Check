@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.13
+# Version: 1.3.14
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -4759,89 +4759,13 @@ section_start "Warning Checks"
 text_echo "${YELLOW}━━━ WARNING CHECKS (review recommended) ━━━${NC}"
 text_echo ""
 
-# Enhanced timezone check - skip lines with phpcs:ignore comments
-# Note: Only flags date() (timezone-dependent), not gmdate() (timezone-safe, always UTC)
-TZ_SEVERITY=$(get_severity "timezone-sensitive-code" "LOW")
-TZ_COLOR="${YELLOW}"
-if [ "$TZ_SEVERITY" = "CRITICAL" ] || [ "$TZ_SEVERITY" = "HIGH" ]; then TZ_COLOR="${RED}"; fi
-text_echo "${BLUE}▸ Timezone-sensitive patterns (current_time/date) ${TZ_COLOR}[$TZ_SEVERITY]${NC}"
-TZ_WARNINGS=0
-TZ_FINDING_COUNT=0
-TZ_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "current_time[[:space:]]*\([[:space:]]*['\"]timestamp" \
-  $PATHS 2>/dev/null || true)
-# Add date() matches but exclude gmdate() (which is timezone-safe, always UTC)
-TZ_MATCHES="${TZ_MATCHES}"$'\n'$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
-  -E "[^a-zA-Z_]date[[:space:]]*\(" \
-  $PATHS 2>/dev/null | grep -v "gmdate" || true)
-
-if [ -n "$TZ_MATCHES" ]; then
-  # Filter out lines that have phpcs:ignore nearby (check line before)
-  FILTERED_MATCHES=""
-  while IFS= read -r match; do
-    file_line=$(echo "$match" | cut -d: -f1-2)
-    file=$(echo "$match" | cut -d: -f1)
-    line_num=$(echo "$match" | cut -d: -f2)
-    code=$(echo "$match" | cut -d: -f3-)
-
-	    # Defensive: ensure line number is numeric before doing arithmetic.
-	    # On some platforms/tools, unexpected grep output can sneak in here
-	    # (e.g. warnings or lines without the usual file:line:code format),
-	    # which would make "$line_num" non-numeric and break $((...)).
-	    if ! [[ "$line_num" =~ ^[0-9][0-9]*$ ]]; then
-	      if [ "${NEOCHROME_DEBUG:-}" = "1" ] && [ "$OUTPUT_FORMAT" = "text" ]; then
-	        text_echo "  [DEBUG] Skipping non-numeric timezone match: $match"
-	      fi
-	      continue
-	    fi
-
-    # Check if there's a phpcs:ignore comment on the line before or same line
-    prev_line=$((line_num - 1))
-    has_ignore=false
-
-    # Check if current line or previous line has phpcs:ignore
-    if sed -n "${prev_line}p;${line_num}p" "$file" 2>/dev/null | grep -q "phpcs:ignore"; then
-      has_ignore=true
-    fi
-
-	    if [ "$has_ignore" = false ]; then
-	      if ! should_suppress_finding "timezone-sensitive-pattern" "$file"; then
-	        FILTERED_MATCHES="${FILTERED_MATCHES}${match}"$'\n'
-	        add_json_finding "timezone-sensitive-code" "warning" "$TZ_SEVERITY" "$file" "$line_num" "Timezone-sensitive pattern without phpcs:ignore" "$code"
-	        ((TZ_WARNINGS++)) || true
-	        ((TZ_FINDING_COUNT++)) || true
-	      fi
-	    fi
-  done <<< "$TZ_MATCHES"
-
-  if [ "$TZ_WARNINGS" -gt 0 ]; then
-    if [ "$TZ_SEVERITY" = "CRITICAL" ] || [ "$TZ_SEVERITY" = "HIGH" ]; then
-      text_echo "${RED}  ✗ FAILED ($TZ_WARNINGS occurrence(s) without phpcs:ignore)${NC}"
-      ((ERRORS++))
-    else
-      text_echo "${YELLOW}  ⚠ WARNING ($TZ_WARNINGS occurrence(s) without phpcs:ignore)${NC}"
-      ((WARNINGS++))
-    fi
-    if [ "$OUTPUT_FORMAT" = "text" ]; then
-      if [ "$VERBOSE" = "true" ]; then
-        echo "$FILTERED_MATCHES"
-      else
-        echo "$FILTERED_MATCHES" | head -5
-        if [ "$TZ_WARNINGS" -gt 5 ]; then
-          echo "  ... and $((TZ_WARNINGS - 5)) more (use --verbose to see all)"
-        fi
-      fi
-    fi
-    add_json_check "Timezone-sensitive patterns (current_time/date)" "$TZ_SEVERITY" "failed" "$TZ_FINDING_COUNT"
-  else
-    text_echo "${GREEN}  ✓ Passed (all occurrences have phpcs:ignore)${NC}"
-    add_json_check "Timezone-sensitive patterns (current_time/date)" "$TZ_SEVERITY" "passed" 0
-  fi
-else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Timezone-sensitive patterns (current_time/date)" "$TZ_SEVERITY" "passed" 0
-fi
-text_echo ""
+# ============================================================================
+# MIGRATED TO JSON: timezone-sensitive-code
+# Pattern file: dist/patterns/timezone-sensitive-code.json
+# Migrated: 2026-01-15 (Phase 3.2 - T2 Scripted Validators)
+# Executed by: Scripted Pattern Runner (lines 5639-5795)
+# Validator: dist/validators/phpcs-ignore-check.sh
+# ============================================================================
 
 # MIGRATED TO JSON: order-by-rand.json
 # This check is now handled by the Simple Pattern Runner (see line ~5659)
@@ -5634,6 +5558,165 @@ $match"
       text_echo ""
     fi
   done <<< "$SIMPLE_PATTERNS"
+fi
+
+# ============================================================================
+# Process patterns with detection_type: "scripted" from JSON files
+# These patterns use custom validator scripts for post-processing
+# ============================================================================
+
+# Find all scripted patterns
+SCRIPTED_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f 2>/dev/null | while read -r pattern_file; do
+  detection_type=$(grep -A2 '"detection"' "$pattern_file" | grep '"type"' | head -1 | sed 's/.*"type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ "$detection_type" = "scripted" ]; then
+    echo "$pattern_file"
+  fi
+done)
+
+if [ -n "$SCRIPTED_PATTERNS" ]; then
+  # Process each scripted pattern
+  while IFS= read -r pattern_file; do
+    [ -z "$pattern_file" ] && continue
+
+    # Load pattern metadata
+    if load_pattern "$pattern_file"; then
+      # Skip if disabled
+      if [ "$pattern_enabled" = "false" ]; then
+        continue
+      fi
+
+      # Get severity with fallback
+      check_severity=$(get_severity "$pattern_id" "$pattern_severity")
+      check_color="${YELLOW}"
+      if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then check_color="${RED}"; fi
+
+      text_echo "${BLUE}▸ $pattern_title ${check_color}[$check_severity]${NC}"
+
+      # Validate validator script exists
+      validator_path="$REPO_ROOT/$pattern_validator_script"
+      if [ ! -f "$validator_path" ]; then
+        text_echo "${RED}  ✗ ERROR: Validator script not found: $pattern_validator_script${NC}"
+        text_echo ""
+        continue
+      fi
+
+      if [ ! -x "$validator_path" ]; then
+        text_echo "${RED}  ✗ ERROR: Validator script not executable: $pattern_validator_script${NC}"
+        text_echo ""
+        continue
+      fi
+
+      # Build --include flags from pattern_file_patterns
+      include_args=""
+      for ext in $pattern_file_patterns; do
+        include_args="$include_args --include=$ext"
+      done
+
+      # Run grep to find candidate matches
+      matches=""
+      match_count=0
+      matches=$(grep -rHn $EXCLUDE_ARGS $include_args -E "$pattern_search" "$PATHS" 2>/dev/null || true)
+
+      if [ -n "$matches" ]; then
+        match_count=$(echo "$matches" | grep -c . 2>/dev/null)
+        match_count=${match_count:-0}
+      fi
+
+      # Process matches through validator
+      if [ "$match_count" -gt 0 ]; then
+        # Apply baseline suppression and validator
+        suppressed_count=0
+        validator_suppressed=0
+        visible_matches=""
+
+        while IFS= read -r match; do
+          [ -z "$match" ] && continue
+
+          file=$(echo "$match" | cut -d: -f1)
+          line=$(echo "$match" | cut -d: -f2)
+          code=$(echo "$match" | cut -d: -f3-)
+
+          # Check baseline suppression first
+          if should_suppress_finding "$pattern_id" "$file"; then
+            ((suppressed_count++)) || true
+            continue
+          fi
+
+          # Run validator script
+          validator_exit=0
+          "$validator_path" "$file" "$line" "$code" 10 >/dev/null 2>&1 || validator_exit=$?
+
+          if [ "$validator_exit" -eq 1 ]; then
+            # Validator says false positive - suppress
+            ((validator_suppressed++)) || true
+            continue
+          elif [ "$validator_exit" -eq 2 ]; then
+            # Validator says needs review - flag as warning
+            code="[NEEDS REVIEW] $code"
+          fi
+          # Exit 0 or any other code = confirmed issue
+
+          # Add to visible matches
+          if [ -z "$visible_matches" ]; then
+            visible_matches="$match"
+          else
+            visible_matches="${visible_matches}
+$match"
+          fi
+
+          # Add to JSON findings
+          add_json_finding "$pattern_id" "error" "$check_severity" "$file" "$line" "$pattern_title" "$code"
+        done <<< "$matches"
+
+        visible_count=$((match_count - suppressed_count - validator_suppressed))
+
+        if [ "$visible_count" -gt 0 ]; then
+          text_echo "${check_color}  ✗ Found $visible_count violation(s)${NC}"
+          if [ "$suppressed_count" -gt 0 ]; then
+            text_echo "  ${BLUE}  ($suppressed_count suppressed by baseline)${NC}"
+          fi
+          if [ "$validator_suppressed" -gt 0 ]; then
+            text_echo "  ${BLUE}  ($validator_suppressed suppressed by validator)${NC}"
+          fi
+
+          # Increment error/warning counters
+          if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then
+            ((ERRORS++))
+          else
+            ((WARNINGS++))
+          fi
+
+          # Show matches in text output
+          if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$visible_matches" ]; then
+            echo "$visible_matches" | head -5 | while IFS= read -r match; do
+              [ -z "$match" ] && continue
+              file=$(echo "$match" | cut -d: -f1)
+              line=$(echo "$match" | cut -d: -f2)
+              code=$(echo "$match" | cut -d: -f3-)
+              text_echo "  ${check_color}→ $file:$line${NC}"
+              if [ "$CONTEXT_LINES" -gt 0 ]; then
+                text_echo "    ${code:0:100}"
+              fi
+            done
+
+            if [ "$visible_count" -gt 5 ]; then
+              text_echo "  ${check_color}  ... and $((visible_count - 5)) more${NC}"
+            fi
+          fi
+
+          # Add to JSON checks summary
+          add_json_check "$pattern_title" "$check_severity" "failed" "$visible_count"
+        else
+          text_echo "${GREEN}  ✓ Passed (all findings suppressed)${NC}"
+          add_json_check "$pattern_title" "$check_severity" "passed" 0
+        fi
+      else
+        text_echo "${GREEN}  ✓ Passed${NC}"
+        add_json_check "$pattern_title" "$check_severity" "passed" 0
+      fi
+      text_echo ""
+    fi
+  done <<< "$SCRIPTED_PATTERNS"
 fi
 
 # ============================================================================

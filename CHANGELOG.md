@@ -5,26 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.14] - 2026-01-15
 
 ### Added
-- **JSON Pattern Files (T2 Simple Patterns) - Phase 3.1 Complete**
-  - `dist/patterns/disallowed-php-short-tags.json` - Detects PHP short tags (`<?=` and `<? `)
-  - `dist/patterns/asset-version-time.json` - Detects `wp_enqueue_*` with `time()` versioning
+- **JSON Pattern Files (T2 Scripted Patterns) - Phase 3.2 In Progress**
+  - `dist/patterns/timezone-sensitive-code.json` - Detects timezone-sensitive functions with validator
+  - `dist/validators/phpcs-ignore-check.sh` - Reusable validator for phpcs:ignore suppression comments
 
 ### Changed
-- **Phase 3.1 Pattern Migration - Complete (2 of 2 simple T2 rules)**
-  - Migrated `disallowed-php-short-tags` (rule #46, lines 5508-5574)
-  - Migrated `asset-version-time` (rule #43, lines 5364-5403)
-  - Both patterns use simple grep-based detection
-  - Pattern count increased from 40 to 42
+- **Phase 3.2 Pattern Migration - First Scripted Validator (1 of 3 T2 scripted rules)**
+  - Migrated `timezone-sensitive-code` (formerly lines 4762-4844)
+  - Created first scripted validator: `phpcs-ignore-check.sh`
+  - Validator features:
+    - Checks for phpcs:ignore suppression comments (line before or same line)
+    - Filters out PHP comment lines (// /* */)
+    - Excludes gmdate() calls (timezone-safe, always UTC)
+    - Properly handles inline comments mentioning gmdate()
+  - Pattern count increased from 42 to 43
+  - Fixed scripted pattern detection in check-performance.sh (grep -A2 instead of -A1)
+  - Updated pattern-loader.sh to support both old (`detection_type`) and new (`detection.type`) formats
 
 ### Notes
-- **Remaining T2 patterns require scripted validators:**
-  - `timezone-sensitive-patterns` - needs phpcs:ignore comment checking
+- **Remaining T2 scripted patterns:**
   - `transient-no-expiration` - needs comma counting for parameter validation
   - `array-merge-in-loop` - needs context analysis for loop detection
-  - These will be migrated in Phase 3.2 (Scripted Validators)
+  - These will be migrated next in Phase 3.2
 
 ## [1.3.13] - 2026-01-15
 
