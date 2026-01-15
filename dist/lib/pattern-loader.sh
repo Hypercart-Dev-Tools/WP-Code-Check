@@ -153,6 +153,65 @@ EOFPYTHON
     pattern_validator_args=""
   fi
 
+  # Extract mitigation_detection configuration
+  if command -v python3 &> /dev/null; then
+    pattern_mitigation_enabled=$(python3 <<EOFPYTHON 2>/dev/null
+import json
+try:
+    with open('$pattern_file', 'r') as f:
+        data = json.load(f)
+        mitigation = data.get('mitigation_detection', {})
+        enabled = mitigation.get('enabled', False)
+        print('true' if enabled else 'false')
+except Exception:
+    print('false')
+EOFPYTHON
+)
+    pattern_mitigation_script=$(python3 <<EOFPYTHON 2>/dev/null
+import json
+try:
+    with open('$pattern_file', 'r') as f:
+        data = json.load(f)
+        mitigation = data.get('mitigation_detection', {})
+        script = mitigation.get('validator_script', '')
+        print(script)
+except Exception:
+    print('')
+EOFPYTHON
+)
+    pattern_mitigation_args=$(python3 <<EOFPYTHON 2>/dev/null
+import json
+try:
+    with open('$pattern_file', 'r') as f:
+        data = json.load(f)
+        mitigation = data.get('mitigation_detection', {})
+        args = mitigation.get('validator_args', [])
+        print(' '.join(str(arg) for arg in args))
+except Exception:
+    print('')
+EOFPYTHON
+)
+    pattern_severity_downgrade=$(python3 <<EOFPYTHON 2>/dev/null
+import json
+try:
+    with open('$pattern_file', 'r') as f:
+        data = json.load(f)
+        mitigation = data.get('mitigation_detection', {})
+        downgrade = mitigation.get('severity_downgrade', {})
+        # Output as KEY=VALUE pairs separated by semicolons
+        pairs = [f"{k}={v}" for k, v in downgrade.items()]
+        print(';'.join(pairs))
+except Exception:
+    print('')
+EOFPYTHON
+)
+  else
+    pattern_mitigation_enabled="false"
+    pattern_mitigation_script=""
+    pattern_mitigation_args=""
+    pattern_severity_downgrade=""
+  fi
+
   # Export for use in calling script
   export pattern_id pattern_enabled pattern_detection_type pattern_category pattern_severity pattern_title pattern_search pattern_file_patterns pattern_validator_script pattern_validator_args
 

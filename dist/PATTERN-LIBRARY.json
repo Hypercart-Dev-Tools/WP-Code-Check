@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T04:14:15Z",
+  "generated": "2026-01-15T04:33:51Z",
   "summary": {
     "total_patterns": 51,
     "enabled": 47,
@@ -699,13 +699,13 @@
 },
 {
   "id": "wp-query-unbounded",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "enabled": true,
   "category": "performance",
   "severity": "CRITICAL",
   "title": "Unbounded WP_Query/get_posts",
-  "description": "Detects WP_Query or get_posts with posts_per_page => -1 or nopaging => true.",
-  "detection_type": "grep",
+  "description": "Detects WP_Query or get_posts with posts_per_page => -1 or nopaging => true, which can fetch ALL posts and cause memory exhaustion.",
+  "detection_type": "",
   "pattern_type": "php",
   "mitigation_detection": true,
   "heuristic": false,

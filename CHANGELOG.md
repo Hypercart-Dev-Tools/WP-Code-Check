@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.17] - 2026-01-15
+
+### Added
+- **Mitigation Detection Infrastructure (Phase 3.4) ✅**
+  - `validators/mitigation-check.sh` - Generic mitigation detector for performance patterns
+    - Detects caching (get_transient, wp_cache_get, update_meta_cache)
+    - Detects pagination (LIMIT, per_page, posts_per_page, number)
+    - Detects guards (if statements, early returns, capability checks)
+    - Detects rate limiting (wp_schedule_event, transient throttling)
+    - Detects hard caps (min/max functions, array_slice)
+  - `validators/security-guard-check.sh` - Security-specific guard detector
+    - Detects nonce verification (wp_verify_nonce, check_admin_referer)
+    - Detects capability checks (current_user_can, user_can)
+    - Detects input sanitization (sanitize_*, wp_unslash)
+    - Detects validation guards (early returns, wp_die)
+    - Detects CSRF protection (wp_nonce_field, wp_create_nonce)
+  - **JSON Schema Extension** - Added `mitigation_detection` section to pattern schema
+    - `enabled` - Enable/disable mitigation detection
+    - `validator_script` - Path to mitigation validator
+    - `validator_args` - Arguments to pass to validator
+    - `severity_downgrade` - Severity mapping when mitigations found (e.g., CRITICAL → HIGH)
+
+### Changed
+- **Pattern Loader** (`dist/lib/pattern-loader.sh`)
+  - Extract mitigation detection configuration from JSON patterns
+  - New variables: `pattern_mitigation_enabled`, `pattern_mitigation_script`, `pattern_mitigation_args`, `pattern_severity_downgrade`
+- **Scripted Pattern Runner** (`dist/bin/check-performance.sh`)
+  - Call mitigation validators after primary validation
+  - Automatically downgrade severity when mitigations detected
+  - Append mitigation info to finding messages (e.g., "[Mitigated by: caching]")
+- **Pattern Updates:**
+  - `wp-query-unbounded.json` - v1.0.0 → v2.0.0
+    - Added mitigation detection with 20-line context window
+    - Severity downgrade: CRITICAL → HIGH, HIGH → MEDIUM, MEDIUM → LOW
+    - Now detects and reports mitigating factors (caching, pagination, guards)
+
+### Testing
+- Added `dist/tests/fixtures/mitigation-isolated-test.php` - Test file for mitigation detection
+  - Test 1: Unbounded query without mitigation → CRITICAL ✅
+  - Test 2: Unbounded query with caching → HIGH + "[Mitigated by: caching]" ✅
+  - Test 3: Unbounded query with capability check → HIGH + "[Mitigated by: admin-only]" ✅
+
+### Notes
+- **Infrastructure Status:** Complete and tested ✅
+- **Next Steps:** Migrate remaining 11 T2 patterns using new mitigation infrastructure
+  - 6 patterns need mitigation detection (wc-unbounded-limit, get-users-no-limit, etc.)
+  - 2 patterns need security guard detection (superglobal-manipulation, wpdb-unprepared-query)
+  - 3 patterns need complex logic (pre-get-posts-unbounded, query-limit-multiplier, n1-meta-in-loop)
+
 ## [1.3.16] - 2026-01-15
 
 ### Added

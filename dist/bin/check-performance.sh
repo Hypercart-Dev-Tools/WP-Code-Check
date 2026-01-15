@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.16
+# Version: 1.3.17
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -5101,6 +5101,44 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
           fi
           # Exit 0 or any other code = confirmed issue
 
+          # Check for mitigations if enabled
+          finding_severity="$check_severity"
+          finding_message="$pattern_title"
+
+          if [ "$pattern_mitigation_enabled" = "true" ] && [ -n "$pattern_mitigation_script" ]; then
+            mitigation_path="$REPO_ROOT/$pattern_mitigation_script"
+            if [ -f "$mitigation_path" ] && [ -x "$mitigation_path" ]; then
+              mitigation_output=""
+              mitigation_exit=0
+
+              if [ -n "$pattern_mitigation_args" ]; then
+                mitigation_output=$("$mitigation_path" "$file" "$line" $pattern_mitigation_args 2>/dev/null) || mitigation_exit=$?
+              else
+                mitigation_output=$("$mitigation_path" "$file" "$line" 2>/dev/null) || mitigation_exit=$?
+              fi
+
+              if [ "$mitigation_exit" -eq 1 ] && [ -n "$mitigation_output" ]; then
+                # Mitigations found - downgrade severity
+                if [ -n "$pattern_severity_downgrade" ]; then
+                  # Parse severity downgrade map (format: CRITICAL=HIGH;HIGH=MEDIUM)
+                  while IFS=';' read -ra PAIRS; do
+                    for pair in "${PAIRS[@]}"; do
+                      from_sev="${pair%%=*}"
+                      to_sev="${pair##*=}"
+                      if [ "$finding_severity" = "$from_sev" ]; then
+                        finding_severity="$to_sev"
+                        break 2
+                      fi
+                    done
+                  done <<< "$pattern_severity_downgrade"
+                fi
+
+                # Append mitigation info to message
+                finding_message="$pattern_title [Mitigated by: $mitigation_output]"
+              fi
+            fi
+          fi
+
           # Add to visible matches
           if [ -z "$visible_matches" ]; then
             visible_matches="$match"
@@ -5109,8 +5147,8 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
 $match"
           fi
 
-          # Add to JSON findings
-          add_json_finding "$pattern_id" "error" "$check_severity" "$file" "$line" "$pattern_title" "$code"
+          # Add to JSON findings with adjusted severity and message
+          add_json_finding "$pattern_id" "error" "$finding_severity" "$file" "$line" "$finding_message" "$code"
         done <<< "$matches"
 
         visible_count=$((match_count - suppressed_count - validator_suppressed))
