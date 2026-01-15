@@ -502,25 +502,69 @@ The following T2 patterns were initially classified as "simple" but require post
 
 ---
 
-#### Phase 3.2 – T2 Scripted Validators (NOT STARTED)
+#### Phase 3.2 – T2 Scripted Validators (COMPLETE ✅)
 
 **Objective:** Implement scripted validator framework and migrate T2 patterns requiring post-processing.
 
 **Framework Requirements:**
-- [ ] Create `dist/validators/` directory for validator scripts
-- [ ] Extend pattern JSON schema to support `detection.type: "scripted"`
-- [ ] Add `detection.validator_script` field pointing to validator file
-- [ ] Implement validator runner in main script
-- [ ] Define validator interface (inputs: file, line, code, context; outputs: 0=issue, 1=false positive)
+- [x] Create `dist/validators/` directory for validator scripts
+- [x] Extend pattern JSON schema to support `detection.type: "scripted"`
+- [x] Add `detection.validator_script` field pointing to validator file
+- [x] Implement validator runner in main script (Scripted Pattern Runner, lines 5576-5795)
+- [x] Define validator interface (inputs: file, line, code, context; outputs: 0=issue, 1=false positive)
 
 **Target Patterns (3 rules):**
-- [ ] `timezone-sensitive-patterns` - phpcs:ignore comment detection
-- [ ] `transient-no-expiration` - parameter count validation
-- [ ] `array-merge-in-loop` - context-based loop detection
+- [x] `timezone-sensitive-patterns` - phpcs:ignore comment detection → `dist/validators/phpcs-ignore-check.sh`
+- [x] `transient-no-expiration` - parameter count validation → `dist/validators/transient-expiration-check.sh`
+- [x] `array-merge-in-loop` - context-based loop detection → `dist/validators/loop-context-check.sh`
 
-**Estimated Effort:** 2-3 hours for framework + 1 hour per pattern = ~6 hours total
+**Completed Migrations:**
 
-**STATUS:** NOT STARTED
+✅ **Rule #34: `timezone-sensitive-code`**
+- Pattern file: `dist/patterns/timezone-sensitive-code.json`
+- Validator: `dist/validators/phpcs-ignore-check.sh`
+- Detection: Combines `current_time('timestamp')` and `date()` patterns
+- Validator features:
+  - Checks for phpcs:ignore suppression comments (line before or same line)
+  - Filters out PHP comment lines (`//`, `/*`, `*`)
+  - Excludes `gmdate()` calls (timezone-safe, always UTC)
+  - Properly handles inline comments mentioning `gmdate()`
+- Removed: Lines 4762-4844
+- Test results: 4 violations, 5 suppressed ✓
+
+✅ **Rule #42: `transient-no-expiration`**
+- Pattern file: `dist/patterns/transient-no-expiration.json`
+- Validator: `dist/validators/transient-expiration-check.sh`
+- Detection: `set_transient()` calls
+- Validator features:
+  - Counts commas to validate 3 parameters (key, value, expiration)
+  - Exit code 0 = missing expiration (issue)
+  - Exit code 1 = has expiration (false positive)
+- Removed: Lines 5239-5286
+- Test results: 2 violations, 1 suppressed ✓
+
+✅ **Rule #32: `array-merge-in-loop`**
+- Pattern file: `dist/patterns/array-merge-in-loop.json` (updated from old format)
+- Validator: `dist/validators/loop-context-check.sh`
+- Detection: `$x = array_merge($x, ...)` pattern
+- Validator features:
+  - Searches for loop keywords (`foreach`, `for`, `while`) within 15 lines before match
+  - Exit code 0 = inside loop (issue)
+  - Exit code 1 = not in loop (false positive)
+- Removed: Lines 4558-4621
+- Test results: 1 violation ✓
+
+**Implementation Summary:**
+- ✅ Scripted Pattern Runner implemented (lines 5576-5795)
+- ✅ Pattern loader updated to support both old (`detection_type`) and new (`detection.type`) formats
+- ✅ Fixed scripted pattern detection (grep -A2 instead of -A1)
+- ✅ All fixture tests pass (11 errors, 4 warnings)
+- ✅ Pattern count: 44 (up from 42)
+- ✅ Zero regressions
+
+**Actual Effort:** ~3 hours (framework + 3 patterns)
+
+**STATUS:** ✅ COMPLETE (2026-01-15)
 
 ---
 

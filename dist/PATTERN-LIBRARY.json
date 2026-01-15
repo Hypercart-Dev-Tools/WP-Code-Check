@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T03:18:48Z",
+  "generated": "2026-01-15T03:43:03Z",
   "summary": {
     "total_patterns": 44,
     "enabled": 40,
@@ -145,7 +145,7 @@
   "severity": "CRITICAL",
   "title": "get_users() without 'number' limit",
   "description": "Detects get_users() calls without the 'number' parameter, which can fetch ALL users from the database and cause memory exhaustion on large sites.",
-  "detection_type": "direct",
+  "detection_type": "",
   "pattern_type": "php",
   "mitigation_detection": true,
   "heuristic": false,

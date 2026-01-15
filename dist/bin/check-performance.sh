@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.15
+# Version: 1.3.16
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -5544,9 +5544,13 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
             continue
           fi
 
-          # Run validator script
+          # Run validator script with args from JSON
           validator_exit=0
-          "$validator_path" "$file" "$line" "$code" 10 >/dev/null 2>&1 || validator_exit=$?
+          if [ -n "$pattern_validator_args" ]; then
+            "$validator_path" "$file" "$line" $pattern_validator_args >/dev/null 2>&1 || validator_exit=$?
+          else
+            "$validator_path" "$file" "$line" >/dev/null 2>&1 || validator_exit=$?
+          fi
 
           if [ "$validator_exit" -eq 1 ]; then
             # Validator says false positive - suppress

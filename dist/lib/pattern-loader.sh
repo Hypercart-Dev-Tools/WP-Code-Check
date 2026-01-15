@@ -117,7 +117,7 @@ EOFPYTHON
     pattern_file_patterns="*.php"
   fi
 
-  # Extract validator_script path for scripted detection type
+  # Extract validator_script path and validator_args for scripted detection type
   if [ "$pattern_detection_type" = "scripted" ]; then
     if command -v python3 &> /dev/null; then
       pattern_validator_script=$(python3 <<EOFPYTHON 2>/dev/null
@@ -131,16 +131,30 @@ except Exception:
     print('')
 EOFPYTHON
 )
+      pattern_validator_args=$(python3 <<EOFPYTHON 2>/dev/null
+import json
+try:
+    with open('$pattern_file', 'r') as f:
+        data = json.load(f)
+        args = data.get('detection', {}).get('validator_args', [])
+        # Join array elements with spaces
+        print(' '.join(str(arg) for arg in args))
+except Exception:
+    print('')
+EOFPYTHON
+)
     else
       # Fallback to grep/sed
       pattern_validator_script=$(grep '"validator_script"' "$pattern_file" | head -1 | cut -d'"' -f4)
+      pattern_validator_args=""
     fi
   else
     pattern_validator_script=""
+    pattern_validator_args=""
   fi
 
   # Export for use in calling script
-  export pattern_id pattern_enabled pattern_detection_type pattern_category pattern_severity pattern_title pattern_search pattern_file_patterns pattern_validator_script
+  export pattern_id pattern_enabled pattern_detection_type pattern_category pattern_severity pattern_title pattern_search pattern_file_patterns pattern_validator_script pattern_validator_args
 
   return 0
 }

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.16] - 2026-01-15
+
+### Added
+- **Validator Args Support** - Pattern loader and scripted runner now support parameterized validators
+  - `dist/lib/pattern-loader.sh` - Extract `validator_args` array from JSON patterns
+  - `dist/bin/check-performance.sh` - Pass validator args to validator scripts
+  - Enables reusable validators with configurable parameters (e.g., parameter name, context lines)
+- **Reusable Validator: `parameter-presence-check.sh`**
+  - Checks if a specific parameter exists in context window around a match
+  - Usage: `parameter-presence-check.sh <file> <line> <param_name> [context_lines]`
+  - Exit codes: 0=missing parameter (issue), 1=parameter found (false positive), 2=error
+  - Can be reused for any pattern that checks for parameter presence
+
+### Changed
+- **Phase 3.3 Discovery** - Started migration of remaining 19 T2 patterns
+  - Updated `get-users-no-limit.json` to new scripted format with validator_args
+  - Discovered that many T2 patterns use advanced features not yet supported in JSON:
+    - Mitigation detection (`get_adjusted_severity`) - 6 patterns (32%)
+    - Security guard detection (`detect_guards`) - 2 patterns (11%)
+    - Complex context analysis - 2 patterns (11%)
+  - Created `PROJECT/2-WORKING/PHASE-3.3-DISCOVERY-NOTES.md` documenting findings
+  - Identified 9 "simple" T2 patterns that can be migrated with existing infrastructure
+  - Remaining 10 patterns need infrastructure enhancements (mitigation detection, guard detection)
+
+### Notes
+- **Phase 3.3 In Progress** - Validator args support complete, pattern migration paused pending decision
+- **Next Steps:** Two options:
+  1. Build mitigation detection infrastructure (~4 hours) then migrate all 19 patterns
+  2. Migrate 9 simple patterns now (~2 hours), defer complex 10 to Phase 4
+- **Recommendation:** Option 2 for quick progress
+
 ## [1.3.15] - 2026-01-15
 
 ### Added
@@ -32,8 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 - **Phase 3.2 Complete!** All T2 patterns requiring scripted validators have been migrated
-- **Next Phase:** T1 patterns (high-complexity patterns requiring advanced analysis)
+- **Next Phase:** Phase 3.3 - Migrate remaining T2 patterns (19 rules still inline in check-performance.sh)
 - All 3 validators are reusable for future patterns with similar validation needs
+- **Clarification:** We are NOT creating new patterns - only migrating existing inline patterns to JSON format
 
 ## [1.3.14] - 2026-01-15
 
