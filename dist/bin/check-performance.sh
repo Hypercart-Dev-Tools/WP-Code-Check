@@ -193,6 +193,11 @@ section_start() {
 
   # Display section name
   text_echo "${BLUE}→ Starting: ${section_name}${NC}"
+
+  # Progress indicator for JSON mode (write to original stderr via fd 3)
+  if [ "$OUTPUT_FORMAT" = "json" ] && [ -w /dev/tty ]; then
+    echo "━━━ $section_name ━━━" >&3 2>/dev/null || true
+  fi
 }
 
 # Display elapsed time for current section
@@ -977,7 +982,9 @@ if [ "$ENABLE_LOGGING" = true ]; then
   # Use appropriate file extension based on format
   if [ "$OUTPUT_FORMAT" = "json" ]; then
     LOG_FILE="$LOG_DIR/$TIMESTAMP.json"
-    # For JSON mode, no header - just redirect output to log file
+    # For JSON mode, save original stderr for progress indicators (fd 3)
+    exec 3>&2
+    # Redirect output to log file
     exec > >(tee "$LOG_FILE")
     exec 2>&1
   else
@@ -2569,6 +2576,17 @@ if [ "$ENABLE_LOGGING" = true ] && [ "$OUTPUT_FORMAT" = "text" ]; then
 fi
 text_echo ""
 
+# Progress indicator for JSON mode (write to original stderr via fd 3)
+if [ "$OUTPUT_FORMAT" = "json" ] && [ -w /dev/tty ]; then
+  {
+    echo ""
+    echo "🔍 Scan started - this may take several minutes for large codebases..."
+    echo "   Scanning: $PATHS"
+    echo "   Log file: $LOG_FILE"
+    echo ""
+  } >&3 2>/dev/null || true
+fi
+
 debug_echo "Starting checks..."
 
 ERRORS=0
@@ -2669,6 +2687,11 @@ run_check() {
   esac
 
   text_echo "${BLUE}▸ $name ${impact_badge}${NC}"
+
+  # Progress indicator for JSON mode (write to original stderr via fd 3)
+  if [ "$OUTPUT_FORMAT" = "json" ] && [ -w /dev/tty ]; then
+    echo "  Checking: $name..." >&3 2>/dev/null || true
+  fi
 
   # Run grep with all patterns
   local result
@@ -2777,6 +2800,61 @@ $line"
 if [ "$PROFILE" = "1" ]; then
   PROFILE_START_TIME=$(date +%s%N 2>/dev/null || echo "0")
 fi
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION: Cache PHP file list
+# ============================================================================
+# Instead of running `grep -r` 50+ times (once per pattern), we build the file
+# list once and reuse it. This dramatically speeds up scans of large directories.
+#
+# We store the file list in a temp file and export it as PHP_FILE_LIST so all
+# grep commands can use it instead of -r (recursive search).
+# ============================================================================
+
+PHP_FILE_LIST=""
+PHP_FILE_COUNT=0
+PHP_FILE_LIST_CACHE=""
+
+if [ -f "$PATHS" ]; then
+  # Single file - no caching needed
+  PHP_FILE_LIST="$PATHS"
+  PHP_FILE_COUNT=1
+  debug_echo "Single file mode: $PATHS"
+else
+  # Directory - build cached file list
+  debug_echo "Building PHP file list cache for: $PATHS"
+
+  # Create temp file for caching
+  PHP_FILE_LIST_CACHE=$(mktemp)
+
+  # Find all PHP files (excluding vendor/node_modules)
+  find "$PATHS" -name "*.php" -type f 2>/dev/null | \
+    grep -v '/vendor/' | \
+    grep -v '/node_modules/' > "$PHP_FILE_LIST_CACHE"
+
+  PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
+
+  if [ "$PHP_FILE_COUNT" -eq 0 ]; then
+    debug_echo "No PHP files found in: $PATHS"
+    rm -f "$PHP_FILE_LIST_CACHE"
+    echo "Error: No PHP files found in: $PATHS"
+    exit 1
+  fi
+
+  debug_echo "Cached $PHP_FILE_COUNT PHP files"
+
+  # Export for use in grep commands
+  PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
+fi
+
+# Cleanup function to remove cache on exit
+cleanup_php_cache() {
+  if [ -n "$PHP_FILE_LIST_CACHE" ] && [ -f "$PHP_FILE_LIST_CACHE" ]; then
+    rm -f "$PHP_FILE_LIST_CACHE"
+    debug_echo "Cleaned up PHP file cache"
+  fi
+}
+trap cleanup_php_cache EXIT
 
 profile_start "CRITICAL_CHECKS"
 section_start "Critical Checks"
@@ -5402,11 +5480,24 @@ debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
 
 # Output based on format
 if [ "$OUTPUT_FORMAT" = "json" ]; then
+  # Progress indicator for JSON mode (write to original stderr via fd 3)
+  if [ -w /dev/tty ]; then
+    {
+      echo ""
+      echo "📊 Scan complete! Generating JSON report..."
+    } >&3 2>/dev/null || true
+  fi
+
   debug_echo "Generating JSON output..."
   JSON_OUTPUT=$(output_json "$EXIT_CODE")
   debug_echo "JSON output generated, echoing..."
   echo "$JSON_OUTPUT"
   debug_echo "JSON output echoed"
+
+  # Progress indicator for JSON mode (write to original stderr via fd 3)
+  if [ -w /dev/tty ]; then
+    echo "✅ JSON report written to: $LOG_FILE" >&3 2>/dev/null || true
+  fi
 
   # Generate HTML report if running locally (not in GitHub Actions)
   if [ -z "$GITHUB_ACTIONS" ]; then
