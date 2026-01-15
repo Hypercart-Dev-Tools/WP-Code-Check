@@ -179,6 +179,42 @@ We will treat DRY’s aggregated schema as the **starting point** and extend it 
 
 > Note: `context_validator` is a symbolic name; the Bash script maps it to a shell function that inspects lines around the match.
 
+### 4.2.1 Pattern Complexity Tiers
+
+Not all patterns can be expressed as pure regex. Define tiers to guide migration strategy:
+
+| Tier | Detection Type | Expressiveness | Example |
+|------|----------------|----------------|---------|
+| T1 | `simple` | Single/multi regex, file filter | `posts_per_page => -1` |
+| T2 | `aggregated` | Grouping, thresholds, dedup | DRY option name detection |
+| T3 | `contextual` | Window-based, multi-condition | Nonce + capability in same function |
+| T4 | `scripted` | Custom validator callback | Complex CFG-like checks |
+
+**T4 "Scripted" Escape Hatch:**
+
+For patterns that exceed JSON expressiveness, allow a hybrid approach:
+
+```json
+"detection": {
+  "type": "scripted",
+  "file_patterns": ["*.php"],
+  "validator_script": "validators/admin-capability-check.sh",
+  "validator_args": ["--context-lines", "20"]
+}
+```
+
+- Validator scripts live in `dist/bin/validators/`.
+- They receive: file path, line number, matched text, context lines.
+- They return: `0` (confirmed issue), `1` (false positive), `2` (needs review).
+
+**Migration Strategy for T3/T4 Patterns:**
+
+1. **Phase 0:** During inventory, tag each inline rule as T1/T2/T3/T4.
+2. **Phase 2.5:** Write validator scripts for T3/T4 patterns BEFORE removing inline code.
+3. **Phase 3:** Migrate remaining T1/T2 patterns after T3/T4 validators are tested.
+
+This ensures complex patterns don't lose fidelity when moved to JSON.
+
 ### 4.3 Remediation Block
 
 ```json
@@ -200,39 +236,77 @@ We will treat DRY’s aggregated schema as the **starting point** and extend it 
 
 This expands on the high-level plan in `BACKLOG.md`.
 
-### Phase 0 – Inventory & Classification (2–3 hours)
+### Phase 0 – Inventory & Classification (COMPLETE)
 
 **Objective:** Get a complete, categorized list of existing rules.
 
 **Tasks:**
-- [ ] Scan `dist/bin/check-performance.sh` for `run_check` invocations.
-- [ ] For each, record:
+- [x] Scan `dist/bin/check-performance.sh` for `run_check` invocations.
+- [x] For each, record:
   - `id` (rule ID string)
   - `severity`
   - `message` / description
   - Pattern(s) (`-E ...` lines)
   - Any special behavior (context windows, OVERRIDE_GREP_INCLUDE, baseline quirks)
-- [ ] Produce `PROJECT/PATTERN-LIBRARY-SUMMARY.md` table (already exists; extend with `source: inline/json`).
-- [ ] Tag each rule as: `core`, `SPO`, `KISS`, `DRY`, `http`, `timezone`, `cron`, `security`.
+- [x] Produce `PROJECT/2-WORKING/PATTERN-INVENTORY.md` table with full rule list, tiers, and migration notes.
+- [x] Tag each rule by tier (T1/T2/T3/T4) and priority (P1/P2/P3).
 
 **Deliverable:**
-- Updated `PATTERN-LIBRARY-SUMMARY.md` with a column `Definition Source: inline/json`.
+- `PROJECT/2-WORKING/PATTERN-INVENTORY.md` with complete inventory.
+
+**STATUS:** ✅ COMPLETE (2026-01-15)
+
+**Inventory Results:**
+- **Total inline rules:** 46
+- **Already migrated to JSON:** 7 rules (15%)
+- **Needs migration:** 39 rules (85%)
+- **Tier breakdown:**
+  - T1 (Simple): 11 rules (24%) - ~55 min effort
+  - T2 (Moderate): 24 rules (52%) - ~6 hours effort
+  - T3 (Complex): 11 rules (24%) - ~8 hours effort
+  - T4 (Very Complex): 0 rules (0%)
+- **Priority breakdown:**
+  - P1 (High - Security/SPO): 13 rules (28%) - 7 already JSON, 6 need migration
+  - P2 (Medium - Performance): 26 rules (57%)
+  - P3 (Low - Heuristics): 7 rules (15%)
+- **Estimated total migration effort:** 14-16 hours (2 full work days)
 
 ---
 
-### Phase 1 – JSON-First for New Rules (Already in Progress)
+### Phase 1 – JSON-First for New Rules (COMPLETE)
 
 **Objective:** Ensure that **all new rules** are added only via JSON.
 
 **Tasks:**
 - [x] DRY patterns in `dist/patterns/dry/*.json`.
-- [ ] Update `CONTRIBUTING.md` examples:
+- [x] Update `CONTRIBUTING.md` examples:
   - Replace inline `run_check` example with JSON rule definition + pointer to the loader.
-- [ ] Add a small developer note to `dist/README.md`:
+- [x] Add a small developer note to `dist/README.md`:
   - "All new rules MUST be defined in `dist/patterns/*.json`. Inline rules are legacy and will be removed."
 
 **Deliverable:**
 - CONTRIBUTING + dist/README both show JSON-based rule authoring.
+
+**STATUS:** ✅ COMPLETE (2026-01-15)
+
+**Completed Changes:**
+- Updated `CONTRIBUTING.md` with comprehensive JSON rule authoring guide
+  - Added JSON structure example with all detection types
+  - Documented file organization by category
+  - Deprecated inline `run_check` format with clear warning
+  - Added reference to migration plan document
+- Updated `dist/README.md` with new "How Rules Are Defined" section
+  - Explained benefits of JSON-based rules (data-driven, self-documenting, testable, extensible)
+  - Provided complete rule structure example
+  - Documented pattern categories and detection types
+  - Added contributor guidance
+- Verified DRY patterns are functional:
+  - `duplicate-option-names.json` ✓
+  - `duplicate-transient-keys.json` ✓
+  - `duplicate-capability-strings.json` ✓
+  - Pattern loader (`dist/lib/pattern-loader.sh`) confirmed working
+  - Aggregated pattern processing confirmed in `check-performance.sh` (lines 5268-5314)
+
 
 ---
 
@@ -264,6 +338,11 @@ This expands on the high-level plan in `BACKLOG.md`.
 - No change in fixture error/warning counts.
 - No change in rule IDs, severities, or messages.
 
+
+**STATUS:** NOT STARTED
+
+
+
 ---
 
 ### Phase 3 – Migrate Remaining Legacy Rules (2–3 days)
@@ -287,6 +366,9 @@ This expands on the high-level plan in `BACKLOG.md`.
 - Only internal/debug patterns remain inline (if any).
 - All production rules listed in `PATTERN-LIBRARY-SUMMARY.md` show `Definition Source: json`.
 
+**STATUS:** NOT STARTED
+
+
 ---
 
 ### Phase 4 – Cleanup, Docs, and Tooling (1 day)
@@ -301,6 +383,9 @@ This expands on the high-level plan in `BACKLOG.md`.
   - `PATTERN-LIBRARY-SUMMARY.md` – mark migration complete.
 - [ ] Optionally, add a small script `dist/bin/list-rules.sh` that prints all rules by reading JSON.
 
+**STATUS:** NOT STARTED
+
+
 ---
 
 ## 6. Testing & Regression Strategy
@@ -313,6 +398,8 @@ To avoid breaking behavior while refactoring:
 - Expected results must remain identical:
   - Same error/warning counts per fixture.
   - Same rule IDs and severities.
+
+**STATUS:** NOT STARTED
 
 ### 6.2 Real-World Projects
 
@@ -336,6 +423,73 @@ To avoid breaking behavior while refactoring:
   - Same `summary.baselined` and `summary.stale_baseline` metrics.
   - No new drift in baseline files.
 
+
+**STATUS:** NOT STARTED
+
+
+
+### 6.4 Golden Output Test Suite
+
+Create a set of "golden" reference outputs from production scans to catch drift that fixtures might miss:
+
+**Setup:**
+```bash
+# Generate golden outputs for reference projects
+./dist/bin/check-performance.sh --paths /path/to/ptt-mkii --format json \
+  | jq -S 'del(.metadata.scan_id, .metadata.timestamp)' > dist/tests/golden/ptt-mkii.json
+```
+
+**CI Check:**
+```bash
+# Compare current output to golden
+./dist/bin/check-performance.sh --paths /path/to/ptt-mkii --format json \
+  | jq -S 'del(.metadata.scan_id, .metadata.timestamp)' > /tmp/current.json
+diff dist/tests/golden/ptt-mkii.json /tmp/current.json
+```
+
+**Golden Projects (minimum 3):**
+- [ ] PTT-MKII (complex real-world plugin)
+- [ ] WooCommerce All Products for Subscriptions (moderate complexity)
+- [ ] A minimal "canary" plugin with 1 instance of every rule type
+
+
+**STATUS:** NOT STARTED
+
+
+
+### 6.5 Pattern Coverage Metrics
+
+Track which patterns are exercised by tests to ensure no rule ships untested:
+
+**Coverage Report Script:**
+```bash
+# Generate coverage report: which rule IDs fired in test runs
+jq -r '.issues[].rule_id' dist/tests/outputs/*.json | sort | uniq -c | sort -rn
+```
+
+**Minimum Coverage Requirement:**
+- Before marking Phase 3 complete, every JSON-defined rule must appear in at least one fixture or golden test.
+- Add `dist/tests/coverage-check.sh` that fails if any rule ID has zero test coverage.
+
+### 6.6 Differential Testing During Migration
+
+For each rule migrated from inline to JSON, verify identical behavior:
+
+1. Run scan with inline rule only (disable JSON loader for that rule).
+2. Run scan with JSON rule only (remove inline rule).
+3. Diff outputs – must be identical.
+
+**Script stub:**
+```bash
+# dist/bin/test-rule-migration.sh <rule_id>
+# Validates that inline and JSON definitions produce identical results
+```
+
+This per-rule differential approach catches subtle behavior changes that aggregate tests might miss.
+
+**STATUS:** NOT STARTED
+
+
 ---
 
 ## 7. Implementation Notes (Engine Side)
@@ -352,6 +506,8 @@ To avoid breaking behavior while refactoring:
   ```
 
 - Ensure deterministic loading order (e.g., sort filenames) to keep JSON output stable.
+
+**STATUS:** NOT STARTED
 
 ### 7.2 Runner Selection
 
@@ -372,9 +528,19 @@ To avoid breaking behavior while refactoring:
   done
   ```
 
+
+**STATUS:** NOT STARTED
+
+
+
 ### 7.3 Backward Compatibility
 
 - During migration, keep a flag or environment variable (e.g., `HCC_USE_JSON_RULES_ONLY=0/1`) for emergency rollback **during development only**. Final state should not require such a flag.
+
+
+**STATUS:** NOT STARTED
+
+
 
 ---
 
@@ -384,15 +550,38 @@ To avoid breaking behavior while refactoring:
 
 - **Mitigation:** Fixture tests + before/after JSON diffs for reference projects.
 
+
+**STATUS:** NOT STARTED
+
+
+
 ### 8.2 Risk: JSON Schema Changes Mid-Migration
 
 - **Mitigation:** Freeze a minimal viable schema before Phase 2 and avoid breaking changes until migration is complete.
+
+
+**STATUS:** NOT STARTED
+
 
 ### 8.3 Risk: Developer Confusion During Transition
 
 - **Mitigation:**
   - Update `CONTRIBUTING.md` immediately to say "New rules must use JSON".
   - Comment legacy inline blocks as `LEGACY_RULE_DEF` with pointers to this migration doc.
+
+**STATUS:** NOT STARTED
+
+### 8.4 Risk: Complex Pattern Loss of Fidelity
+
+- **Description:** Some legacy rules rely on advanced Bash logic (context windows, custom validators, multi-condition checks). Migrating these to JSON may oversimplify or lose expressiveness.
+- **Mitigation:**
+  - Use the T1–T4 complexity tier system (§4.2.1) to identify high-risk patterns early.
+  - Implement the `scripted` detection type escape hatch for T4 patterns.
+  - Write and test validator scripts BEFORE removing inline code (Phase 2.5).
+  - Use differential testing (§6.6) to verify per-rule behavior parity.
+
+**STATUS:** NOT STARTED
+
 
 ---
 
@@ -416,14 +605,26 @@ To avoid breaking behavior while refactoring:
 
 **Planning & Inventory**
 - [ ] Complete Phase 0 inventory and update `PATTERN-LIBRARY-SUMMARY.md`.
+- [ ] Tag each inline rule as T1/T2/T3/T4 complexity tier.
 
 **JSON-First Authoring**
 - [ ] Update `CONTRIBUTING.md` to prefer JSON-based rules.
 - [ ] Update `dist/README.md` with JSON rule authoring guidance.
 
+**Complex Pattern Handling**
+- [ ] Audit inline rules, identify all T3/T4 patterns.
+- [ ] Write validator scripts for T3/T4 patterns (in `dist/bin/validators/`).
+- [ ] Test validator scripts in isolation before wiring to JSON.
+
 **Migration Execution**
 - [ ] Phase 2 – Migrate high-impact rules to JSON (SPO, KISS, security, HTTP).
+- [ ] Phase 2.5 – Migrate T3/T4 patterns with validator scripts.
 - [ ] Phase 3 – Migrate remaining legacy rules (query, timezone, cron, misc).
+
+**Testing Robustness**
+- [ ] Generate golden outputs for 3+ reference projects.
+- [ ] Add `dist/tests/coverage-check.sh` to CI.
+- [ ] Run differential testing for each migrated rule.
 
 **Verification & Cleanup**
 - [ ] Ensure all fixture tests pass unchanged.

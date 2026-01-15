@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-01-15
+
+### Documentation
+- **Phase 1: JSON-First for New Rules (Pattern Migration)**
+  - Updated `CONTRIBUTING.md` with comprehensive JSON rule authoring guide
+    - Added complete JSON structure example with all detection types (simple, aggregated, contextual, scripted)
+    - Documented file organization by category (core, dry, headless, js, nodejs)
+    - Deprecated inline `run_check` format with clear warning and reference to migration plan
+  - Updated `dist/README.md` with new "How Rules Are Defined" section
+    - Explained benefits of JSON-based rules (data-driven, self-documenting, testable, extensible)
+    - Provided complete rule structure example with detection types and remediation
+    - Documented pattern categories and their purposes
+    - Added contributor guidance linking to CONTRIBUTING.md
+  - Completed Phase 1 of pattern migration to JSON (see `PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md`)
+    - All new rules must now be defined as JSON patterns in `dist/patterns/`
+    - Verified DRY patterns are functional (duplicate-option-names, duplicate-transient-keys, duplicate-capability-strings)
+    - Pattern loader and aggregated pattern processing confirmed working
+
 ## [1.3.11] - 2026-01-14
 
 ### Fixed
