@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.23] - 2026-01-15
+
+### Fixed
+- **Pattern Discovery** - Fixed simple pattern runner to detect root-level `detection_type` field
+  - Now checks both `detection_type` (root) and `detection.type` (nested) for backward compatibility
+  - Fixes issue where patterns with `detection_type: "direct"` were not being discovered
+  - Enables 4 security patterns to run from JSON files instead of inline code
+
+### Removed
+- **Redundant Security Pattern Inline Code** - Removed 4 duplicate `run_check` calls (32 lines)
+  - `php-eval-injection` - Now runs from `dist/patterns/php-eval-injection.json`
+  - `php-dynamic-include` - Now runs from `dist/patterns/php-dynamic-include.json`
+  - `php-shell-exec-functions` - Now runs from `dist/patterns/php-shell-exec-functions.json`
+  - `php-hardcoded-credentials` - Now runs from `dist/patterns/php-hardcoded-credentials.json`
+  - These patterns already had JSON files but were still using inline `run_check` calls
+  - Kept `spo-003-insecure-deserialization` inline (no JSON file exists yet)
+  - Kept `php-user-controlled-file-write` inline (JSON file needs multi-pattern runner support)
+
+### Changed
+- **File Size** - Reduced `check-performance.sh` from 5,849 to 5,831 lines (-18 lines net)
+  - Removed 32 lines of redundant pattern code
+  - Added 14 lines of migration comments and improved pattern discovery
+- **Version:** 1.3.22 → 1.3.23
+
+## [1.3.22] - 2026-01-15
+
+### Changed
+- **HTML Report Sections** - Split DRY Violations into separate Magic Strings and Function Clones sections
+  - Magic Strings section shows hardcoded values that should be constants
+  - Function Clones section shows duplicate functions (when `--enable-clone-detection` is used)
+  - Function Clones section displays "Skipped" message when clone detection is disabled
+  - Summary stats now show separate counts for Magic Strings and Function Clones
+  - Updated both HTML templates (`bin/templates/` and `bin/report-templates/`)
+  - Updated Python JSON-to-HTML converter to handle new sections
+  - JSON output now includes `clone_detection_ran` flag in summary
+
+### Changed
+- **Version:** 1.3.21 → 1.3.22
+
+## [1.3.21] - 2026-01-15
+
+### Fixed
+- **Magic String Detector shell errors** - Fixed quote escaping in grep patterns
+  - Eliminated "unexpected EOF while looking for matching" errors
+  - Added proper shell escaping for patterns containing single quotes
+  - Supports both Bash 3 (macOS) and Bash 4+ (Linux)
+  - Uses `printf %q` for Bash 4+, falls back to `sed` for Bash 3
+- **HTML report generation** - Fixed JSON parsing issue in Python converter
+  - Reports now generate successfully on all platforms
+  - Automatically opens in browser after generation
+
+### Changed
+- **Version:** 1.3.20 → 1.3.21
+
 ## [1.3.20] - 2026-01-15
 
 ### Performance

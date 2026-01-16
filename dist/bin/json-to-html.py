@@ -108,7 +108,12 @@ def main():
     
     magic_violations = data.get('magic_string_violations', [])
     dry_violations_count = len(magic_violations)
-    
+    clone_detection_ran = summary.get('clone_detection_ran', False)
+
+    # Count magic strings vs function clones
+    magic_string_count = sum(1 for v in magic_violations if v.get('type') == 'magic_string')
+    function_clone_count = sum(1 for v in magic_violations if v.get('type') == 'function_clone')
+
     checks = data.get('checks', [])
     
     # Extract fixture validation info
@@ -340,11 +345,12 @@ def main():
 
     print(f"{Colors.BLUE}Processing DRY violations ({dry_violations_count} total)...{Colors.NC}")
 
-    # Generate Magic String violations HTML
-    dry_violations_html = ""
-    if dry_violations_count > 0:
-        dry_parts = []
-        for violation in magic_violations:
+    # Generate Magic Strings HTML (separate from Function Clones)
+    magic_strings_html = ""
+    magic_string_violations = [v for v in magic_violations if v.get('type') == 'magic_string']
+    if len(magic_string_violations) > 0:
+        magic_parts = []
+        for violation in magic_string_violations:
             dup_string = violation.get('duplicated_string', '')
             pattern = violation.get('pattern', '')
             file_count = violation.get('file_count', 0)
@@ -359,9 +365,9 @@ def main():
 
             locations_list = ''.join(locations_html)
 
-            dry_html = f'''<div class="finding medium">
+            magic_html = f'''<div class="finding medium">
       <div class="finding-header">
-        <div class="finding-title">🔄 {dup_string}</div>
+        <div class="finding-title">🔤 {dup_string}</div>
         <span class="badge medium">MEDIUM</span>
       </div>
       <div class="finding-details">
@@ -378,11 +384,59 @@ def main():
         </div>
       </div>
     </div>'''
-            dry_parts.append(dry_html)
+            magic_parts.append(magic_html)
 
-        dry_violations_html = '\n'.join(dry_parts)
+        magic_strings_html = '\n'.join(magic_parts)
     else:
-        dry_violations_html = "<p style='text-align: center; color: #6c757d; padding: 20px;'>No magic strings detected. Great job! 🎉</p>"
+        magic_strings_html = "<p style='text-align: center; color: #6c757d; padding: 20px;'>No magic strings detected. Great job! 🎉</p>"
+
+    # Generate Function Clones HTML (separate from Magic Strings)
+    function_clones_html = ""
+    if clone_detection_ran:
+        function_clone_violations = [v for v in magic_violations if v.get('type') == 'function_clone']
+        if len(function_clone_violations) > 0:
+            clone_parts = []
+            for violation in function_clone_violations:
+                dup_string = violation.get('duplicated_string', '')
+                pattern = violation.get('pattern', '')
+                file_count = violation.get('file_count', 0)
+                total_count = violation.get('total_count', 0)
+                locations = violation.get('locations', [])
+
+                locations_html = []
+                for loc in locations:
+                    loc_file = loc.get('file', '')
+                    loc_line = loc.get('line', '')
+                    locations_html.append(f'<li style="font-family: monospace; font-size: 0.9em;">{loc_file}:{loc_line}</li>')
+
+                locations_list = ''.join(locations_html)
+
+                clone_html = f'''<div class="finding medium">
+      <div class="finding-header">
+        <div class="finding-title">🔄 {dup_string}</div>
+        <span class="badge medium">MEDIUM</span>
+      </div>
+      <div class="finding-details">
+        <div style="margin-bottom: 10px;">
+          <strong>Pattern:</strong> {pattern}<br>
+          <strong>Duplicated Function:</strong> <code>{dup_string}</code><br>
+          <strong>Files:</strong> {file_count} files | <strong>Total Occurrences:</strong> {total_count}
+        </div>
+        <div style="margin-top: 10px;">
+          <strong>Locations:</strong>
+          <ul style="margin: 5px 0 0 20px; padding: 0;">
+            {locations_list}
+          </ul>
+        </div>
+      </div>
+    </div>'''
+                clone_parts.append(clone_html)
+
+            function_clones_html = '\n'.join(clone_parts)
+        else:
+            function_clones_html = "<p style='text-align: center; color: #6c757d; padding: 20px;'>No duplicate functions detected. Great job! 🎉</p>"
+    else:
+        function_clones_html = "<p style='text-align: center; color: #6c757d; padding: 20px;'>⏭️ Skipped (use <code>--enable-clone-detection</code> to run)</p>"
 
     print(f"{Colors.BLUE}Generating HTML report...{Colors.NC}")
 
@@ -406,6 +460,8 @@ def main():
         '{{TOTAL_ERRORS}}': str(total_errors),
         '{{TOTAL_WARNINGS}}': str(total_warnings),
         '{{MAGIC_STRING_VIOLATIONS_COUNT}}': str(dry_violations_count),
+        '{{MAGIC_STRING_COUNT}}': str(magic_string_count),
+        '{{FUNCTION_CLONE_COUNT}}': str(function_clone_count),
         '{{BASELINED}}': str(baselined),
         '{{STALE_BASELINE}}': str(stale_baseline),
         '{{EXIT_CODE}}': str(exit_code),
@@ -414,7 +470,8 @@ def main():
         '{{STATUS_MESSAGE}}': status_message,
         '{{FINDINGS_COUNT}}': str(findings_count),
         '{{FINDINGS_HTML}}': findings_html,
-        '{{MAGIC_STRING_VIOLATIONS_HTML}}': dry_violations_html,
+        '{{MAGIC_STRINGS_HTML}}': magic_strings_html,
+        '{{FUNCTION_CLONES_HTML}}': function_clones_html,
         '{{CHECKS_HTML}}': checks_html,
         '{{FIXTURE_STATUS_CLASS}}': fixture_status_class,
         '{{FIXTURE_STATUS_TEXT}}': fixture_status_text,

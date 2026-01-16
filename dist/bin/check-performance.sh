@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.20
+# Version: 1.3.23
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.20"
+SCRIPT_VERSION="1.3.23"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -291,6 +291,7 @@ declare -a JSON_CHECKS=()
 # Note: Variable names kept as DRY_VIOLATIONS for backward compatibility
 declare -a DRY_VIOLATIONS=()
 DRY_VIOLATIONS_COUNT=0
+CLONE_DETECTION_RAN=false  # Track whether clone detection was executed
 
 # Show enhanced help message
 show_help() {
@@ -1243,7 +1244,7 @@ EOF
 }
 
 # Add a magic string violation to the collection
-# Usage: add_dry_violation "pattern_title" "severity" "duplicated_string" "file_count" "total_count" "locations_json"
+# Usage: add_dry_violation "pattern_title" "severity" "duplicated_string" "file_count" "total_count" "locations_json" ["type"]
 # Note: Function name kept as add_dry_violation for backward compatibility
 add_dry_violation() {
   local pattern_title="$1"
@@ -1252,9 +1253,10 @@ add_dry_violation() {
   local file_count="$4"
   local total_count="$5"
   local locations_json="$6"
+  local violation_type="${7:-magic_string}"  # Default to magic_string for backward compatibility
 
   local violation=$(cat <<EOF
-{"pattern":"$(json_escape "$pattern_title")","severity":"$severity","duplicated_string":"$(json_escape "$duplicated_string")","file_count":$file_count,"total_count":$total_count,"locations":$locations_json}
+{"pattern":"$(json_escape "$pattern_title")","severity":"$severity","type":"$violation_type","duplicated_string":"$(json_escape "$duplicated_string")","file_count":$file_count,"total_count":$total_count,"locations":$locations_json}
 EOF
 )
   DRY_VIOLATIONS+=("$violation")
@@ -1326,6 +1328,7 @@ output_json() {
     "total_errors": $ERRORS,
     "total_warnings": $WARNINGS,
     "magic_string_violations": $DRY_VIOLATIONS_COUNT,
+    "clone_detection_ran": $CLONE_DETECTION_RAN,
     "files_analyzed": $files_analyzed,
     "lines_of_code": $lines_of_code,
     "baselined": $BASELINED,
@@ -1377,6 +1380,11 @@ generate_html_report() {
   local strict_mode=$(echo "$json_data" | jq -r '.strict_mode // false')
   local findings_count=$(echo "$json_data" | jq '.findings | length')
   local dry_violations_count=$(echo "$json_data" | jq '.magic_string_violations | length')
+  local clone_detection_ran=$(echo "$json_data" | jq -r '.summary.clone_detection_ran // false')
+
+  # Count magic strings vs function clones
+  local magic_string_count=$(echo "$json_data" | jq '[.magic_string_violations[] | select(.type == "magic_string")] | length')
+  local function_clone_count=$(echo "$json_data" | jq '[.magic_string_violations[] | select(.type == "function_clone")] | length')
 
   # Extract fixture validation info
   local fixture_status=$(echo "$json_data" | jq -r '.fixture_validation.status // "not_run"')
@@ -1525,13 +1533,13 @@ generate_html_report() {
       <div class=\"finding-details\">Findings: \(.findings_count)</div>
     </div>"' | tr '\n' ' ')
 
-  # Generate Magic String violations HTML
-  local dry_violations_html=""
-  if [ "$dry_violations_count" -gt 0 ]; then
-    dry_violations_html=$(echo "$json_data" | jq -r '.magic_string_violations[] |
+  # Generate Magic Strings HTML (separate from Function Clones)
+  local magic_strings_html=""
+  if [ "$magic_string_count" -gt 0 ]; then
+    magic_strings_html=$(echo "$json_data" | jq -r '.magic_string_violations[] | select(.type == "magic_string") |
       "<div class=\"finding medium\">
         <div class=\"finding-header\">
-          <div class=\"finding-title\">🔄 \(.duplicated_string)</div>
+          <div class=\"finding-title\">🔤 \(.duplicated_string)</div>
           <span class=\"badge medium\">MEDIUM</span>
         </div>
         <div class=\"finding-details\">
@@ -1549,7 +1557,38 @@ generate_html_report() {
         </div>
       </div>"' | tr '\n' ' ')
   else
-    dry_violations_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>No magic strings detected. Great job! 🎉</p>"
+    magic_strings_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>No magic strings detected. Great job! 🎉</p>"
+  fi
+
+  # Generate Function Clones HTML (separate from Magic Strings)
+  local function_clones_html=""
+  if [ "$clone_detection_ran" = "true" ]; then
+    if [ "$function_clone_count" -gt 0 ]; then
+      function_clones_html=$(echo "$json_data" | jq -r '.magic_string_violations[] | select(.type == "function_clone") |
+        "<div class=\"finding medium\">
+          <div class=\"finding-header\">
+            <div class=\"finding-title\">🔄 \(.duplicated_string)</div>
+            <span class=\"badge medium\">MEDIUM</span>
+          </div>
+          <div class=\"finding-details\">
+            <div style=\"margin-bottom: 10px;\">
+              <strong>Pattern:</strong> \(.pattern)<br>
+              <strong>Duplicated Function:</strong> <code>\(.duplicated_string)</code><br>
+              <strong>Files:</strong> \(.file_count) files | <strong>Total Occurrences:</strong> \(.total_count)
+            </div>
+            <div style=\"margin-top: 10px;\">
+              <strong>Locations:</strong>
+              <ul style=\"margin: 5px 0 0 20px; padding: 0;\">
+                \(.locations | map("<li style=\"font-family: monospace; font-size: 0.9em;\">\(.file):\(.line)</li>") | join(""))
+              </ul>
+            </div>
+          </div>
+        </div>"' | tr '\n' ' ')
+    else
+      function_clones_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>No duplicate functions detected. Great job! 🎉</p>"
+    fi
+  else
+    function_clones_html="<p style='text-align: center; color: #6c757d; padding: 20px;'>⏭️ Skipped (use <code>--enable-clone-detection</code> to run)</p>"
   fi
 
   # Read template and replace placeholders
@@ -1574,6 +1613,8 @@ generate_html_report() {
   html_content="${html_content//\{\{TOTAL_ERRORS\}\}/$total_errors}"
   html_content="${html_content//\{\{TOTAL_WARNINGS\}\}/$total_warnings}"
   html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_COUNT\}\}/$dry_violations_count}"
+  html_content="${html_content//\{\{MAGIC_STRING_COUNT\}\}/$magic_string_count}"
+  html_content="${html_content//\{\{FUNCTION_CLONE_COUNT\}\}/$function_clone_count}"
   html_content="${html_content//\{\{BASELINED\}\}/$baselined}"
   html_content="${html_content//\{\{STALE_BASELINE\}\}/$stale_baseline}"
   html_content="${html_content//\{\{EXIT_CODE\}\}/$exit_code}"
@@ -1582,7 +1623,8 @@ generate_html_report() {
   html_content="${html_content//\{\{STATUS_MESSAGE\}\}/$status_message}"
   html_content="${html_content//\{\{FINDINGS_COUNT\}\}/$findings_count}"
   html_content="${html_content//\{\{FINDINGS_HTML\}\}/$findings_html}"
-  html_content="${html_content//\{\{MAGIC_STRING_VIOLATIONS_HTML\}\}/$dry_violations_html}"
+  html_content="${html_content//\{\{MAGIC_STRINGS_HTML\}\}/$magic_strings_html}"
+  html_content="${html_content//\{\{FUNCTION_CLONES_HTML\}\}/$function_clones_html}"
   html_content="${html_content//\{\{CHECKS_HTML\}\}/$checks_html}"
   html_content="${html_content//\{\{FIXTURE_STATUS_CLASS\}\}/$fixture_status_class}"
   html_content="${html_content//\{\{FIXTURE_STATUS_TEXT\}\}/$fixture_status_text}"
@@ -2227,7 +2269,17 @@ process_aggregated_pattern() {
     matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -Hn $include_args -E "$pattern_search" "$PHP_FILE_LIST" 2>/dev/null) || grep_exit_code=$?
   else
     # Multiple files - use cached list with xargs
-    matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E '$pattern_search' 2>/dev/null") || grep_exit_code=$?
+    # Use printf %q to properly escape the pattern for shell (Bash 4+)
+    # Fallback: Use sed to escape single quotes for Bash 3
+    local escaped_pattern
+    if command -v printf >/dev/null 2>&1 && printf %q "test" >/dev/null 2>&1; then
+      escaped_pattern=$(printf %q "$pattern_search")
+      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E $escaped_pattern 2>/dev/null") || grep_exit_code=$?
+    else
+      # Bash 3 fallback: escape single quotes manually
+      escaped_pattern=$(echo "$pattern_search" | sed "s/'/'\\\\''/g")
+      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E '$escaped_pattern' 2>/dev/null") || grep_exit_code=$?
+    fi
   fi
 
   # Check for timeout (exit code 124)
@@ -2600,7 +2652,7 @@ process_clone_detection() {
       locations_json+="]"
 
       # Add to violations with function name as the "duplicated_string"
-      add_dry_violation "$pattern_title" "$pattern_severity" "$func_name (${line_count} lines)" "$file_count" "$total_count" "$locations_json"
+      add_dry_violation "$pattern_title" "$pattern_severity" "$func_name (${line_count} lines)" "$file_count" "$total_count" "$locations_json" "function_clone"
     fi
   done <<< "$unique_hashes"
 
@@ -3373,52 +3425,29 @@ else
 fi
 text_echo ""
 
-# Dangerous eval() usage in PHP
-run_check "ERROR" "$(get_severity "php-eval-injection" "CRITICAL")" "Dangerous eval() usage in PHP" "php-eval-injection" \
-  "-E eval[[:space:]]*\\("
-
-# Dynamic PHP include/require with variables (LFI/RFI risk)
-run_check "ERROR" "$(get_severity "php-dynamic-include" "CRITICAL")" "Dynamic PHP include/require with variables" "php-dynamic-include" \
-  "-E include(_once)?[[:space:]]+[^;]*\\$" \
-  "-E require(_once)?[[:space:]]+[^;]*\\$"
-
-# Shell command execution functions (shell_exec/exec/system/passthru)
-run_check "ERROR" "$(get_severity "php-shell-exec-functions" "CRITICAL")" "Shell command execution functions in PHP" "php-shell-exec-functions" \
-  "-E shell_exec[[:space:]]*\\(" \
-  "-E exec[[:space:]]*\\(" \
-  "-E system[[:space:]]*\\(" \
-  "-E passthru[[:space:]]*\\("
+# ============================================================================
+# MIGRATED TO JSON: php-eval-injection, php-dynamic-include,
+#                   php-shell-exec-functions, php-hardcoded-credentials
+# Pattern files: dist/patterns/php-*.json
+# Migrated: 2026-01-15 (v1.3.7-1.3.9)
+# Executed by: Simple Pattern Runner (lines 5132-5276)
+# ============================================================================
 
 # Insecure data deserialization
+# NOTE: Kept inline - no JSON file exists yet (TODO: migrate to JSON)
 run_check "ERROR" "$(get_severity "spo-003-insecure-deserialization" "CRITICAL")" "Insecure data deserialization" "spo-003-insecure-deserialization" \
 	  '-E unserialize[[:space:]]*\(\$_' \
 	  '-E base64_decode[[:space:]]*\(\$_' \
 	  '-E json_decode[[:space:]]*\(\$_' \
-	  '-E maybe_unserialize[[:space:]]*\(\$_' 
-	
-	# Direct file write with user-controlled path
-	run_check "ERROR" "$(get_severity "php-user-controlled-file-write" "CRITICAL")" "Direct file write with user-controlled path" "php-user-controlled-file-write" \
+	  '-E maybe_unserialize[[:space:]]*\(\$_'
+
+# Direct file write with user-controlled path
+# NOTE: Kept inline - JSON file exists (dist/patterns/php-user-controlled-file-write.json)
+#       but uses multi-pattern format that needs simple pattern runner enhancement
+run_check "ERROR" "$(get_severity "php-user-controlled-file-write" "CRITICAL")" "Direct file write with user-controlled path" "php-user-controlled-file-write" \
 	  '-E file_put_contents[[:space:]]*\([^,]*\$_(GET|POST|REQUEST|COOKIE|SERVER|FILES)' \
 	  '-E fopen[[:space:]]*\([^,]*\$_(GET|POST|REQUEST|COOKIE|SERVER|FILES)' \
 	  '-E move_uploaded_file[[:space:]]*\([^,]+,[^,]*\$_(GET|POST|REQUEST|COOKIE|SERVER)'
-
-# Hardcoded credentials in PHP
-run_check "ERROR" "$(get_severity "php-hardcoded-credentials" "CRITICAL")" "Hardcoded credentials in PHP" "php-hardcoded-credentials" \
-  "-E \\$password[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$passwd[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$secret[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$token[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$api_key[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$apikey[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$auth_token[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$PASSWORD[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$PASSWD[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$SECRET[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$TOKEN[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$API_KEY[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \\$AUTH_TOKEN[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E define[[:space:]]*\\([[:space:]]*['\"][A-Z0-9_]*(SECRET|TOKEN|PASSWORD|KEY|API)[A-Z0-9_]*['\"][[:space:]]*,[[:space:]]*['\"][^'\"]{8,}['\"]" \
-  "-E \"Authorization\"[[:space:]]*=>[[:space:]]*\"Bearer[[:space:]]+[A-Za-z0-9._-]{16,}\"" 
 
 # Direct database queries without $wpdb->prepare() (SQL injection risk)
 # Note: This check requires custom implementation because we need to filter out lines
@@ -5078,20 +5107,25 @@ section_start "Magic String Detector"
 # These are basic grep-based checks migrated from inline run_check calls
 
 SIMPLE_PATTERNS=$(find "$REPO_ROOT/patterns" -maxdepth 1 -name "*.json" -type f 2>/dev/null | while read -r pattern_file; do
-  # Extract detection type from JSON (look for "type" field inside "detection" object)
+  # Extract detection_type from JSON (root level field, not nested detection.type)
+  # Check both detection_type (root) and detection.type (nested) for backward compatibility
   detection_type=$(python3 <<EOFPYTHON 2>/dev/null
 import json
 try:
     with open('$pattern_file', 'r') as f:
         data = json.load(f)
-        detection = data.get('detection', {})
-        print(detection.get('type', ''))
+        # Try root-level detection_type first (newer format)
+        dt = data.get('detection_type', '')
+        if not dt:
+            # Fall back to nested detection.type (older format)
+            dt = data.get('detection', {}).get('type', '')
+        print(dt)
 except:
     pass
 EOFPYTHON
 )
 
-  # Match both "simple" and "direct" (they're equivalent)
+  # Match "simple" and "direct" (they're equivalent for simple grep-based patterns)
   if [ "$detection_type" = "simple" ] || [ "$detection_type" = "direct" ]; then
     echo "$pattern_file"
   fi
@@ -5606,6 +5640,9 @@ if [ -n "$CLONE_PATTERNS" ]; then
     text_echo "${BLUE}  FUNCTION CLONE DETECTOR${NC}"
     text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     text_echo ""
+
+    # Mark that clone detection ran
+    CLONE_DETECTION_RAN=true
 
     # Debug: Log clone patterns found
     debug_echo "Clone detection patterns found: $(echo "$CLONE_PATTERNS" | wc -l | tr -d ' ') patterns"
