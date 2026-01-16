@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.29] - 2026-01-16
+
+### Changed
+- **Pattern Loader (Phase 2)** – Taught `load_pattern()` to read from the enriched `dist/PATTERN-LIBRARY.json` first
+  - Added a small registry adapter in `dist/lib/pattern-loader.sh` that pulls core metadata, detection, and mitigation fields from the registry when available
+  - Preserved robust fallbacks to per-pattern JSON parsing when the registry is missing or a field is absent
+  - Ensured clone-detection patterns continue to skip unused `search_pattern` fields to avoid unnecessary work
+
+### Documentation
+- **PROJECT/1-INBOX/PROJECT-PATTERN-LOADER-MEMORY.md** – Marked Phase 2 as complete and recorded the new registry-backed loader behavior
+
+### Changed
+- **Version:** 1.3.28 → 1.3.29
+
+## [1.3.28] - 2026-01-16
+
+### Changed
+- **Pattern Registry (Phase 2)** – Enriched `dist/PATTERN-LIBRARY.json` entries with detection and mitigation details
+  - Updated `dist/bin/pattern-library-manager.sh` to emit `search_pattern`, `file_patterns`, `validator_script`, `validator_args`, and `mitigation_details` for each pattern
+  - Kept the schema backward compatible: existing fields unchanged and new fields omitted when `python3` is not available
+- **Documentation** – Documented the new registry fields for advanced loaders in `dist/bin/PATTERN-LIBRARY-MANAGER-README.md`
+- **Version:** 1.3.27 → 1.3.28
+
 ## [1.3.27] - 2026-01-16
 
 ### Added

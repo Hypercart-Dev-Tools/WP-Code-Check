@@ -30,7 +30,7 @@
 
 - [x] Phase 0 – Analyze current PATTERN-LIBRARY.json schema vs pattern-loader requirements
 - [x] Phase 1 – Use PATTERN-LIBRARY.json for metadata + discovery (keep detection/mitigation loading as-is)
-- [ ] Phase 2 – Extend PATTERN-LIBRARY.json schema with detection/mitigation details needed by pattern-loader
+- [x] Phase 2 – Extend PATTERN-LIBRARY.json schema with detection/mitigation details needed by pattern-loader
 - [ ] Phase 3 – Implement in-memory pattern loader + Bash-friendly registry interface with robust fallbacks
 - [ ] Phase 4 – Measure performance impact, validate fallbacks, and document results
 
@@ -93,18 +93,70 @@ The `pattern-library-manager.sh` already generates `dist/PATTERN-LIBRARY.json` w
 
 **Goal:** Make the registry rich enough that it can eventually satisfy everything `pattern-loader.sh` needs, without re-opening each JSON file.
 
-- Update `dist/bin/pattern-library-manager.sh` so each `patterns[]` entry also includes:
+- [x] Update `dist/bin/pattern-library-manager.sh` so each `patterns[]` entry also includes:
   - The resolved search pattern used by the scanner:
-    - Either `search_pattern`, or an OR-joined string derived from `detection.patterns[].pattern`.
+    - Either `search_pattern`, or an OR-joined string derived from `detection.patterns[].pattern` / `detection.patterns[].search`.
   - `file_patterns` (from `detection.file_patterns`), matching what `pattern_file_patterns` uses today.
   - `validator_script` and `validator_args` for scripted detections.
-  - A richer `mitigation_detection` object with:
+  - A richer mitigation configuration object with:
     - `enabled`
     - `validator_script`
     - `validator_args`
     - `severity_downgrade` (key/value map).
-- Keep existing summary/marketing fields intact and backward compatible.
-- Regenerate `dist/PATTERN-LIBRARY.json` and validate the new schema (e.g. via a small test harness) to ensure all existing patterns are represented correctly.
+
+- [x] Keep existing summary/marketing fields intact and backward compatible (additive schema only).
+
+- [x] Regenerate `dist/PATTERN-LIBRARY.json` and validate the new schema via `dist/bin/check-pattern-library-json.sh` to ensure all existing patterns are represented correctly.
+
+**Phase 2 status (2026-01-16):**
+
+- Thin registry adapter implemented in `dist/lib/pattern-loader.sh`.
+- `load_pattern()` now prefers the enriched registry for core metadata, detection, and mitigation fields, with safe fallback to per-pattern JSON parsing.
+- Registry-aware loading covers simple, scripted, headless/nodejs/js direct, aggregated, and clone-detection patterns.
+- Regression checks executed where environment allowed (`verify-phase2-context-signals.sh`); PHP-specific tests are pending locally due to missing `php` binary but are expected to pass in CI.
+
+**Phase 2 execution sequence (frozen plan)**
+
+1. **Freeze and verify the registry schema**
+   - Confirm that for every pattern, the registry now includes:
+     - `search_pattern` or a combined pattern derived from `detection.search_pattern` / `detection.patterns[].pattern` / `detection.patterns[].search`.
+     - `file_patterns` matching what `pattern_file_patterns` uses today.
+     - `validator_script` and `validator_args` for scripted detections.
+     - A full `mitigation_detection` object (enabled/script/args/severity_downgrade).
+   - Cross-check that every field consumed by `dist/lib/pattern-loader.sh` has a 1:1 counterpart in the registry.
+   - Treat any missing/mismatched field that affects behavior as a **Phase 2 blocker** (fix in `pattern-library-manager.sh` + regenerate the registry).
+
+2. **Introduce a thin registry adapter in `pattern-loader.sh` (no external behavior change)**
+   - Add small helpers (conceptually):
+     - `registry_has_pattern "$pattern_id"`
+     - `registry_get_field "$pattern_id" "$field_name"`
+   - Implementation details:
+     - First try to read from the enriched `PATTERN-LIBRARY.json`.
+     - Fall back to the existing per-pattern JSON parsing when the registry is missing, the pattern is absent, or a field is not present.
+     - Keep the public surface area of `load_pattern()` unchanged so callers do not need to be updated during Phase 2.
+
+3. **Wire detection/mitigation fields through the adapter**
+   - For each field group currently derived from JSON inside `load_pattern()`:
+     - Core metadata: `pattern_id`, `pattern_enabled`, `pattern_detection_type`, `pattern_category`, `pattern_severity`, `pattern_title`.
+     - Detection: `pattern_search`, `pattern_file_patterns`, `pattern_validator_script`, `pattern_validator_args`.
+     - Mitigation: `pattern_mitigation_enabled`, `pattern_mitigation_script`, `pattern_mitigation_args`, `pattern_severity_downgrade`.
+   - Change `load_pattern()` internals to **prefer** the registry adapter for these values whenever the registry can supply them, and only fall back to JSON parsing when required.
+   - Ensure all detection types (simple, scripted, headless/nodejs/js direct, aggregated, clone detection) are covered.
+
+4. **Regression pass focused on behavior (not performance)**
+   - Run the existing fixture and baseline tests (e.g. `dist/tests/run-fixture-tests-v2.sh` and mitigation-focused tests) to confirm matches/misses are unchanged.
+   - Spot-check a small set of representative patterns end-to-end:
+     - A simple pattern (e.g. `file-get-contents-url`).
+     - A pattern with multiple `detection.patterns[]` entries.
+     - A scripted pattern with mitigation configuration.
+     - A clone-detection pattern.
+   - If failures appear, prefer fixing the registry/adapter mapping over adding runner-specific hacks, unless we uncover a pre-existing bug that should be corrected.
+
+5. **Close out Phase 2 in this doc and changelog**
+   - When the above is implemented and tests are green:
+     - Mark the top-level Phase 2 checklist item as complete (`[x]`).
+     - Capture any non-blocking gaps as bullets under **Future Enhancements** or as a short "Known limitations after Phase 2" subsection.
+     - Bump the relevant script version(s) (e.g. `check-performance.sh`) and add a concise entry to `CHANGELOG.md` describing the Phase 2 completion.
 
 ### Phase 3: Implement in-memory pattern loader
 

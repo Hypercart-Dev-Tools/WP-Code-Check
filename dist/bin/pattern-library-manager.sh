@@ -66,13 +66,132 @@ has_mitigation_detection() {
 
 # Check if pattern is heuristic (MEDIUM or LOW severity, or has "heuristic" in description)
 is_heuristic() {
-  local severity="$1"
-  local description="$2"
-  if [[ "$severity" == "MEDIUM" || "$severity" == "LOW" ]] || echo "$description" | grep -qi "heuristic"; then
-    echo "true"
-  else
-    echo "false"
-  fi
+	local severity="$1"
+	local description="$2"
+	if [[ "$severity" == "MEDIUM" || "$severity" == "LOW" ]] || echo "$description" | grep -qi "heuristic"; then
+		echo "true"
+	else
+		echo "false"
+	fi
+}
+
+# Build detection and mitigation fields for registry entries (Phase 2)
+#
+# This mirrors the semantics in dist/lib/pattern-loader.sh so the registry can
+# eventually satisfy all loader needs without re-opening pattern JSON files.
+# The output is a comma-prefixed JSON snippet suitable for embedding inside the
+# per-pattern object. On older systems without python3, this function returns
+# an empty string so the schema remains backward compatible.
+build_detection_and_mitigation_json() {
+	local pattern_file="$1"
+
+	# Enriched schema requires python3; skip gracefully if unavailable.
+	if ! command -v python3 &> /dev/null; then
+		echo ""
+		return 0
+	fi
+
+	PATTERN_FILE="$pattern_file" python3 <<'EOFPY'
+import json
+import os
+import sys
+
+path = os.environ.get("PATTERN_FILE")
+if not path:
+    sys.exit(0)
+
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+except Exception:
+    # Keep registry generation robust: on any error, omit extra fields
+    sys.exit(0)
+
+detection = data.get("detection") or {}
+mitigation = data.get("mitigation_detection") or {}
+
+# Compute search_pattern (mirrors dist/lib/pattern-loader.sh)
+search_pattern = None
+if "search_pattern" in detection:
+    search_pattern = detection["search_pattern"]
+else:
+    patterns_list = detection.get("patterns")
+    if isinstance(patterns_list, list):
+        collected = []
+        for p in patterns_list:
+            if not isinstance(p, dict):
+                continue
+            val = p.get("pattern") or p.get("search")
+            if val:
+                collected.append(str(val))
+        if collected:
+            search_pattern = "|".join(collected)
+
+# File patterns (default to PHP for backward compatibility)
+file_patterns = detection.get("file_patterns") or ["*.php"]
+if isinstance(file_patterns, (str, int, float, bool)):
+    file_patterns = [str(file_patterns)]
+elif isinstance(file_patterns, list):
+    file_patterns = [str(x) for x in file_patterns]
+else:
+    file_patterns = ["*.php"]
+
+# Scripted validator configuration
+validator_script = detection.get("validator_script") or ""
+validator_args = detection.get("validator_args") or []
+if isinstance(validator_args, (str, int, float, bool)):
+    validator_args = [str(validator_args)]
+elif isinstance(validator_args, list):
+    validator_args = [str(a) for a in validator_args]
+else:
+    validator_args = []
+
+# Mitigation details
+enabled = bool(mitigation.get("enabled", False))
+m_script = mitigation.get("validator_script") or ""
+m_args = mitigation.get("validator_args") or []
+if isinstance(m_args, (str, int, float, bool)):
+    m_args = [str(m_args)]
+elif isinstance(m_args, list):
+    m_args = [str(a) for a in m_args]
+else:
+    m_args = []
+
+severity_downgrade = mitigation.get("severity_downgrade") or {}
+if not isinstance(severity_downgrade, dict):
+    severity_downgrade = {}
+
+extra = {}
+
+if search_pattern is not None:
+    extra["search_pattern"] = search_pattern
+
+# Always include file_patterns to keep behavior predictable
+extra["file_patterns"] = file_patterns
+
+if validator_script or validator_args:
+    extra["validator_script"] = validator_script
+    extra["validator_args"] = validator_args
+
+if enabled or m_script or m_args or severity_downgrade:
+    extra["mitigation_details"] = {
+        "enabled": enabled,
+        "script": m_script,
+        "args": m_args,
+        "severity_downgrade": severity_downgrade,
+    }
+
+if not extra:
+    sys.exit(0)
+
+# Emit as comma-prefixed JSON snippet for embedding into existing object
+items = list(extra.items())
+lines = [","]
+for idx, (key, value) in enumerate(items):
+    suffix = "," if idx < len(items) - 1 else ""
+    lines.append('  "%s": %s%s' % (key, json.dumps(value, ensure_ascii=False), suffix))
+sys.stdout.write("\n".join(lines))
+EOFPY
 }
 
 # ============================================================================
@@ -175,35 +294,38 @@ while IFS= read -r pattern_file; do
   fi
   
   # Category tracking (simple string-based for bash 3 compatibility)
-  if [ -n "$category" ]; then
-    if ! echo "$category_list" | grep -q "^$category:"; then
-      category_list+="$category:1"$'\n'
-    else
-      # Increment count (use awk to avoid arithmetic errors with category names)
-      old_count=$(echo "$category_list" | grep "^$category:" | cut -d: -f2)
-      new_count=$(echo "$old_count" | awk '{print $1 + 1}')
-      category_list=$(echo "$category_list" | sed "s/^$category:.*/$category:$new_count/")
-    fi
-  fi
-  
-  # Store pattern data for JSON output
-  patterns_data+=("$(cat <<EOF
+	  if [ -n "$category" ]; then
+	    if ! echo "$category_list" | grep -q "^$category:"; then
+	      category_list+="$category:1"$'\n'
+	    else
+	      # Increment count (use awk to avoid arithmetic errors with category names)
+	      old_count=$(echo "$category_list" | grep "^$category:" | cut -d: -f2)
+	      new_count=$(echo "$old_count" | awk '{print $1 + 1}')
+	      category_list=$(echo "$category_list" | sed "s/^$category:.*/$category:$new_count/")
+	    fi
+	  fi
+	  
+	  # Build detection/mitigation fields for registry consumers (Phase 2)
+	  extra_fields=$(build_detection_and_mitigation_json "$pattern_file")
+
+	  # Store pattern data for JSON output
+	  patterns_data+=("$(cat <<EOF
 {
-  "id": "$id",
-  "version": "$version",
-  "enabled": $enabled,
-  "category": "$category",
-  "severity": "$severity",
-  "title": "$title",
-  "description": "$description",
-  "detection_type": "$detection_type",
-  "pattern_type": "$pattern_type",
-  "mitigation_detection": $has_mitigation,
-  "heuristic": $is_heuristic_pattern,
-  "file": "$(basename "$pattern_file")"
+	"id": "$id",
+	"version": "$version",
+	"enabled": $enabled,
+	"category": "$category",
+	"severity": "$severity",
+	"title": "$title",
+	"description": "$description",
+	"detection_type": "$detection_type",
+	"pattern_type": "$pattern_type",
+	"mitigation_detection": $has_mitigation,
+	"heuristic": $is_heuristic_pattern,
+	"file": "$(basename "$pattern_file")"$extra_fields
 }
 EOF
-)")
+	)")
   
 done < <(find "$PATTERNS_DIR" -name "*.json" -type f | sort)
 
