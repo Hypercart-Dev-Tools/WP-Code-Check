@@ -1,10 +1,10 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-15T16:37:17Z",
+  "generated": "2026-01-16T05:04:20Z",
   "summary": {
     "total_patterns": 52,
-    "enabled": 48,
-    "disabled": 4,
+    "enabled": 52,
+    "disabled": 0,
     "by_severity": {
       "CRITICAL": 19,
       "HIGH": 16,
@@ -55,8 +55,8 @@
 },
 {
   "id": "asset-version-time",
-  "version": "",
-  "enabled": ,
+  "version": "1.0.0",
+  "enabled": true,
   "category": "Performance",
   "severity": "MEDIUM",
   "title": "Script/style versioning with time()",
@@ -70,7 +70,7 @@
 {
   "id": "disallowed-php-short-tags",
   "version": "",
-  "enabled": ,
+  "enabled": true,
   "category": "KISS",
   "severity": "MEDIUM",
   "title": "Disallowed PHP short tags",
@@ -140,7 +140,7 @@
 {
   "id": "file-get-contents-url",
   "version": "",
-  "enabled": ,
+  "enabled": true,
   "category": "Performance",
   "severity": "HIGH",
   "title": "file_get_contents() with external URLs",
@@ -448,7 +448,7 @@
 {
   "id": "php-shell-exec-functions",
   "version": "",
-  "enabled": ,
+  "enabled": true,
   "category": "security",
   "severity": "CRITICAL",
   "title": "Shell command execution functions in PHP (shell_exec/exec/system/passthru)",

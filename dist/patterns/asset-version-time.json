@@ -1,9 +1,11 @@
 {
   "id": "asset-version-time",
-  "title": "Script/style versioning with time()",
-  "description": "Using time() as the version parameter for wp_enqueue_script() or wp_enqueue_style() prevents browser caching and forces re-download on every page load, significantly impacting performance.",
-  "severity": "MEDIUM",
-  "category": "Performance",
+	  "version": "1.0.0",
+	  "enabled": true,
+	  "title": "Script/style versioning with time()",
+	  "description": "Using time() as the version parameter for wp_enqueue_script() or wp_enqueue_style() prevents browser caching and forces re-download on every page load, significantly impacting performance.",
+	  "severity": "MEDIUM",
+	  "category": "Performance",
   "detection": {
     "type": "simple",
     "search_pattern": "wp_(register|enqueue)_(script|style)[[:space:]]*\\([^)]*,[[:space:]]*time[[:space:]]*\\(",

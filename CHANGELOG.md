@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.27] - 2026-01-16
+
+### Added
+- **Regression Check** – Tiny bash helper to validate `dist/PATTERN-LIBRARY.json` is valid JSON
+  - Added `dist/bin/check-pattern-library-json.sh` to run `python3 -m json.tool` against the registry
+  - Intended for CI or local sanity checks whenever the pattern library is regenerated
+
+### Changed
+- **Version:** 1.3.26 → 1.3.27
+
+## [1.3.26] - 2026-01-16
+
+### Fixed
+- **Pattern Library Registry** – Ensure `enabled` defaults correctly for legacy patterns
+  - Updated `dist/bin/pattern-library-manager.sh` to treat missing `enabled` fields as `true` when generating `PATTERN-LIBRARY.json`
+  - Fixes invalid JSON in `PATTERN-LIBRARY.json` for the `disallowed-php-short-tags` pattern where `"enabled": ,` was emitted
+  - Keeps the registry consumable by Python tooling and the registry-based pattern loader
+
+### Changed
+- **Version:** 1.3.25 → 1.3.26
+
+## [1.3.25] - 2026-01-16
+
+### Fixed
+- **Pattern Library** – Fixed invalid JSON in `PATTERN-LIBRARY.json` caused by missing metadata on the `asset-version-time` pattern
+  - Added `version` and `enabled` fields to `dist/patterns/asset-version-time.json`
+  - Ensures `pattern-library-manager.sh` always emits valid JSON when all required fields are present in pattern files
+  - Prevents Python-based tooling from failing with `JSONDecodeError` when reading the pattern library
+- **Fixture JSON Tests** – Hardened JSON format and baseline behavior tests
+  - JSON tests now strip any non-JSON noise before the first `{` while still enforcing required fields
+  - Keeps the contract that `--format json --no-log` returns a single valid JSON document for parsing
+
+### Changed
+- **Version:** 1.3.24 → 1.3.25
+
+## [1.3.24] - 2026-01-16
+
+### Changed
+- **Pattern Discovery** – Phase 1 registry integration
+  - Added registry-aware discovery helper that reads `dist/PATTERN-LIBRARY.json` when available
+  - Simple, scripted, direct, aggregated, and clone detection runners now prefer the registry for pattern lists
+  - Automatically fall back to legacy `find` + `grep` discovery when the registry is missing or invalid
+- **Version:** 1.3.23 → 1.3.24
+
 ## [1.3.23] - 2026-01-15
 
 ### Fixed

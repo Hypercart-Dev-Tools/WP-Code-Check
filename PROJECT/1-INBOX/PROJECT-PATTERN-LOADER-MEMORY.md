@@ -1,7 +1,7 @@
 # Pattern Loader Memory Optimization
 
 **Created:** 2026-01-15  
-**Status:** Not Started  
+**Status:** In Progress  
 **Priority:** Medium  
 **Estimated Impact:** 6-12x faster pattern loading (600-1200ms → 50-100ms)
 
@@ -29,7 +29,7 @@
 > Note for LLMs: Continuously update this checklist as work progresses (design, implementation, and testing) so humans can see high-level status without scrolling.
 
 - [x] Phase 0 – Analyze current PATTERN-LIBRARY.json schema vs pattern-loader requirements
-- [ ] Phase 1 – Use PATTERN-LIBRARY.json for metadata + discovery (keep detection/mitigation loading as-is)
+- [x] Phase 1 – Use PATTERN-LIBRARY.json for metadata + discovery (keep detection/mitigation loading as-is)
 - [ ] Phase 2 – Extend PATTERN-LIBRARY.json schema with detection/mitigation details needed by pattern-loader
 - [ ] Phase 3 – Implement in-memory pattern loader + Bash-friendly registry interface with robust fallbacks
 - [ ] Phase 4 – Measure performance impact, validate fallbacks, and document results
@@ -77,13 +77,17 @@ The `pattern-library-manager.sh` already generates `dist/PATTERN-LIBRARY.json` w
   - Which patterns exist (`id`, `file`).
   - Which patterns are enabled/disabled.
   - Core metadata: category, severity, title, pattern_type, heuristic flag, mitigation flag.
-- Add a small helper (likely Python) that:
-  - Reads `dist/PATTERN-LIBRARY.json`.
-  - Emits a Bash-friendly structure (e.g. lines of `id=<id> enabled=<bool> severity=<...> file=<...> ...`).
-- In `dist/bin/check-performance.sh`:
-  - Replace repeated `find` + `grep`-based discovery loops with queries against this registry data.
-  - Use registry metadata (title, severity, category, etc.) when composing findings.
-  - Continue to call `load_pattern` against individual pattern JSON files **only when detection details are required** (search patterns, file globs, validators, mitigation behavior).
+- Implement registry-based discovery in `dist/bin/check-performance.sh` via `get_patterns_from_registry()`:
+  - Reads `dist/PATTERN-LIBRARY.json` once per scan using Python.
+  - Filters by `detection_type`, `pattern_type`, and `enabled` flag.
+  - Maps each entry to the correct file path under `dist/patterns/` (including `headless/`, `nodejs/`, `js/`).
+  - Returns pattern file lists for simple, scripted, direct, aggregated, and clone-detection runners.
+- Keep `dist/lib/pattern-loader.sh` responsible for loading detection/mitigation details from individual JSON files on demand.
+
+**Phase 1 status (2026-01-16):**
+
+- Registry-based discovery is implemented and enabled by default when `dist/PATTERN-LIBRARY.json` and `python3` are available.
+- All major runners (simple, scripted, headless/nodejs/js direct, aggregated, clone detection) now prefer the registry and fall back to legacy `find`-based discovery only when the registry is missing or unreadable.
 
 ### Phase 2: Extend PATTERN-LIBRARY.json schema with detection/mitigation details
 
@@ -266,7 +270,7 @@ fi
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Stale registry | Incorrect pattern metadata | Check file timestamps, regenerate if stale |
-| Registry corruption | Scan fails | Validate JSON before loading, fallback on error |
+| Registry corruption | Scan fails | Validate JSON before loading (e.g. `dist/bin/check-pattern-library-json.sh`), fallback on error |
 | Memory usage | Bash variable limits | Use temp file instead of env vars if needed |
 | Bash 3 compatibility | Breaks on older systems | Use simple key-value format, no associative arrays |
 

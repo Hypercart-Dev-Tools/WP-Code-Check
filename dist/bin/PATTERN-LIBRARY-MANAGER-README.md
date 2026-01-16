@@ -210,6 +210,12 @@ Edit `dist/bin/pattern-library-manager.sh`:
 
 ---
 
+## ✅ Verification
+
+To validate the registry JSON, run `dist/bin/check-pattern-library-json.sh` to ensure `dist/PATTERN-LIBRARY.json` is valid JSON.
+
+---
+
 ## 🚨 Troubleshooting
 
 ### Script Fails Silently
@@ -234,7 +240,7 @@ If patterns are missing from the registry:
 
 ---
 
-**Last Updated:** 2026-01-07  
+**Last Updated:** 2026-01-16  
 **Version:** 1.0.0  
 **Author:** Pattern Library Manager
 

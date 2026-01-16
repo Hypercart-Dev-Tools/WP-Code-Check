@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check - Fixture Validation Tests
-# Version: 1.0.81
+# Version: 1.0.82
 #
 # Runs check-performance.sh against test fixtures and validates expected counts.
 # This prevents regressions when modifying detection patterns.
@@ -372,9 +372,12 @@ echo -e "${BLUE}▸ Testing: JSON output format${NC}"
 ((TESTS_RUN++))
 
 # Run with JSON format and validate with shell parsing (no jq dependency)
-JSON_OUTPUT=$("$BIN_DIR/check-performance.sh" --format json --paths "$FIXTURES_DIR/antipatterns.php" --no-log 2>&1)
+JSON_OUTPUT_RAW=$("$BIN_DIR/check-performance.sh" --format json --paths "$FIXTURES_DIR/antipatterns.php" --no-log 2>&1)
 
-# Check if output starts with {
+# Extract JSON payload starting from the first line that looks like JSON
+JSON_OUTPUT=$(printf '%s\n' "$JSON_OUTPUT_RAW" | awk 'BEGIN{found=0} {if(!found && $0 ~ /^[[:space:]]*\{/){found=1} if(found) print}')
+
+# Check if extracted payload starts with {
 if [[ "$JSON_OUTPUT" == "{"* ]]; then
   # Basic JSON structure validation
   if echo "$JSON_OUTPUT" | grep -q '"version"' && \
@@ -396,7 +399,7 @@ if [[ "$JSON_OUTPUT" == "{"* ]]; then
   fi
 else
   echo -e "  ${RED}✗ FAILED${NC} - Output is not valid JSON (doesn't start with {)"
-  echo "  Output preview: ${JSON_OUTPUT:0:100}..."
+  echo "  Output preview: ${JSON_OUTPUT_RAW:0:100}..."
   ((TESTS_FAILED++))
 fi
 
@@ -419,10 +422,13 @@ cat > "$BASELINE_FILE" << 'EOF'
 ./tests/fixtures/antipatterns.php:210:wpdb-query-no-prepare
 EOF
 
-JSON_BASELINE_OUTPUT=$("$BIN_DIR/check-performance.sh" --format json --paths "$FIXTURES_DIR/antipatterns.php" --baseline "$BASELINE_FILE" --no-log 2>&1)
+JSON_BASELINE_OUTPUT_RAW=$("$BIN_DIR/check-performance.sh" --format json --paths "$FIXTURES_DIR/antipatterns.php" --baseline "$BASELINE_FILE" --no-log 2>&1)
 
 # Clean up baseline file after test
 rm -f "$BASELINE_FILE"
+
+# Extract JSON payload (strip any non-JSON noise before the first '{')
+JSON_BASELINE_OUTPUT=$(printf '%s\n' "$JSON_BASELINE_OUTPUT_RAW" | awk 'BEGIN{found=0} {if(!found && $0 ~ /^[[:space:]]*\{/){found=1} if(found) print}')
 
 if [[ "$JSON_BASELINE_OUTPUT" == "{"* ]]; then
   # Use grep-based parsing (no jq dependency)
@@ -441,7 +447,7 @@ if [[ "$JSON_BASELINE_OUTPUT" == "{"* ]]; then
   fi
 else
   echo -e "  ${RED}✗ FAILED${NC} - Baseline JSON output is not valid JSON (doesn't start with {)"
-  echo "  Output preview: ${JSON_BASELINE_OUTPUT:0:100}..."
+	  echo "  Output preview: ${JSON_BASELINE_OUTPUT_RAW:0:100}..."
   ((TESTS_FAILED++))
 fi
 

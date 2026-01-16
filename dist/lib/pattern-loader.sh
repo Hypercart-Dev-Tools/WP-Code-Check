@@ -33,10 +33,13 @@ load_pattern() {
   pattern_severity=$(grep '"severity"' "$pattern_file" | head -1 | sed 's/.*"severity"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
   pattern_title=$(grep '"title"' "$pattern_file" | head -1 | sed 's/.*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
 
-  # Extract search_pattern using Python for reliable JSON parsing
-  # Supports both single search_pattern and patterns array
-  if command -v python3 &> /dev/null; then
-    pattern_search=$(python3 <<EOFPYTHON 2>/dev/null
+	  # Extract search patterns using Python for reliable JSON parsing.
+	  # Supports:
+	  # - detection.search_pattern (single pattern, legacy format)
+	  # - detection.patterns[]."pattern" (new format)
+	  # - detection.patterns[]."search" (backward-compatible alias used by some rules)
+	  if command -v python3 &> /dev/null; then
+	    pattern_search=$(python3 <<EOFPYTHON 2>/dev/null
 import json
 import sys
 try:
@@ -44,26 +47,35 @@ try:
         data = json.load(f)
         detection = data.get('detection', {})
 
-        # Check for single search_pattern first (backward compatibility)
+        # 1) Single search_pattern field (legacy/simple rules)
         if 'search_pattern' in detection:
             print(detection['search_pattern'])
-        # Then check for patterns array (new format for multi-pattern rules)
+        # 2) patterns array (multi-pattern rules)
         elif 'patterns' in detection and isinstance(detection['patterns'], list):
-            # Combine all patterns with OR (|)
-            patterns = [p.get('pattern', '') for p in detection['patterns'] if 'pattern' in p]
+            patterns = []
+            for p in detection['patterns']:
+                # Prefer explicit "pattern" key, fall back to "search" for
+                # older/simple definitions like file-get-contents-url.json
+                val = p.get('pattern') or p.get('search')
+                if val:
+                    patterns.append(val)
+
             if patterns:
                 # Join patterns with | for grep -E
                 print('|'.join(patterns))
+            else:
+                sys.stderr.write('No usable patterns (pattern/search) found in patterns[]\\n')
+                sys.exit(1)
         else:
-            sys.stderr.write('No search_pattern or patterns found\\n')
+            sys.stderr.write('No search_pattern or patterns[] found in detection\\n')
             sys.exit(1)
 except Exception as e:
     sys.stderr.write(str(e) + '\\n')
     sys.exit(1)
 EOFPYTHON
-)
-  elif command -v python &> /dev/null; then
-    pattern_search=$(python <<EOFPYTHON 2>/dev/null
+	)
+	  elif command -v python &> /dev/null; then
+	    pattern_search=$(python <<EOFPYTHON 2>/dev/null
 import json
 import sys
 try:
@@ -74,21 +86,29 @@ try:
         if 'search_pattern' in detection:
             print detection['search_pattern']
         elif 'patterns' in detection and isinstance(detection['patterns'], list):
-            patterns = [p.get('pattern', '') for p in detection['patterns'] if 'pattern' in p]
+            patterns = []
+            for p in detection['patterns']:
+                val = p.get('pattern') or p.get('search')
+                if val:
+                    patterns.append(val)
+
             if patterns:
                 print '|'.join(patterns)
+            else:
+                print >> sys.stderr, 'No usable patterns (pattern/search) found in patterns[]'
+                sys.exit(1)
         else:
-            print >> sys.stderr, 'No search_pattern or patterns found'
+            print >> sys.stderr, 'No search_pattern or patterns[] found in detection'
             sys.exit(1)
 except Exception as e:
     print >> sys.stderr, str(e)
     sys.exit(1)
 EOFPYTHON
-)
-  else
-    # Fallback to grep/sed (less reliable for complex patterns)
-    pattern_search=$(grep '"search_pattern"' "$pattern_file" | head -1 | cut -d'"' -f4 | sed 's/\\\\/\\/g')
-  fi
+	)
+	  else
+	    # Fallback to grep/sed (less reliable for complex patterns)
+	    pattern_search=$(grep '"search_pattern"' "$pattern_file" | head -1 | cut -d'"' -f4 | sed 's/\\\\/\\/g')
+	  fi
 
   # Default to "direct" if not specified (backward compatibility)
   if [ -z "$pattern_detection_type" ]; then

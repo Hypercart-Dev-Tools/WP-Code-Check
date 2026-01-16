@@ -112,8 +112,14 @@ while IFS= read -r pattern_file; do
   id=$(get_json_field "$pattern_file" "id")
   [ -z "$id" ] && continue  # Skip if no ID
 
-  version=$(get_json_field "$pattern_file" "version")
-  enabled=$(get_json_field "$pattern_file" "enabled")
+	  version=$(get_json_field "$pattern_file" "version")
+	  enabled=$(get_json_field "$pattern_file" "enabled")
+	  # Default to enabled when field is missing for backward compatibility.
+	  # Older pattern JSON files omit the "enabled" field entirely and should
+	  # be treated as enabled by default in the canonical registry.
+	  if [ -z "$enabled" ]; then
+	    enabled="true"
+	  fi
   category=$(get_json_field "$pattern_file" "category")
   severity=$(get_json_field "$pattern_file" "severity")
   title=$(get_json_field "$pattern_file" "title")
@@ -210,8 +216,8 @@ echo "✓ Found $total_patterns patterns"
 if [[ "$OUTPUT_FORMAT" == "json" || "$OUTPUT_FORMAT" == "both" ]]; then
   echo "📝 Generating JSON registry..."
   
-  # Build patterns array
-  patterns_json=$(printf "%s,\n" "${patterns_data[@]}" | sed '$ s/,$//')
+	  # Build patterns array
+	  patterns_json=$(printf "%s,\n" "${patterns_data[@]}" | sed '$ s/,$//')
 
   # Build category breakdown from string list
   category_json=""
