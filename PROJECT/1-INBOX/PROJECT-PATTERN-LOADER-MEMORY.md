@@ -7,6 +7,35 @@
 
 ---
 
+## Table of Contents
+
+1. [Overview](#pattern-loader-memory-optimization)
+2. [Phase Checklist](#phase-checklist)
+3. [Problem Statement](#problem-statement)
+4. [Proposed Solution](#proposed-solution)
+5. [Implementation Plan](#implementation-plan)
+6. [Registry vs Loader Field Mapping](#registry-vs-loader-field-mapping)
+7. [Performance Expectations](#performance-expectations)
+8. [Fallback Strategy](#fallback-strategy)
+9. [Acceptance Criteria](#acceptance-criteria)
+10. [Testing Plan](#testing-plan)
+11. [Risks & Mitigations](#risks--mitigations)
+12. [Future Enhancements](#future-enhancements)
+
+---
+
+## Phase Checklist
+
+> Note for LLMs: Continuously update this checklist as work progresses (design, implementation, and testing) so humans can see high-level status without scrolling.
+
+- [x] Phase 0 – Analyze current PATTERN-LIBRARY.json schema vs pattern-loader requirements
+- [ ] Phase 1 – Use PATTERN-LIBRARY.json for metadata + discovery (keep detection/mitigation loading as-is)
+- [ ] Phase 2 – Extend PATTERN-LIBRARY.json schema with detection/mitigation details needed by pattern-loader
+- [ ] Phase 3 – Implement in-memory pattern loader + Bash-friendly registry interface with robust fallbacks
+- [ ] Phase 4 – Measure performance impact, validate fallbacks, and document results
+
+---
+
 ## Problem Statement
 
 The scanner currently loads and parses pattern JSON files multiple times during each scan:
@@ -26,105 +55,148 @@ Load all patterns into memory **once** at scan startup, then access pre-loaded d
 
 ### Approach: Leverage Existing PATTERN-LIBRARY.json
 
-The `pattern-library-manager.sh` already generates `dist/PATTERN-LIBRARY.json` with complete pattern metadata after each scan. We can use this as a pre-computed pattern registry.
+The `pattern-library-manager.sh` already generates `dist/PATTERN-LIBRARY.json` with complete **core metadata** after each scan. We can use this as a pre-computed pattern registry and extend it as needed.
 
 **Benefits:**
 - ✅ Already exists - no new data structure needed
-- ✅ Pre-computed - all metadata already extracted
-- ✅ Complete - includes all fields (id, severity, search_pattern, file_patterns, etc.)
+- ✅ Pre-computed - all core metadata already extracted (id, enabled, category, severity, title, pattern_type, heuristic flag, mitigation flag, etc.)
+- ✅ Extensible - detection/mitigation details can be added in a backward-compatible way
 - ✅ Auto-updated - regenerated after each scan
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Create Pattern Registry Loader (Python)
+> Phase 0 (analysis) is captured in the **Registry vs Loader Field Mapping** section below and is already complete.
 
-**File:** `dist/bin/lib/load-pattern-registry.py`
+### Phase 1: Use PATTERN-LIBRARY.json for metadata and discovery
 
-**Functionality:**
-- Read `dist/PATTERN-LIBRARY.json`
-- Parse all pattern metadata
-- Export to Bash-friendly format (temp file with key-value pairs)
-- Support fallback to individual file parsing if registry missing
+**Goal:** Reduce repeated `find`/`grep` work and duplicated metadata parsing, without changing how detection/mitigation details are loaded.
 
-**Output format options:**
-1. **Temp file with sourcing:** `PATTERN_<ID>_<FIELD>=value` (Bash 3 compatible)
-2. **JSON temp file:** Single file with all patterns, parsed once with jq/Python
-3. **Associative arrays:** For Bash 4+ environments
+- Treat `dist/PATTERN-LIBRARY.json` as the single source of truth for:
+  - Which patterns exist (`id`, `file`).
+  - Which patterns are enabled/disabled.
+  - Core metadata: category, severity, title, pattern_type, heuristic flag, mitigation flag.
+- Add a small helper (likely Python) that:
+  - Reads `dist/PATTERN-LIBRARY.json`.
+  - Emits a Bash-friendly structure (e.g. lines of `id=<id> enabled=<bool> severity=<...> file=<...> ...`).
+- In `dist/bin/check-performance.sh`:
+  - Replace repeated `find` + `grep`-based discovery loops with queries against this registry data.
+  - Use registry metadata (title, severity, category, etc.) when composing findings.
+  - Continue to call `load_pattern` against individual pattern JSON files **only when detection details are required** (search patterns, file globs, validators, mitigation behavior).
 
-### Phase 2: Modify Scanner Startup
+### Phase 2: Extend PATTERN-LIBRARY.json schema with detection/mitigation details
 
-**Location:** `dist/bin/check-performance.sh` (before pattern discovery)
+**Goal:** Make the registry rich enough that it can eventually satisfy everything `pattern-loader.sh` needs, without re-opening each JSON file.
 
-**Changes:**
-```bash
-# Early in script (after REPO_ROOT is set)
-section_start "PATTERN_REGISTRY_LOAD"
+- Update `dist/bin/pattern-library-manager.sh` so each `patterns[]` entry also includes:
+  - The resolved search pattern used by the scanner:
+    - Either `search_pattern`, or an OR-joined string derived from `detection.patterns[].pattern`.
+  - `file_patterns` (from `detection.file_patterns`), matching what `pattern_file_patterns` uses today.
+  - `validator_script` and `validator_args` for scripted detections.
+  - A richer `mitigation_detection` object with:
+    - `enabled`
+    - `validator_script`
+    - `validator_args`
+    - `severity_downgrade` (key/value map).
+- Keep existing summary/marketing fields intact and backward compatible.
+- Regenerate `dist/PATTERN-LIBRARY.json` and validate the new schema (e.g. via a small test harness) to ensure all existing patterns are represented correctly.
 
-# Check if pre-generated registry exists
-if [ -f "$REPO_ROOT/PATTERN-LIBRARY.json" ]; then
-  # Load all patterns into memory
-  PATTERN_REGISTRY_FILE=$(mktemp)
-  python3 "$SCRIPT_DIR/lib/load-pattern-registry.py" \
-    "$REPO_ROOT/PATTERN-LIBRARY.json" \
-    "$PATTERN_REGISTRY_FILE"
-  
-  # Source the registry (Bash 3 compatible)
-  source "$PATTERN_REGISTRY_FILE"
-  PATTERN_REGISTRY_LOADED=true
-else
-  # First run or registry missing - use fallback
-  PATTERN_REGISTRY_LOADED=false
-fi
+### Phase 3: Implement in-memory pattern loader
 
-section_end
-```
+**Goal:** Load all pattern metadata + detection/mitigation details once per scan, then avoid per-pattern JSON parsing and extra Python subprocesses during the hot path.
 
-### Phase 3: Replace Pattern Discovery Loops
+- Introduce `dist/bin/lib/load-pattern-registry.py` to:
+  - Read the enriched `dist/PATTERN-LIBRARY.json` (note: actual path is `dist/PATTERN-LIBRARY.json`, not repo root).
+  - Build an in-memory registry (in Python) and export it in a Bash 3–compatible way, for example:
+    - A temp file of `PATTERN_<ID>_<FIELD>=...` assignments that can be `source`d, **or**
+    - A compact JSON cache that follow-up helpers can query in a single Python process.
+- In `dist/bin/check-performance.sh`:
+  - Add an early `PATTERN_REGISTRY_LOAD` section (after `REPO_ROOT`/`SCRIPT_DIR` are set) that:
+    - Checks for `dist/PATTERN-LIBRARY.json`.
+    - Invokes `load-pattern-registry.py` and records `PATTERN_REGISTRY_LOADED=true/false`.
+    - Performs a robust staleness check (e.g. if any file under `patterns/` is newer than the registry, skip the registry and fall back to per-file parsing for that run).
+- In `dist/lib/pattern-loader.sh`:
+  - Update `load_pattern()` so that when `PATTERN_REGISTRY_LOADED=true`:
+    - It pulls `pattern_id`, `pattern_enabled`, `pattern_category`, `pattern_severity`, `pattern_title`, `pattern_search`, `pattern_file_patterns`, validator fields, and mitigation fields from the pre-loaded registry.
+    - It avoids re-opening the JSON file and avoids spawning additional Python subprocesses on the hot path.
+  - When `PATTERN_REGISTRY_LOADED=false` or a pattern is missing from the registry, fall back to the existing JSON/Python-based parsing logic.
+  - Ensure all Bash indirection is valid in Bash 3 (no associative arrays; use carefully constructed variable names or a small lookup helper instead).
 
-**Current (5 separate find operations):**
-```bash
-SIMPLE_PATTERNS=$(find "$REPO_ROOT/patterns" -maxdepth 1 -name "*.json" | while read -r pattern_file; do
-  detection_type=$(python3 <<EOFPYTHON ...)
-  if [ "$detection_type" = "simple" ]; then echo "$pattern_file"; fi
-done)
-```
+### Phase 4: Measure, harden, and document
 
-**Optimized (single registry lookup):**
-```bash
-if [ "$PATTERN_REGISTRY_LOADED" = "true" ]; then
-  # Get patterns from pre-loaded registry
-  SIMPLE_PATTERNS=$(get_patterns_by_type "simple")
-else
-  # Fallback to current approach
-  SIMPLE_PATTERNS=$(find "$REPO_ROOT/patterns" ...)
-fi
-```
+**Goal:** Confirm the performance wins and robustness, and make the behavior transparent to future maintainers.
 
-### Phase 4: Optimize load_pattern() Function
+- Use the existing profiling hooks (e.g. `PROFILE=1`) to measure:
+  - Pattern discovery time before vs after Phase 1.
+  - Pattern loading time before vs after Phase 3.
+- Add smoke tests around failure modes:
+  - Missing `dist/PATTERN-LIBRARY.json` (first run / registry generation failure).
+  - Corrupt or partially-written registry.
+  - Stale registry vs modified pattern JSONs.
+- Update documentation:
+  - Summarize the final registry schema and its relationship to individual pattern JSON files.
+  - Cross-link with `PATTERN-LIBRARY-MANAGER-README.md` and this project doc.
 
-**Location:** `dist/lib/pattern-loader.sh`
+---
 
-**Changes:**
-```bash
-load_pattern() {
-  local pattern_file="$1"
-  local pattern_id=$(basename "$pattern_file" .json)
-  
-  if [ "$PATTERN_REGISTRY_LOADED" = "true" ]; then
-    # Load from pre-parsed registry (no file I/O, no Python subprocess)
-    pattern_id="${PATTERN_${pattern_id}_ID}"
-    pattern_enabled="${PATTERN_${pattern_id}_ENABLED}"
-    pattern_severity="${PATTERN_${pattern_id}_SEVERITY}"
-    # ... etc
-    return 0
-  else
-    # Fallback to current file parsing
-    # ... existing code
-  fi
-}
-```
+## Registry vs Loader Field Mapping
+
+This section captures the current state (as of 2026-01-16) of `dist/PATTERN-LIBRARY.json` vs what `dist/lib/pattern-loader.sh` actually needs at runtime.
+
+### PATTERN-LIBRARY.json per-pattern fields (today)
+
+Each entry under `"patterns"` currently includes:
+
+- `id`
+- `version`
+- `enabled`
+- `category`
+- `severity`
+- `title`
+- `description`
+- `detection_type`
+- `pattern_type`
+- `mitigation_detection` (boolean flag indicating presence of mitigation configuration)
+- `heuristic` (boolean)
+- `file` (basename of the pattern JSON file)
+
+These make the registry an excellent source of truth for **metadata and discovery**, but they do **not** include the actual search patterns or detailed mitigation configuration.
+
+### Fields used by pattern-loader.sh
+
+`dist/lib/pattern-loader.sh` currently derives the following from each individual pattern JSON file:
+
+- Core metadata:
+  - `pattern_id` (from `id`)
+  - `pattern_enabled` (from `enabled`)
+  - `pattern_detection_type` (from `detection.type` or root `detection_type`)
+  - `pattern_category` (from `category`)
+  - `pattern_severity` (from `severity`)
+  - `pattern_title` (from `title`)
+- Detection details:
+  - `pattern_search` – from `detection.search_pattern` **or** OR-joined from `detection.patterns[].pattern`.
+  - `pattern_file_patterns` – from `detection.file_patterns[]`, defaulting to `"*.php"`.
+  - `pattern_validator_script` and `pattern_validator_args` – from `detection.validator_script` / `detection.validator_args` when `pattern_detection_type="scripted"`.
+- Mitigation details (from `mitigation_detection`):
+  - `pattern_mitigation_enabled` (enabled flag)
+  - `pattern_mitigation_script` (validator script)
+  - `pattern_mitigation_args` (validator args)
+  - `pattern_severity_downgrade` (encoded as `KEY=VALUE;KEY2=VALUE2...`).
+
+### Gaps between registry and loader needs
+
+Fields **not** present in `PATTERN-LIBRARY.json` today but required by `pattern-loader.sh` for full in-memory loading:
+
+- `pattern_search` / combined search pattern (derived from `detection.search_pattern` or `detection.patterns[].pattern`).
+- `file_patterns` (from `detection.file_patterns`).
+- `validator_script` and `validator_args` for scripted detection types.
+- Detailed `mitigation_detection` configuration (enabled/script/args/severity_downgrade), beyond the simple boolean flag.
+
+### Implications for this project
+
+- **Today:** `PATTERN-LIBRARY.json` is ready to be used as a **metadata + discovery cache** (Phase 1).
+- **To reach full in-memory loading:** The registry must be extended to include the detection/mitigation details listed above (Phase 2), after which Phase 3 can safely move `load_pattern()` to rely primarily on the registry, with a fallback to direct JSON parsing.
 
 ---
 
