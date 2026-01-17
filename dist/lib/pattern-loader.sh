@@ -7,7 +7,7 @@
 #
 
 # ----------------------------------------------------------------------------
-# Registry helpers (Phase 2)
+# Registry helpers (Phase 2 + minimal Phase 3 in-memory cache)
 # ----------------------------------------------------------------------------
 
 # Determine whether the canonical pattern registry is available.
@@ -21,6 +21,11 @@ pattern_registry_available() {
 	fi
 	return 1
 }
+
+# Simple on-disk cache built once per scan from PATTERN-LIBRARY.json.
+# This avoids re-opening the registry (or individual pattern JSON files)
+# for every pattern, while keeping the loader Bash 3–compatible.
+PATTERN_REGISTRY_CACHE_FILE=""
 
 # Load detection/mitigation fields for a pattern from PATTERN-LIBRARY.json.
 #
@@ -46,115 +51,133 @@ _load_pattern_from_registry() {
 		return 1
 	fi
 
-	# Use python3 to keep this in sync with build_detection_and_mitigation_json
-	# in dist/bin/pattern-library-manager.sh. We intentionally avoid jq and
-	# associative arrays so this remains portable to older shells.
-		local registry_kv
-		registry_kv=$(python3 "$PATTERN_REGISTRY_FILE" "$pattern_id_lookup" 2>/dev/null <<'EOFPY'
-import json
-import sys
+	# Materialise a simple cache from PATTERN-LIBRARY.json on first use.
+	if [ -z "$PATTERN_REGISTRY_CACHE_FILE" ] || [ ! -f "$PATTERN_REGISTRY_CACHE_FILE" ]; then
+		local tmpfile
+		tmpfile="$(mktemp "${TMPDIR:-/tmp}/wpcc-pattern-registry.XXXXXX" 2>/dev/null || echo "")"
+		if [ -z "$tmpfile" ]; then
+			return 1
+		fi
 
-if len(sys.argv) < 3:
-    sys.exit(1)
-
-registry_path, target_id = sys.argv[1], sys.argv[2]
-
-try:
-    with open(registry_path, "r") as f:
-        data = json.load(f)
-except Exception:
-    sys.exit(1)
-
-pattern = None
-for p in data.get("patterns", []):
-    if p.get("id") == target_id:
-        pattern = p
-        break
-
-if not pattern:
-    # Not found in registry; let caller fall back to JSON file.
-    sys.exit(1)
-
-def emit(key, value):
-    if value is None:
-        return
-    # Normalise to simple shell-friendly representations.
-    if isinstance(value, bool):
-        sys.stdout.write(f"{key}={'true' if value else 'false'}\n")
-    elif isinstance(value, (int, float)):
-        sys.stdout.write(f"{key}={value}\n")
-    elif isinstance(value, list):
-        # Space-separated list for easy iteration in bash.
-        sys.stdout.write(f"{key}=" + " ".join(str(v) for v in value) + "\n")
-    elif isinstance(value, dict) and key == "severity_downgrade":
-        # KEY=VALUE;KEY=VALUE form as expected by check-performance.sh
-        parts = [f"{k}={v}" for k, v in value.items()]
-        sys.stdout.write(f"{key}=" + ";".join(parts) + "\n")
-    else:
-        sys.stdout.write(f"{key}={str(value)}\n")
-
-# Base detection fields from registry (already normalised by manager).
-if "search_pattern" in pattern:
-    emit("search_pattern", pattern.get("search_pattern"))
-if "file_patterns" in pattern:
-    emit("file_patterns", pattern.get("file_patterns"))
-if "validator_script" in pattern:
-    emit("validator_script", pattern.get("validator_script"))
-if "validator_args" in pattern:
-    emit("validator_args", pattern.get("validator_args"))
-
-# Mitigation details are provided by pattern-library-manager as a
-# "mitigation_details" object when present.
-mitigation = pattern.get("mitigation_details") or {}
-if mitigation:
-    emit("mitigation_enabled", mitigation.get("enabled", False))
-    emit("mitigation_script", mitigation.get("script") or "")
-    emit("mitigation_args", mitigation.get("args") or [])
-    emit("severity_downgrade", mitigation.get("severity_downgrade") or {})
+			# Build one line per pattern:
+			#   <id> search_pattern=... file_patterns=pat1,pat2 validator_script=... \
+			#        validator_args=arg1,arg2 mitigation_enabled=true ...
+			# Lists are encoded as comma-separated strings; severity_downgrade stays
+			# as KEY=VALUE;KEY=VALUE. This keeps parsing trivial in Bash.
+			if ! PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 <<'EOFPY' >"$tmpfile" 2>/dev/null; then
+	import json
+	import os
+	import sys
+	
+	registry_path = os.environ.get("PATTERN_REGISTRY_FILE")
+	if not registry_path:
+	    sys.exit(1)
+	
+	try:
+	    with open(registry_path, "r", encoding="utf-8") as f:
+	        data = json.load(f)
+	except Exception:
+	    sys.exit(1)
+	
+	patterns = data.get("patterns", [])
+	for p in patterns:
+	    pid = p.get("id")
+	    if not pid:
+	        continue
+	
+	    pieces = [pid]
+	
+	    def add_kv(key, value, is_list=False, is_dict=False):
+	        if value is None:
+	            return
+	        if is_dict:
+	            if not isinstance(value, dict):
+	                return
+	            joined = ";".join(f"{k}={v}" for k, v in value.items())
+	            pieces.append(f"{key}={joined}")
+	            return
+	        if is_list:
+	            if not isinstance(value, list):
+	                value = [value]
+	            joined = ",".join(str(v) for v in value)
+	            pieces.append(f"{key}={joined}")
+	            return
+	        if isinstance(value, bool):
+	            val_str = "true" if value else "false"
+	        else:
+	            val_str = str(value)
+	        pieces.append(f"{key}={val_str}")
+	
+	    add_kv("search_pattern", p.get("search_pattern"))
+	    add_kv("file_patterns", p.get("file_patterns"), is_list=True)
+	    add_kv("validator_script", p.get("validator_script"))
+	    add_kv("validator_args", p.get("validator_args"), is_list=True)
+	
+	    mitigation = p.get("mitigation_details") or {}
+	    if isinstance(mitigation, dict) and mitigation:
+	        add_kv("mitigation_enabled", mitigation.get("enabled", False))
+	        add_kv("mitigation_script", mitigation.get("script") or "")
+	        add_kv("mitigation_args", mitigation.get("args") or [], is_list=True)
+	        add_kv("severity_downgrade", mitigation.get("severity_downgrade") or {}, is_dict=True)
+	
+	    if len(pieces) > 1:
+	        sys.stdout.write(" ".join(pieces) + "\n")
 EOFPY
-)
+				# On any failure, discard cache and fall back to legacy JSON parsing.
+				rm -f "$tmpfile" 2>/dev/null || true
+				return 1
+			fi
 
-	if [ -z "$registry_kv" ]; then
-		# Either not found in registry or lookup failed; fall back to JSON file.
-		return 1
+			PATTERN_REGISTRY_CACHE_FILE="$tmpfile"
 	fi
 
-	# Apply registry values to the current pattern globals. We intentionally do
-	# not override pattern_detection_type here so that clone_detection and other
-	# special cases continue to be driven by the JSON definition.
-	while IFS='=' read -r key value; do
-		case "$key" in
-			search_pattern)
-				pattern_search="$value"
-				;;
-			file_patterns)
-				pattern_file_patterns="$value"
-				;;
-			validator_script)
-				pattern_validator_script="$value"
-				;;
-			validator_args)
-				pattern_validator_args="$value"
-				;;
-			mitigation_enabled)
-				pattern_mitigation_enabled="$value"
-				;;
-			mitigation_script)
-				pattern_mitigation_script="$value"
-				;;
-			mitigation_args)
-				pattern_mitigation_args="$value"
-				;;
-			severity_downgrade)
-				pattern_severity_downgrade="$value"
-				;;
-		esac
-	done <<EOF
-$registry_kv
-EOF
+		# Lookup entry for this pattern id in the cache file.
+		local line
+		line=$(grep -E "^${pattern_id_lookup}( |$)" "$PATTERN_REGISTRY_CACHE_FILE" 2>/dev/null | head -n 1 || true)
+		if [ -z "$line" ]; then
+			# Not found in registry; let caller fall back to JSON file.
+			return 1
+		fi
 
-	return 0
-}
+		# Strip leading pattern id and trim leading whitespace.
+		line="${line#"$pattern_id_lookup"}"
+		line="${line#"${line%%[![:space:]]*}"}"
+
+		local token key value
+		for token in $line; do
+			key=${token%%=*}
+			value=${token#*=}
+			case "$key" in
+				search_pattern)
+					pattern_search="$value"
+					;;
+				file_patterns)
+					# Convert comma-separated list back to space-separated for callers.
+					pattern_file_patterns="${value//,/ }"
+					;;
+				validator_script)
+					pattern_validator_script="$value"
+					;;
+				validator_args)
+					pattern_validator_args="${value//,/ }"
+					;;
+				mitigation_enabled)
+					pattern_mitigation_enabled="$value"
+					;;
+				mitigation_script)
+					pattern_mitigation_script="$value"
+					;;
+				mitigation_args)
+					pattern_mitigation_args="${value//,/ }"
+					;;
+				severity_downgrade)
+					pattern_severity_downgrade="$value"
+					;;
+			esac
+		done
+
+		return 0
+	}
 
 # Load a single pattern from JSON file
 # Usage: load_pattern "path/to/pattern.json"

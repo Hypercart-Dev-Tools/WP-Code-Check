@@ -338,6 +338,8 @@ See [Manual JSON to HTML Conversion](#manual-json-to-html-conversion) section be
 
 After HTML report is generated, perform a 2nd pass AI triage on the generated JSON log to identify false positives and provide an overall assessment.
 
+Scan the actual files that were flagged to determine if the finding is valid.
+
 **Purpose:** Reduce noise by identifying false positives and providing actionable recommendations.
 
 ### When to Use
@@ -348,6 +350,7 @@ After HTML report is generated, perform a 2nd pass AI triage on the generated JS
 - Preparing findings for stakeholder review or GitHub issue creation
 
 The Experimental Golden Analyzer PHP script is not the AI assisted triage. 
+Your analysis of the JSON log against the codebase is the AI assisted triage.
 
 **Cross-Reference:** See [README - AI-Assisted Triage](../../README.md#-phase-2-ai-assisted-triage-v11-poc) for feature overview.
 

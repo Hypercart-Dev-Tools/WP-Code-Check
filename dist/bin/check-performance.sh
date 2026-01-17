@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.29
+# Version: 1.3.35
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -63,7 +63,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.31"
+SCRIPT_VERSION="1.3.35"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5922,18 +5922,31 @@ profile_report
 
 if [ -f "$SCRIPT_DIR/pattern-library-manager.sh" ]; then
   if [ "$OUTPUT_FORMAT" = "json" ]; then
-    # In JSON mode, send output to terminal only (not to log file)
-    # Check if /dev/tty is available (not available in CI environments)
-    if [ -w /dev/tty ] 2>/dev/null; then
-      bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/tty 2>&1 || {
-        echo "⚠️  Pattern library manager failed (non-fatal)" > /dev/tty
-      }
+    # In JSON mode, we have two sub-modes:
+    #   1) Logging enabled  (default)  → safe to emit progress to /dev/tty only.
+    #   2) --no-log (ENABLE_LOGGING=false) → strict JSON mode, often used by
+    #      other tools/CI. In this case we skip the manager entirely to
+    #      guarantee a clean, JSON-only contract.
+
+    if [ "$ENABLE_LOGGING" = false ]; then
+      # Strict JSON/no-log mode: do not run pattern-library-manager.sh to avoid
+      # any chance of stdout/stderr pollution. Registries are expected to be
+      # generated out-of-band for this use case.
+      debug_echo "Skipping pattern-library-manager.sh in JSON no-log mode"
     else
-      # No TTY available (CI environment) - suppress output to avoid corrupting JSON
-      bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/null 2>&1 || true
+      # Logging+JSON mode: send any chatter to /dev/tty so logs/JSON remain clean.
+      # Check if /dev/tty is available (not available in CI environments).
+      if [ -w /dev/tty ] 2>/dev/null; then
+        bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/tty 2>&1 || {
+          echo "⚠️  Pattern library manager failed (non-fatal)" > /dev/tty
+        }
+      else
+        # No TTY available (CI environment) - suppress output to avoid corrupting JSON
+        bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/null 2>&1 || true
+      fi
     fi
   else
-    # In text mode, output goes to log file normally
+    # In text mode, output goes to log file/console normally
     echo ""
     echo "🔄 Updating pattern library registry..."
     bash "$SCRIPT_DIR/pattern-library-manager.sh" both 2>/dev/null || {

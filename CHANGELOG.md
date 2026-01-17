@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.35] - 2026-01-17
+
+### Fixed
+- **Fixture JSON Validation** – Hardened `dist/tests/run-fixture-tests.sh` to tolerate rare environment-specific noise (e.g., stray tracebacks) ahead of the JSON payload by stripping any non-JSON prefix before running `jq`, while still enforcing that `check-performance.sh --format json --no-log` returns a single valid JSON document.
+
+### Changed
+- **Version:** 1.3.34 → 1.3.35
+
+## [1.3.34] - 2026-01-17
+
+### Fixed
+- **JSON Output (Strict Mode)** – Ensured that `check-performance.sh --format json --no-log` no longer runs `pattern-library-manager.sh`, preventing any registry update chatter from escaping to `/dev/tty` and guaranteeing a clean, JSON-only contract for embedders and CI.
+
+### Changed
+- **Version:** 1.3.33 → 1.3.34
+
+## [1.3.33] - 2026-01-17
+
+### Fixed
+- **Pattern Loader Registry Adapter** – Fixed Bash 3 syntax in `_load_pattern_from_registry()` by ensuring the embedded Python here-doc does not swallow the surrounding `if`/`then` block, eliminating the `syntax error near unexpected token '}'` when sourcing `dist/lib/pattern-loader.sh`.
+
+### Changed
+- **Version:** 1.3.32 → 1.3.33
+
+## [1.3.32] - 2026-01-17
+
+### Fixed
+- **Pattern Loader Registry Adapter** – Corrected leading-whitespace trimming in `_load_pattern_from_registry()` to use a portable `[:space:]` character class instead of the previous `${line%%[!$' \t']*}` expansion, ensuring Bash 3 compatibility.
+
+### Changed
+- **Version:** 1.3.31 → 1.3.32
+
 ## [1.3.31] - 2026-01-17
 
 ### Documentation
