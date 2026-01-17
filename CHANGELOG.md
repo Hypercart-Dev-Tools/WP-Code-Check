@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-01-17
+
+### Fixed
+- **Registry cache encoding (whitespace-safe)** – Updated `dist/lib/pattern-loader.sh`
+  to encode registry cache entries using a length-prefixed `key=<len>:<value>`
+  format and a matching Bash parser, so pattern fields such as `search_pattern`
+  and `validator_args` that contain spaces round-trip correctly from
+  `PATTERN-LIBRARY.json` without truncation.
+- **JSON output contract in no-log mode** – Tightened the JSON output path in
+  `dist/bin/check-performance.sh` so that `--format json --no-log` guarantees a
+  single JSON document on stdout (with all human-facing progress messages gated
+  behind `/dev/tty` and `ENABLE_LOGGING`), and verified this behavior against the
+  `tests/fixtures/antipatterns.php` fixture.
+
+### Changed
+- **Version:** 2.0.0 → 2.0.1
+
 ## [2.0.0] - 2026-01-17
 
 ### Fixed

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.0
+# Version: 2.0.1
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -66,7 +66,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="2.0.1"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5825,32 +5825,31 @@ fi
 
 debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
 
-# Output based on format
-if [ "$OUTPUT_FORMAT" = "json" ]; then
-  # Progress indicator for JSON mode (write to original stderr via fd 3)
-  # Only enabled when logging is active so fd 3 is guaranteed to exist.
-  if [ "$ENABLE_LOGGING" = true ] && [ -w /dev/tty ]; then
-    {
-      echo ""
-      echo "📊 Scan complete! Generating JSON report..."
-    } >&3 2>/dev/null || true
-  fi
-
-  debug_echo "Generating JSON output..."
-  JSON_OUTPUT=$(output_json "$EXIT_CODE")
-  debug_echo "JSON output generated, echoing..."
-  echo "$JSON_OUTPUT"
-  debug_echo "JSON output echoed"
-
-  # Progress indicator for JSON mode (write to original stderr via fd 3)
-  # Only enabled when logging is active so fd 3 is guaranteed to exist.
-  if [ "$ENABLE_LOGGING" = true ] && [ -w /dev/tty ]; then
-    echo "✅ JSON report written to: $LOG_FILE" >&3 2>/dev/null || true
-  fi
-
-	  # Generate HTML report if running locally (not in GitHub Actions) and logging is enabled
-	  # We require a non-empty LOG_FILE; when --no-log is used, HTML generation is skipped
-	  if [ "$ENABLE_LOGGING" = true ] && [ -n "$LOG_FILE" ] && [ -z "$GITHUB_ACTIONS" ]; then
+	# Output based on format
+	if [ "$OUTPUT_FORMAT" = "json" ]; then
+	  # In JSON mode we must guarantee that stdout contains a single JSON document
+	  # and nothing else. Any human-facing progress should go to the original
+	  # stderr (fd 3) when logging is enabled and a TTY is available.
+	  if [ "$ENABLE_LOGGING" = true ] && [ -w /dev/tty ] 2>/dev/null; then
+	    {
+	      echo ""
+	      echo "📊 Scan complete! Generating JSON report..."
+	    } >&3 2>/dev/null || true
+	  fi
+	
+	  debug_echo "Generating JSON output..."
+	  JSON_OUTPUT=$(output_json "$EXIT_CODE")
+	  debug_echo "JSON output generated, echoing..."
+	  echo "$JSON_OUTPUT"
+	  debug_echo "JSON output echoed"
+	
+	  if [ "$ENABLE_LOGGING" = true ] && [ -w /dev/tty ] 2>/dev/null; then
+	    echo "✅ JSON report written to: $LOG_FILE" >&3 2>/dev/null || true
+	  fi
+	
+		  # Generate HTML report if running locally (not in GitHub Actions) and logging is enabled
+		  # We require a non-empty LOG_FILE; when --no-log is used, HTML generation is skipped
+		  if [ "$ENABLE_LOGGING" = true ] && [ -n "$LOG_FILE" ] && [ -z "$GITHUB_ACTIONS" ]; then
     # Create reports directory if it doesn't exist
     REPORTS_DIR="$PLUGIN_DIR/reports"
     mkdir -p "$REPORTS_DIR"

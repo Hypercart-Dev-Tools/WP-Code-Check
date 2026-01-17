@@ -156,13 +156,14 @@ _load_pattern_from_registry() {
 			return 1
 		fi
 
-		# Build one line per pattern:
-		#   <id> search_pattern=... file_patterns=pat1,pat2 validator_script=... \
-		#        validator_args=arg1,arg2 mitigation_enabled=true ...
-		# Lists are encoded as comma-separated strings; severity_downgrade stays
-		# as KEY=VALUE;KEY=VALUE. This keeps parsing trivial in Bash.
-		if command -v python3 >/dev/null 2>&1; then
-			PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 <<'EOFPY' >"$tmpfile" 2>/dev/null || true
+			# Build one line per pattern using a whitespace-safe encoding:
+			#   <id> search_pattern=<len>:<value> file_patterns=<len>:pat1,pat2 \
+			#        validator_script=<len>:<value> validator_args=<len>:arg1,arg2 \
+			#        mitigation_enabled=<len>:true ...
+			# Each value is prefixed with its byte length and a colon so that the
+			# Bash-side parser can safely recover values that contain spaces.
+			if command -v python3 >/dev/null 2>&1; then
+				PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 <<'EOFPY' >"$tmpfile" 2>/dev/null || true
 import json
 import os
 import sys
@@ -192,19 +193,19 @@ for p in patterns:
             if not isinstance(value, dict):
                 return
             joined = ";".join(f"{k}={v}" for k, v in value.items())
-            pieces.append(f"{key}={joined}")
-            return
-        if is_list:
+            val_str = joined
+        elif is_list:
             if not isinstance(value, list):
                 value = [value]
             joined = ",".join(str(v) for v in value)
-            pieces.append(f"{key}={joined}")
-            return
-        if isinstance(value, bool):
+            val_str = joined
+        elif isinstance(value, bool):
             val_str = "true" if value else "false"
         else:
             val_str = str(value)
-        pieces.append(f"{key}={val_str}")
+        # Length-prefixed encoding: key=<len>:<value> (len in characters)
+        length = len(val_str)
+        pieces.append(f"{key}={length}:{val_str}")
 
     add_kv("search_pattern", p.get("search_pattern"))
     add_kv("file_patterns", p.get("file_patterns"), is_list=True)
@@ -248,51 +249,86 @@ EOFPY
 		PATTERN_REGISTRY_CACHE_FILE="$tmpfile"
 	fi
 
-	# Lookup entry for this pattern id in the cache file.
-	local line
-	line=$(grep -E "^${pattern_id_lookup}( |$)" "$PATTERN_REGISTRY_CACHE_FILE" 2>/dev/null | head -n 1 || true)
-	if [ -z "$line" ]; then
-		# Not found in registry; let caller fall back to JSON file.
-		PATTERN_REGISTRY_MISSES=$((PATTERN_REGISTRY_MISSES + 1))
-		return 1
-	fi
+		# Lookup entry for this pattern id in the cache file.
+		local line
+		line=$(grep -E "^${pattern_id_lookup}( |$)" "$PATTERN_REGISTRY_CACHE_FILE" 2>/dev/null | head -n 1 || true)
+		if [ -z "$line" ]; then
+			# Not found in registry; let caller fall back to JSON file.
+			PATTERN_REGISTRY_MISSES=$((PATTERN_REGISTRY_MISSES + 1))
+			return 1
+		fi
 
-	# Strip leading pattern id and trim leading whitespace.
-	line="${line#"$pattern_id_lookup"}"
-	line="${line#"${line%%[![:space:]]*}"}"
+		# Strip leading pattern id and trim leading whitespace.
+		line="${line#"$pattern_id_lookup"}"
+		line="${line#"${line%%[![:space:]]*}"}"
 
-	local token key value
-	for token in $line; do
-		key=${token%%=*}
-		value=${token#*=}
-		case "$key" in
-			search_pattern)
-				pattern_search="$value"
-				;;
-			file_patterns)
-				# Convert comma-separated list back to space-separated for callers.
-				pattern_file_patterns="${value//,/ }"
-				;;
-			validator_script)
-				pattern_validator_script="$value"
-				;;
-			validator_args)
-				pattern_validator_args="${value//,/ }"
-				;;
-			mitigation_enabled)
-				pattern_mitigation_enabled="$value"
-				;;
-			mitigation_script)
-				pattern_mitigation_script="$value"
-				;;
-			mitigation_args)
-				pattern_mitigation_args="${value//,/ }"
-				;;
-			severity_downgrade)
-				pattern_severity_downgrade="$value"
-				;;
-		esac
-	done
+		# New whitespace-safe parser: each value is encoded as key=<len>:<value>.
+		# This allows arbitrary spaces inside values without relying on word-splitting.
+		local rest key value len
+		rest="$line"
+		while [ -n "$rest" ]; do
+			# Trim leading whitespace before each token.
+			rest="${rest#"${rest%%[![:space:]]*}"}"
+			[ -z "$rest" ] && break
+
+			# Extract the key (up to '=')
+			key=${rest%%=*}
+			# If there was no '=' then we're done.
+			if [ "$key" = "$rest" ]; then
+				break
+			fi
+			# Drop 'key=' from the front.
+			rest=${rest#"$key="}
+
+			# Expect a length prefix of the form '<len>:'
+			len=${rest%%:*}
+			# If there is no ':' delimiter, abort parsing this line.
+			if [ "$len" = "$rest" ]; then
+				break
+			fi
+			# Drop '<len>:' from the front.
+			rest=${rest#"$len:"}
+
+			# Extract exactly <len> bytes as the value; the remainder stays in $rest.
+			value=${rest%%${rest#?}}
+			if [ "$len" -gt 0 ]; then
+				value=${rest%%${rest#?}}
+				# Use POSIX parameter expansion to grab the first $len characters.
+				value=$(printf '%s' "$rest" | cut -c1-$len)
+				# Advance rest past the consumed value.
+				rest=${rest#"$value"}
+			else
+				value=""
+			fi
+
+			case "$key" in
+				search_pattern)
+					pattern_search="$value"
+					;;
+				file_patterns)
+					# Convert comma-separated list back to space-separated for callers.
+					pattern_file_patterns="${value//,/ }"
+					;;
+				validator_script)
+					pattern_validator_script="$value"
+					;;
+				validator_args)
+					pattern_validator_args="${value//,/ }"
+					;;
+				mitigation_enabled)
+					pattern_mitigation_enabled="$value"
+					;;
+				mitigation_script)
+					pattern_mitigation_script="$value"
+					;;
+				mitigation_args)
+					pattern_mitigation_args="${value//,/ }"
+					;;
+				severity_downgrade)
+					pattern_severity_downgrade="$value"
+					;;
+			esac
+		done
 
 	PATTERN_REGISTRY_HITS=$((PATTERN_REGISTRY_HITS + 1))
 	return 0
