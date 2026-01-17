@@ -65,7 +65,7 @@ This keeps DSM highly visible but means guarded + sanitized DSM still contribute
 
 ## Observed False Positive Patterns
 
-From real plugin scans (e.g., Gravity Forms):
+From real plugin scans (e.g., Gravity Forms, Hypercart Server Monitor MKII):
 
 1. Nonce + capability guarded form handlers
    - Typical pattern:
@@ -84,6 +84,11 @@ From real plugin scans (e.g., Gravity Forms):
 4. Admin-only flows
    - DSM in code that only runs on `is_admin()` routes with additional capability checks.
    - Still worth surfacing but should not carry the same severity as public endpoint manipulations.
+
+5. JS/AJAX requests inside PHP views
+   - Patterns like jQuery `$.ajax({ type: 'POST', data: { action: '...' } })` embedded in PHP admin views.
+   - These are front-end request descriptors (JavaScript), not PHP superglobal writes, but can currently be misclassified as DSM.
+   - Concrete example: Hypercart Server Monitor MKII admin tabs (`tab-manual-test.php`, `tab-email.php`, `tab-debug.php`) where `type: 'POST'` lines are flagged by `spo-002-superglobals`.
 
 ## Goals and Success Metrics
 
@@ -108,8 +113,9 @@ Primary path (recommended):
   - Guarded DSM: recorded as warning/info, does not fail the check.
 - Add sanitizer detection for writes:
   - If a context window contains both guard and sanitizer, downgrade further.
-- Strengthen non-PHP filtering:
-  - Tighten `is_html_or_rest_config` to skip JS snippets and REST config lines.
+- Strengthen non-PHP filtering (make JS/AJAX-in-PHP a first-class case):
+  - Tighten `is_html_or_rest_config` (or equivalent helper) so DSM ignores JS snippets and REST config lines entirely.
+  - Explicitly treat jQuery/JS AJAX blocks inside PHP views (e.g., `$.ajax({ type: 'POST', data: { action: 'hsm_*' } })`) as **out of scope for DSM**; they should instead be handled by JS-facing rules.
 - Add project-level allowlist pattern:
   - Allow per-project suppression of known bridge code, e.g., `spo-002-superglobals-bridge`.
 
@@ -121,11 +127,12 @@ Primary path (recommended):
 
 ### Phase 3: Benchmark Results
 
-- Use 3 to 5 representative plugins (e.g., Gravity Forms, WooCommerce extensions).
+- Use 3 to 5 representative plugins (e.g., Gravity Forms, WooCommerce extensions, Hypercart Server Monitor MKII).
 - Measure:
   - DSM finding counts before vs after changes.
   - Share of findings now classified as guarded/sanitized.
   - Any missed unguarded DSM instances.
+  - Specific regression: Hypercart Server Monitor MKII should report **zero** DSM findings originating from JS admin views once non-PHP filtering is in place.
 
 ### Phase 4 (Optional): GRA SuperglobalsRule
 
