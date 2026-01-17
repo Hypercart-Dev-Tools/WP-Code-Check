@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.38] - 2026-01-17
+
+### Fixed
+- **Registry-backed Loader Cache** – Hardened `_load_pattern_from_registry()` in
+  `dist/lib/pattern-loader.sh` so detection and mitigation fields (including
+  `validator_script` / `validator_args`) are consistently populated from
+  `PATTERN-LIBRARY.json`, eliminating "Validator script not found" errors
+  surfaced during the ACF Pro run and ensuring registry hit/miss metrics
+  reflect actual loader usage.
+
+### Internal
+- **Phase 3 Closure & Phase 4 Medium Plugin Run** – Verified the registry-backed
+  loader and scripted validators against both the fixture suite and a
+  real-world ACF Pro scan using `PROFILE=1` and `WPCC_REGISTRY_DEBUG=1`.
+  On that medium-sized plugin, total scan time was ~9.4s (Magic String
+  Detector ~6.6s, critical checks ~1.7s, warning checks ~0.9s, clone detector
+  ~0.18s) with `REGISTRY DEBUG: state=fresh hits=37 misses=0`, confirming the
+  in-memory registry cache path is stable.
+
+### Changed
+- **Version:** 1.3.37 → 1.3.38
+
+## [1.3.37] - 2026-01-17
+
+### Changed
+- **Version:** 1.3.36 → 1.3.37
+
+### Internal
+- **Registry Staleness Detection** – Added `pattern_registry_check_state()` in
+  `dist/lib/pattern-loader.sh` to compare `PATTERN-LIBRARY.json` mtime against
+  `dist/patterns/*.json`; when any pattern JSON is newer, the registry is marked
+  stale (`PATTERN_REGISTRY_STATE="stale"`) and callers fall back safely to
+  per-file JSON parsing for that run.
+- **Registry Debug Metrics** – Introduced opt-in registry debug metrics controlled
+  via `WPCC_REGISTRY_DEBUG=1`, tracking `PATTERN_REGISTRY_STATE` plus
+  hit/miss counters in the loader and emitting a concise
+  `REGISTRY DEBUG: state=… hits=… misses=…` summary (with `stale_reason` when
+  applicable) at the end of each scan.
+
+## [1.3.36] - 2026-01-17
+
+### Fixed
+- **JSON Logs** – Updated JSON logging so that `dist/logs/*.json` capture only the
+  final JSON document emitted by `check-performance.sh`, keeping stderr noise (for
+  example Python tracebacks or `/dev/tty` errors) out of log files used by the HTML
+  report generator and AI workflows.
+- **Known Behavior Note** – Documented that logs produced by versions prior to
+  `1.3.36` may contain non-JSON preambles (such as tracebacks) before the JSON
+  payload; consumers of older logs should strip everything before the first `{` or
+  prefer rerunning scans with a newer version.
+
+### Changed
+- **Version:** 1.3.35 → 1.3.36
+
 ## [1.3.35] - 2026-01-17
 
 ### Fixed

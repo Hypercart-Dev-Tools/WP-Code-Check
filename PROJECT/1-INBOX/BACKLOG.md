@@ -13,6 +13,11 @@
   - Should show: "DRY Violations (0) - Magic Strings: 0, Function Clones: Skipped"
   - Or split into two sections: "Magic Strings" and "Function Clones (Skipped)"
   - Related: Both Magic String Detector and Function Clone Detector add to same DRY_VIOLATIONS array
+ - [ ] **P1: Align fixture expectations with current pattern library + registry-backed loader**
+   - 7/10 fixture tests are currently failing due to `total_errors` / `total_warnings` mismatches (e.g. `antipatterns.php`, `clean-code.php`, `file-get-contents-url.php`, `cron-interval-validation.php`).
+   - Before simply updating expected counts, audit each failing fixture to confirm whether new findings represent **desired behavior** or **false positives** (especially in `clean-code.php`).
+   - Once semantics are confirmed, either (a) adjust the underlying patterns/validators to restore the intended behavior, or (b) update the expected counts in `dist/tests/run-fixture-tests.sh` to match the new, correct semantics.
+   - Re-run `./tests/run-fixture-tests.sh --trace` and ensure all fixtures pass under the registry-backed loader path.
 
 ## ✅ COMPLETED: Phase 3 Performance Optimization (Magic String & Clone Detection)
 

@@ -31,7 +31,12 @@
 - [x] Phase 0 – Analyze current PATTERN-LIBRARY.json schema vs pattern-loader requirements
 - [x] Phase 1 – Use PATTERN-LIBRARY.json for metadata + discovery (keep detection/mitigation loading as-is)
 - [x] Phase 2 – Extend PATTERN-LIBRARY.json schema with detection/mitigation details needed by pattern-loader
-- [ ] Phase 3 – Implement in-memory pattern loader + Bash-friendly registry interface with robust fallbacks
+- [x] Phase 3 – Implement in-memory pattern loader + Bash-friendly registry interface with robust fallbacks (per-scan registry cache, staleness checks, and registry debug metrics are now in place; see Phase 3 status note below)
+
+  - [x] Focus on staleness detection plus a visible flag: before using the registry cache, compare PATTERN-LIBRARY.json mtime against dist/patterns/*.json, and if any pattern is newer, treat the registry as stale (PATTERN_REGISTRY_STATE="stale") so callers fall back safely to per-file parsing for that run. This is implemented in dist/lib/pattern-loader.sh via pattern_registry_check_state(), which walks dist/patterns/*.json and marks the registry stale (with PATTERN_REGISTRY_STALE_REASON indicating the first newer file) when any pattern mtime exceeds the registry mtime.
+ 
+  - [x] At the same time, add a lightweight debug toggle (env var-based) that prints whether the registry-backed path was used and how many patterns came from cache vs legacy, so you can trust behavior on large scans like WooCommerce. This is implemented via WPCC_REGISTRY_DEBUG=1, PATTERN_REGISTRY_STATE/HITS/MISSES counters in dist/lib/pattern-loader.sh, and a registry_debug_report() helper in dist/bin/check-performance.sh that emits a concise "REGISTRY DEBUG: state=… hits=… misses=…" line (plus stale_reason when applicable) at the end of a run.
+
 - [ ] Phase 4 – Measure performance impact, validate fallbacks, and document results
 
 ---
@@ -196,13 +201,24 @@ The `pattern-library-manager.sh` already generates `dist/PATTERN-LIBRARY.json` w
   - Summarize the final registry schema and its relationship to individual pattern JSON files.
   - Cross-link with `PATTERN-LIBRARY-MANAGER-README.md` and this project doc.
 
+**Phase 4 status note (2026-01-17):** A medium-size real-world plugin run
+using Advanced Custom Fields Pro with `PROFILE=1` and
+`WPCC_REGISTRY_DEBUG=1` completed in ~9.4s total (Magic String Detector
+~6.6s, critical checks ~1.7s, warning checks ~0.9s, clone detector ~0.18s),
+with `REGISTRY DEBUG: state=fresh hits=37 misses=0`. This confirms that the
+registry-backed loader is exercised heavily on real scans and that Phase 3's
+staleness checks + metrics are behaving as expected. A remaining follow-up
+task is to track down and eliminate the noisy Python traceback where
+`PATTERN-LIBRARY.json` is briefly executed as code on some environments;
+for now this is treated as a cosmetic log issue rather than a blocker.
+
 ---
 
 ## Registry vs Loader Field Mapping
 
-This section captures the current state (as of 2026-01-16) of `dist/PATTERN-LIBRARY.json` vs what `dist/lib/pattern-loader.sh` actually needs at runtime.
+This section captures the registry evolution from the original baseline (pre-Phase 2) to the enriched schema now consumed by `dist/lib/pattern-loader.sh`.
 
-### PATTERN-LIBRARY.json per-pattern fields (today)
+### PATTERN-LIBRARY.json per-pattern fields (original baseline, pre-Phase 2)
 
 Each entry under `"patterns"` currently includes:
 
@@ -219,7 +235,20 @@ Each entry under `"patterns"` currently includes:
 - `heuristic` (boolean)
 - `file` (basename of the pattern JSON file)
 
-These make the registry an excellent source of truth for **metadata and discovery**, but they do **not** include the actual search patterns or detailed mitigation configuration.
+These made the registry an excellent source of truth for **metadata and discovery**, but they did **not** originally include the actual search patterns or detailed mitigation configuration.
+
+### Additional registry fields after Phase 2 (current)
+
+As of Phase 2 (completed 2026-01-16), each pattern entry in `dist/PATTERN-LIBRARY.json` is enriched with the fields required by the registry-backed loader adapter:
+
+- `search_pattern` – normalized search string used for grep-style checks
+- `file_patterns` – list of file globs consumed by `pattern_file_patterns`
+- `validator_script` and `validator_args` – for scripted detections
+- `mitigation_details` object containing:
+  - `enabled`
+  - `script`
+  - `args`
+  - `severity_downgrade` (key/value map)
 
 ### Fields used by pattern-loader.sh
 
@@ -244,17 +273,12 @@ These make the registry an excellent source of truth for **metadata and discover
 
 ### Gaps between registry and loader needs
 
-Fields **not** present in `PATTERN-LIBRARY.json` today but required by `pattern-loader.sh` for full in-memory loading:
-
-- `pattern_search` / combined search pattern (derived from `detection.search_pattern` or `detection.patterns[].pattern`).
-- `file_patterns` (from `detection.file_patterns`).
-- `validator_script` and `validator_args` for scripted detection types.
-- Detailed `mitigation_detection` configuration (enabled/script/args/severity_downgrade), beyond the simple boolean flag.
+After Phase 2, there are no critical schema gaps for the current loader: all fields that `dist/lib/pattern-loader.sh` reads via the registry adapter are present in `dist/PATTERN-LIBRARY.json`, and any missing/legacy fields fall back to per-pattern JSON parsing.
 
 ### Implications for this project
 
-- **Today:** `PATTERN-LIBRARY.json` is ready to be used as a **metadata + discovery cache** (Phase 1).
-- **To reach full in-memory loading:** The registry must be extended to include the detection/mitigation details listed above (Phase 2), after which Phase 3 can safely move `load_pattern()` to rely primarily on the registry, with a fallback to direct JSON parsing.
+- **Today:** `PATTERN-LIBRARY.json` serves as both a **metadata + discovery cache** (Phase 1) and the primary source for detection/mitigation wiring via the per-scan registry cache (Phase 2 + minimal Phase 3).
+- **To reach full Phase 3 completion:** The remaining work is operational rather than structural  primarily adding staleness checks between `dist/PATTERN-LIBRARY.json` and `dist/patterns/*.json`, and surfacing clearer flags/diagnostics to confirm when the registry-backed path vs legacy per-file parsing is in use.
 
 ---
 
