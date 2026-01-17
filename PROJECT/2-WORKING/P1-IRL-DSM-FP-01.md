@@ -26,6 +26,7 @@ Reduce DSM false positives by ~5–20% while keeping the rule loud on genuine ri
 
 Note for LLM: Always mark checklist items as progress is made.
 
+V1.x Series
 - [x] Phase 1: Define policy and heuristics (guarded vs unguarded DSM)
 - [ ] Phase 2: Implement quick scanner refinements
 - [x] Phase 3: Benchmark results on representative plugins
@@ -241,11 +242,39 @@ Planned fixture updates:
 - Add nonce-in-condition fixtures (same-line guard detection).
 - Add bridge-code examples with explicit suppression to verify allowlist behavior.
 
+### Minimal Fixture Plan (Short Scope)
+
+Target: 60–70% improvement in DSM false-positive reduction with minimal, stable fixtures.
+
+Scope constraints:
+
+- 5 fixture categories only (no edge-case expansion).
+- No changes to DSM rule logic unless a fixture exposes a clear false positive.
+- Fixtures focused on fail/no-fail behavior, not perfect precision.
+
+Fixture set (short list):
+
+1. Unguarded write (must fail)
+   - Direct `$_POST`/`$_GET` usage without guards or sanitizers.
+
+2. Guarded + sanitized (should not fail)
+   - Nonce + capability + sanitizer in same function; DSM should be info/warn.
+
+3. Same-line nonce guard (should not fail)
+   - `wp_verify_nonce( ... $_POST[...] ... )` in the condition line.
+
+4. JS/AJAX-in-PHP exclusion (should not detect)
+   - jQuery/fetch snippet inside a PHP admin view.
+
+5. Bridge code allowlist (should suppress)
+   - Known bridge file suppressed by `spo-002-superglobals-bridge`.
+
 Acceptance criteria:
 
 - DSM fixtures confirm unguarded writes still fail.
 - Guarded + sanitized fixtures remain visible but do not fail.
 - Exclusions only apply to JS/REST/HTML cases, not real PHP writes.
+- Short plan achieved without expanding fixture count beyond the five categories above.
 
 ## Decision Points
 
