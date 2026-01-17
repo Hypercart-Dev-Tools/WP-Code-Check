@@ -28,7 +28,7 @@ Note for LLM: Always mark checklist items as progress is made.
 
 - [x] Phase 1: Define policy and heuristics (guarded vs unguarded DSM)
 - [ ] Phase 2: Implement quick scanner refinements
-- [ ] Phase 3: Benchmark results on representative plugins
+- [x] Phase 3: Benchmark results on representative plugins
 - [ ] Decision Gate A: After benchmarks, decide if GRA prototype is required
 - [ ] Phase 4: Prototype GRA SuperglobalsRule (optional)
 - [ ] Phase 5: Decide on integration strategy and rollout
@@ -191,6 +191,22 @@ Primary path (recommended):
   - Any missed unguarded DSM instances.
   - Specific regression: Hypercart Server Monitor MKII should report **zero** DSM findings originating from JS admin views once non-PHP filtering is in place.
 
+#### Benchmark Results (Current)
+
+1. Hypercart Server Monitor MKII
+   - Result: DSM findings = 0 (no failures).
+   - Regression target met: JS admin view DSM findings removed.
+
+2. Health Check & Troubleshooting
+   - Before: DSM total = 8.
+   - After: DSM total = 8; unguarded (fail) = 3.
+   - Net: Reduced failing DSM count by 5 while preserving visibility.
+
+3. SPC Order Velocity Monitor (Scaled)
+   - Before (2026-01-10-012836-UTC.json): DSM total = 16.
+   - After (2026-01-17-225644-UTC.json): DSM total = 18; unguarded (fail) = 9; guarded/info = 9.
+   - Net: Failing DSM count reduced by 7, with additional guarded/info visibility.
+
 ### Phase 4 (Optional): GRA SuperglobalsRule
 
 - Add `SuperglobalsRule` to `dist/bin/experimental/golden-rules-analyzer.php`.
@@ -212,6 +228,24 @@ Primary path (recommended):
   - Mitigation: Use project-level allowlists and document how to configure them.
 - Risk: GRA integration increases runtime cost.
   - Mitigation: Make it opt-in or only run when DSM hits exist.
+
+## Test Fixtures (Not Started)
+
+Goal: Validate that DSM false-positive reductions do not suppress true positives.
+
+Planned fixture updates:
+
+- Add DSM fixtures for guarded + sanitized patterns (should be info/warn, not fail).
+- Add DSM fixtures for unguarded writes (must fail).
+- Add JS/AJAX-in-PHP snippet fixtures to confirm exclusion.
+- Add nonce-in-condition fixtures (same-line guard detection).
+- Add bridge-code examples with explicit suppression to verify allowlist behavior.
+
+Acceptance criteria:
+
+- DSM fixtures confirm unguarded writes still fail.
+- Guarded + sanitized fixtures remain visible but do not fail.
+- Exclusions only apply to JS/REST/HTML cases, not real PHP writes.
 
 ## Decision Points
 
