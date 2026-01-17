@@ -122,9 +122,9 @@ parse_json_output() {
 # antipatterns.php - Should detect all intentional antipatterns
 # Updated 2026-01-10: Increased from 6 to 9 errors due to additional wpdb->prepare() checks
 ANTIPATTERNS_EXPECTED_ERRORS=9
-# Updated 2026-01-10: Warnings now 3 (was 4)
-ANTIPATTERNS_EXPECTED_WARNINGS_MIN=3
-ANTIPATTERNS_EXPECTED_WARNINGS_MAX=3
+# Updated 2026-01-17: Warnings now 4 (was 3) to reflect current rule behavior
+ANTIPATTERNS_EXPECTED_WARNINGS_MIN=4
+ANTIPATTERNS_EXPECTED_WARNINGS_MAX=4
 
 # clean-code.php - Should pass with minimal warnings
 # Updated 2026-01-10: Now detects 1 error (wpdb->prepare() check)

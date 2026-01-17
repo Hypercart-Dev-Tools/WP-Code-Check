@@ -4,6 +4,8 @@
  *
  * This file contains intentional performance antipatterns for testing detection.
  * The check-performance.sh script should flag ALL of these.
+ * It also intentionally exercises warning-level checks (timezone-sensitive code,
+ * ORDER BY RAND, LIKE leading wildcards, and transients without expiration).
  *
  * @package Neochrome\WPPerformanceTests
  */

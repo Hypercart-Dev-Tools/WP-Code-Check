@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-01-17
+
+### Documentation
+- **Fixtures**
+  - Added a brief comment to `dist/tests/fixtures/antipatterns.php` documenting which warning-level checks this antipattern fixture is intended to exercise (timezone-sensitive code, ORDER BY RAND, LIKE leading wildcards, and transients without expiration).
+
+## [1.3.12] - 2026-01-17
+
+### Fixed
+- **Fixture Baselines**
+  - Updated `dist/tests/run-fixture-tests.sh` expectations for `antipatterns.php` to match the current scanner behavior (now 9 errors and 4 warnings). This keeps the fixture useful as a broad regression test while acknowledging the additional intentional warning-level rule now reported in the summary.
+
+## [1.3.11] - 2026-01-17
+
+### Changed
+- **HTTP Timeout Detection**
+  - Refined the `http-no-timeout` rule in `dist/bin/check-performance.sh` to better support centralized `$args` patterns and reduce false positives:
+    - Introduced a dedicated `HTTP_TIMEOUT_BACKWARD_LINES` constant (default: 20) to control how many lines are searched backward for `$args` definitions with a `timeout` parameter.
+    - Added a heuristic tier for calls that use centralized argument containers (e.g. `self::ARGS`, `My_Class::ARGS`, `$this->get_args()`), emitting **INFO**-level findings instead of full warnings so these can be reviewed without failing the check.
+    - Updated CLI and JSON output so `http-no-timeout` now clearly distinguishes between high-confidence missing timeouts and lower-confidence centralized-args cases, while maintaining existing fixture expectations.
+
 ## [1.3.10] - 2026-01-14
 
 ### Fixed

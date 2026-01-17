@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.10"
+SCRIPT_VERSION="1.3.13"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -118,6 +118,10 @@ VERBOSE=false
 ENABLE_LOGGING=true
 OUTPUT_FORMAT="json"  # text or json (default: json for HTML reports)
 CONTEXT_LINES=3       # Number of lines to show before/after findings (0 to disable)
+# Number of lines to search backward for wp_remote_* $args definitions when
+# detecting missing HTTP timeouts. Kept as a dedicated constant so it can be
+# tuned independently without touching the core rule logic.
+HTTP_TIMEOUT_BACKWARD_LINES=20
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
@@ -5485,8 +5489,9 @@ HTTP_NO_TIMEOUT_MATCHES=$(grep -rHn $EXCLUDE_ARGS --include="*.php" \
   -E "wp_remote_(get|post|request|head)[[:space:]]*\(" \
   "$PATHS" 2>/dev/null || true)
 
-HTTP_NO_TIMEOUT_ISSUES=""
-HTTP_NO_TIMEOUT_FINDING_COUNT=0
+	HTTP_NO_TIMEOUT_ISSUES=""
+	HTTP_NO_TIMEOUT_FINDING_COUNT=0
+	HTTP_NO_TIMEOUT_INFO_COUNT=0
 
 if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
   while IFS= read -r match; do
@@ -5506,11 +5511,12 @@ if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
       continue
     fi
 
-    # Look at next 5 lines for 'timeout' parameter (inline args)
-    # But only within the same statement (until we hit a semicolon)
-    start_line=$line_num
-    end_line=$((line_num + 5))
-    has_timeout=false
+	    # Look at next 5 lines for 'timeout' parameter (inline args)
+	    # But only within the same statement (until we hit a semicolon)
+	    start_line=$line_num
+	    end_line=$((line_num + 5))
+	    has_timeout=false
+	    confidence="high"  # Default: treat as high-confidence missing-timeout finding
 
     # Extract the statement (until semicolon) from next 5 lines
     statement=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null | \
@@ -5528,9 +5534,9 @@ if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
         # Extract variable name (e.g., $args from "wp_remote_get($url, $args)")
         var_name=$(echo "$code" | grep -oE '\$[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\)' | sed 's/[[:space:]]*)//' | head -1)
 
-        if [ -n "$var_name" ]; then
-          # Look backward up to 20 lines for variable definition with timeout
-          backward_start=$((line_num - 20))
+	        if [ -n "$var_name" ]; then
+	          # Look backward up to HTTP_TIMEOUT_BACKWARD_LINES for variable definition with timeout
+	          backward_start=$((line_num - HTTP_TIMEOUT_BACKWARD_LINES))
           [ "$backward_start" -lt 1 ] && backward_start=1
 
           # Check if variable is defined with 'timeout' in previous lines
@@ -5539,18 +5545,45 @@ if [ -n "$HTTP_NO_TIMEOUT_MATCHES" ]; then
              grep -qE "'timeout'|\"timeout\""; then
             has_timeout=true
           fi
-        fi
-      fi
-    fi
+	        fi
+	      fi
+	    fi
 
-    # Only flag if no timeout found (inline or in variable definition)
-    if [ "$has_timeout" = false ]; then
-      if ! should_suppress_finding "http-no-timeout" "$file"; then
-        HTTP_NO_TIMEOUT_ISSUES="${HTTP_NO_TIMEOUT_ISSUES}${match}"$'\n'
-        add_json_finding "http-no-timeout" "warning" "$HTTP_TIMEOUT_SEVERITY" "$file" "$line_num" "HTTP request without explicit timeout can hang site if remote server doesn't respond" "$code"
-        ((HTTP_NO_TIMEOUT_FINDING_COUNT++)) || true
-      fi
-    fi
+	    # If we still haven't found a timeout, classify potential lower-confidence cases
+	    if [ "$has_timeout" = false ]; then
+	      # Try to detect centralized args provided via constants or methods, e.g.:
+	      # - wp_remote_get( $url, self::ARGS );
+	      # - wp_remote_get( $url, My_Class::ARGS );
+	      # - wp_remote_get( $url, $this->get_args() );
+	      # This is a heuristic: we only use it to DOWNGRADE findings to INFO so it
+	      # is safe if the detection is not perfect.
+	      second_arg_expr=$(echo "$statement" | \
+	        sed -n 's/.*wp_remote_[a-zA-Z0-9_]*(\([^,]*,\)[[:space:]]*\([^,)]*\).*/\2/p' | head -1)
+	      # Trim whitespace from extracted expression
+	      second_arg_expr=$(echo "$second_arg_expr" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+	      if [ -n "$second_arg_expr" ]; then
+	        if echo "$second_arg_expr" | grep -qE '::|->'; then
+	          confidence="medium"
+	        fi
+	      fi
+	    fi
+
+	    # Only flag if no timeout found (inline or in variable definition)
+	    if [ "$has_timeout" = false ]; then
+	      if ! should_suppress_finding "http-no-timeout" "$file"; then
+	        if [ "$confidence" = "medium" ]; then
+	          # Centralized args via constant/method: emit INFO for manual verification
+	          add_json_finding "http-no-timeout" "info" "LOW" "$file" "$line_num" \
+	            "HTTP request uses centralized args (constant/method); manually verify timeout is configured in shared args" "$code"
+	          ((HTTP_NO_TIMEOUT_INFO_COUNT++)) || true
+	        else
+	          HTTP_NO_TIMEOUT_ISSUES="${HTTP_NO_TIMEOUT_ISSUES}${match}"$'\n'
+	          add_json_finding "http-no-timeout" "warning" "$HTTP_TIMEOUT_SEVERITY" "$file" "$line_num" \
+	            "HTTP request without explicit timeout can hang site if remote server doesn't respond" "$code"
+	          ((HTTP_NO_TIMEOUT_FINDING_COUNT++)) || true
+	        fi
+	      fi
+	    fi
   done <<< "$HTTP_NO_TIMEOUT_MATCHES"
 fi
 
@@ -5565,7 +5598,14 @@ if [ "$HTTP_NO_TIMEOUT_FINDING_COUNT" -gt 0 ]; then
   if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$HTTP_NO_TIMEOUT_ISSUES" ]; then
     echo "$HTTP_NO_TIMEOUT_ISSUES" | head -5
   fi
+  if [ "$HTTP_NO_TIMEOUT_INFO_COUNT" -gt 0 ] && [ "$OUTPUT_FORMAT" = "text" ]; then
+    text_echo "${BLUE}  (${HTTP_NO_TIMEOUT_INFO_COUNT} additional HTTP request(s) use centralized args (constant/method) - manually verify timeout in shared configuration)${NC}"
+  fi
   add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "failed" "$HTTP_NO_TIMEOUT_FINDING_COUNT"
+elif [ "$HTTP_NO_TIMEOUT_INFO_COUNT" -gt 0 ]; then
+  # No hard failures, but at least one INFO-level centralized args case
+  text_echo "${GREEN}  ✓ Passed${NC} ${BLUE}(${HTTP_NO_TIMEOUT_INFO_COUNT} HTTP request(s) use centralized args (constant/method) - manually verify timeout in shared configuration)${NC}"
+  add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "passed" 0
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "HTTP requests without timeout" "$HTTP_TIMEOUT_SEVERITY" "passed" 0
