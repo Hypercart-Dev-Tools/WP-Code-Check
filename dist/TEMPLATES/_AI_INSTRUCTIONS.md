@@ -734,6 +734,43 @@ python3 dist/bin/json-to-html.py "$latest_json" dist/reports/manual-report.html
 
 **Remember:** The HTML converter reads the JSON file at the time it runs. If you regenerate HTML before updating the JSON with AI triage data, the HTML will not include the triage information.
 
+### AI Triage Hallucinations: Recommendations for Non-Existent Issues
+
+**Symptom:** AI triage recommendations mention issues (e.g., "Remove debugger statements") that don't appear in the actual findings list.
+
+**Root Cause:** The AI triage script was generating hardcoded recommendations that didn't validate against actual findings. This has been fixed in v1.1+.
+
+**How to Detect:**
+1. Review the recommendations in the HTML report
+2. Search the findings list for the recommended issue
+3. If no findings match the recommendation → it's a hallucination
+
+**Example (Fixed in v1.1):**
+```
+❌ OLD (v1.0): Recommendation: "Remove debugger; statements from shipped JS"
+   But: Zero findings for debugger statements in the scan
+
+✅ NEW (v1.1): Only recommendations for issues actually found in triaged findings
+```
+
+**Prevention (v1.1+):**
+- AI triage now builds recommendations dynamically from actual findings
+- Each recommendation is validated against the triaged findings set
+- Validation step logs: `✅ Validation passed: N recommendations match actual findings`
+- If no actionable findings exist, a generic guidance recommendation is provided instead
+
+**For AI Agents (v1.1+):**
+- The script automatically validates recommendations before writing JSON
+- Look for this log message: `[AI Triage] ✅ Validation passed: N recommendations match actual findings`
+- If you see warnings about mismatched recommendations, investigate the triaged findings
+- Never manually add hardcoded recommendations; always derive them from actual findings
+
+**If You Encounter Hallucinations:**
+1. Check the AI triage script version: `grep "version.*:" dist/bin/ai-triage.py | head -1`
+2. If version < 1.1, update the script from the main branch
+3. Re-run triage: `python3 dist/bin/ai-triage.py dist/logs/[TIMESTAMP].json`
+4. Verify recommendations: `jq '.ai_triage.recommendations' dist/logs/[TIMESTAMP].json`
+
 ### Getting Help
 
 If you encounter issues not covered here:
@@ -773,6 +810,11 @@ If you encounter issues not covered here:
 - [ ] Analyze findings for false positives (check context, safeguards)
 - [ ] Update JSON with `ai_triage` section (summary stats + recommendations)
 - [ ] **VERIFY JSON was updated:** `jq '.ai_triage' dist/logs/[TIMESTAMP].json`
+- [ ] **HALLUCINATION CHECK:** Verify recommendations match actual findings
+  - [ ] Extract recommendations: `jq '.ai_triage.recommendations' dist/logs/[TIMESTAMP].json`
+  - [ ] For each recommendation, search findings for matching issue type
+  - [ ] If recommendation mentions issue not in findings → hallucination detected
+  - [ ] Script validates automatically (look for: `✅ Validation passed`)
 - [ ] **THEN regenerate HTML:** `python3 dist/bin/json-to-html.py [json] [html]`
 - [ ] Verify AI summary appears at top of HTML report: `grep -c 'AI Triage\|False Positives' dist/reports/[TIMESTAMP].html`
 
