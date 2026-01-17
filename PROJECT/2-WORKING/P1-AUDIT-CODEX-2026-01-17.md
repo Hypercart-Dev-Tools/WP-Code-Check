@@ -17,14 +17,14 @@ Attn LLMs: do not create new docs unless directed. Please update this doc with f
 - **Code refs:** `dist/bin/check-performance.sh:5832`, `dist/bin/check-performance.sh:5866`, `dist/bin/check-performance.sh:5958`
 - **Why it matters:** Any stderr emitted by failed `/dev/tty` redirections (or tools writing to stderr) contaminates JSON, causing downstream `jq`, HTML converter, and AI triage to fail.
 
-- [ ] STATUS: In Progress
-
 #### Patch Plan (JSON output / non-TTY)
-- [ ] 1.1 Confirm all JSON-mode progress output is gated behind `OUTPUT_FORMAT = json` and does **not** write to stdout.
-- [ ] 1.2 Tighten `/dev/tty` guards so we **never** attempt to write to `/dev/tty` if it is not available, and fall back to quiet `debug_echo` logging instead.
-- [ ] 1.3 In JSON mode with `--no-log` (`ENABLE_LOGGING=false`), ensure there are **zero** non-JSON writes (no pattern-library-manager, no HTML hints, no progress banners).
+- [x] 1.1 Confirm all JSON-mode progress output is gated behind `OUTPUT_FORMAT = json` and does **not** write to stdout.
+- [x] 1.2 Tighten `/dev/tty` guards so we **never** attempt to write to `/dev/tty` if it is not available, and fall back to quiet `debug_echo` logging instead.
+- [x] 1.3 In JSON mode with `--no-log` (`ENABLE_LOGGING=false`), ensure there are **zero** non-JSON writes (no pattern-library-manager, no HTML hints, no progress banners).
 - [ ] 1.4 Add/adjust a small CI-style sanity check that runs `--format json --no-log` and validates that stdout is a single valid JSON document (no preamble/noise).
 - [ ] 1.5 Re-run WooCommerce/Beaver/ACF scans in JSON mode to confirm logs remain clean in both TTY and non-TTY scenarios.
+
+_Status note (2026-01-17): Items 1.1–1.3 implemented in `dist/bin/check-performance.sh` and validated by running `--format json --no-log` against `tests/fixtures/antipatterns.php`, confirming JSON-only stdout and a valid document._
 
 ### 2) Registry cache parsing is not whitespace-safe
 - **Severity:** High
@@ -35,14 +35,14 @@ Attn LLMs: do not create new docs unless directed. Please update this doc with f
 - **Code refs:** `dist/lib/pattern-loader.sh:159`, `dist/lib/pattern-loader.sh:221`, `dist/lib/pattern-loader.sh:265`
 - **Why it matters:** Many regex patterns and validator args contain spaces or escaped whitespace. Truncation changes detection logic silently.
 
-- [ ] STATUS: In Progress
-
 #### Patch Plan (Registry cache whitespace safety)
-- [ ] 2.1 Change the cache line encoding so that **values are safely delimited**, e.g. use a JSON or `key=<len>:<value>` style format instead of naive space splitting.
-- [ ] 2.2 Update the Bash-side parser in `_load_pattern_from_registry()` to read each line as a whole record and parse fields without splitting on raw spaces.
+- [x] 2.1 Change the cache line encoding so that **values are safely delimited**, e.g. use a JSON or `key=<len>:<value>` style format instead of naive space splitting.
+- [x] 2.2 Update the Bash-side parser in `_load_pattern_from_registry()` to read each line as a whole record and parse fields without splitting on raw spaces.
 - [ ] 2.3 Add at least one pattern in `PATTERN-LIBRARY.json` (or a temporary test pattern) whose `search_pattern` and `validator_args` contain spaces to validate round-trip encoding/decoding.
 - [ ] 2.4 Verify that existing patterns still load correctly (file patterns, mitigation flags, severity_downgrade) and that registry hit/miss metrics remain accurate.
 - [ ] 2.5 Run fixture tests and a real plugin scan (e.g., WooCommerce) to confirm detection behaviour is unchanged except where whitespace bugs previously caused silent truncation.
+
+_Status note (2026-01-17): Items 2.1–2.2 implemented in `dist/lib/pattern-loader.sh` (length-prefixed `key=<len>:<value>` encoding plus matching Bash parser) and validated via the `http-no-timeout` pattern and the antipatterns fixture scan using the registry-backed loader. Remaining items track additional test coverage (dedicated "spaces" pattern, broader pattern/mitigation verification, and a real plugin scan)._ 
 
 ### 3) Registry cache temp files are never cleaned up
 - **Severity:** Low
@@ -68,5 +68,7 @@ Attn LLMs: do not create new docs unless directed. Please update this doc with f
 - Assumed: JSON output is consumed by CI or external tooling and must remain a single valid JSON document.
 - Assumed: Pattern `search_pattern` and `validator_args` may include whitespace (common for regex literals and CLI flags).
 
-## Change Summary (No Changes Made)
-- This audit is observational only; no files modified.
+## Change Summary (Work in Progress)
+- Implemented JSON-output hardening for `--format json --no-log` in `dist/bin/check-performance.sh` and verified clean JSON-only stdout against `tests/fixtures/antipatterns.php`.
+- Implemented whitespace-safe registry cache encoding/parsing in `dist/lib/pattern-loader.sh` and validated the registry-backed loader with the `http-no-timeout` pattern and antipatterns fixture.
+- Bumped scanner version to `2.0.1` and recorded these changes in `CHANGELOG.md`.

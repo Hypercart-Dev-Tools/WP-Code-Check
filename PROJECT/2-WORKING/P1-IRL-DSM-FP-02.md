@@ -1,7 +1,7 @@
 # IRL: Direct Superglobal Manipulation (DSM) False Positives - Post Memory Loader Project Version
 
 **Created:** 2026-01-17  
-**Status:** Not Started   
+**Status:** In Progress   
 **Priority:** P2  
 **Rule:** `spo-002-superglobals` (Direct superglobal manipulation)
 
@@ -17,6 +17,7 @@
 8. Implementation Details
 9. Risks and Mitigations
 10. Decision Points
+11. Test Fixtures (Not Started)
 
 ## Project Summary
 
@@ -106,6 +107,13 @@ Primary path (recommended):
 
 ## Implementation Details
 
+### Architecture Alignment (Registry-Backed Memory Loader)
+
+- Treat `dist/PATTERN-LIBRARY.json` as the authoritative source for DSM pattern metadata.
+- Any changes to `search_pattern`, `file_patterns`, or mitigation/validator configuration must be made in `dist/patterns/spo-002-superglobal-manipulation.json` and then regenerated via `pattern-library-manager.sh`.
+- The in-memory registry cache is now the default path; if the registry is stale or missing, the loader falls back to per-pattern JSON parsing. This doc assumes registry-first behavior.
+- Guard/sanitizer logic still lives in the quick scanner; if future work moves any of that logic into scripted validators, ensure `validator_script`/`validator_args` and mitigation fields are added to the registry and consumed by the loader adapter.
+
 ### Phase 1: Define Policy and Heuristics
 
 - Split DSM into two categories at the check level:
@@ -124,6 +132,34 @@ Primary path (recommended):
 - Update `detect_guards()` and add `detect_sanitizers()`.
 - Adjust DSM check failure logic to trigger only on unguarded DSM.
 - Update JSON output to include `guarded`, `sanitized`, and `severity` fields as appropriate.
+- If any detection inputs are updated (e.g., more precise regex, file patterns), regenerate `dist/PATTERN-LIBRARY.json` so the registry-backed loader stays in sync.
+
+#### Phase 2 Implementation Tasks (Concrete)
+
+- [x] Guard detection updates
+  - [x] Ensure `detect_guards()` recognizes `check_admin_referer`, `wp_verify_nonce`, and `current_user_can`.
+  - [x] Treat `is_admin` as a weak guard only (does not fully downgrade on its own).
+  - [x] Include same-line guard checks (e.g., `wp_verify_nonce` in the condition).
+
+- [x] Sanitizer detection for writes
+  - [x] Add `detect_write_sanitizers()` with the Phase 1 sanitizer list.
+  - [x] Limit sanitizer signals to the same context window as the write.
+
+- [x] DSM classification and failure criteria
+  - [x] Compute `guarded` and `sanitized` booleans per finding.
+  - [x] Fail the check only when `guarded=false`.
+  - [x] Downgrade guarded + sanitized to info severity.
+
+- [x] JS/AJAX-in-PHP exclusion
+  - [x] Tighten `is_html_or_rest_config` (or add a dedicated JS detector).
+  - [x] Exclude lines inside JS blocks in PHP views, especially `$.ajax({ type: 'POST' ... })`.
+
+- [ ] Bridge code allowlist
+  - [x] Extend `should_suppress_finding` to support `spo-002-superglobals-bridge`.
+  - [ ] Document expected format in template suppression examples if needed.
+
+- [x] Output consistency
+  - [x] Confirm JSON findings include `guards` list and new `guarded/sanitized/severity` fields.
 
 ### Phase 3: Benchmark Results
 
@@ -133,6 +169,22 @@ Primary path (recommended):
   - Share of findings now classified as guarded/sanitized.
   - Any missed unguarded DSM instances.
   - Specific regression: Hypercart Server Monitor MKII should report **zero** DSM findings originating from JS admin views once non-PHP filtering is in place.
+
+#### Benchmark Results (Current)
+
+1. Hypercart Server Monitor MKII
+   - Result: DSM findings = 0 (no failures).
+   - Regression target met: JS admin view DSM findings removed.
+
+2. Health Check & Troubleshooting
+   - Before: DSM total = 8.
+   - After: DSM total = 8; unguarded (fail) = 3.
+   - Net: Reduced failing DSM count by 5 while preserving visibility.
+
+3. SPC Order Velocity Monitor (Scaled)
+   - Before (2026-01-10-012836-UTC.json): DSM total = 16.
+   - After (2026-01-17-225644-UTC.json): DSM total = 18; unguarded (fail) = 9; guarded/info = 9.
+   - Net: Failing DSM count reduced by 7, with additional guarded/info visibility.
 
 ### Phase 4 (Optional): GRA SuperglobalsRule
 
@@ -160,3 +212,21 @@ Primary path (recommended):
 
 - After Phase 3: If FP reduction is at least 5–10% and unguarded detection remains strong, ship Option A.
 - After Phase 4: If GRA meaningfully reduces noise without performance issues, consider optional integration.
+
+## Test Fixtures (Not Started)
+
+Goal: Validate that DSM false-positive reductions do not suppress true positives.
+
+Planned fixture updates:
+
+- Add DSM fixtures for guarded + sanitized patterns (should be info/warn, not fail).
+- Add DSM fixtures for unguarded writes (must fail).
+- Add JS/AJAX-in-PHP snippet fixtures to confirm exclusion.
+- Add nonce-in-condition fixtures (same-line guard detection).
+- Add bridge-code examples with explicit suppression to verify allowlist behavior.
+
+Acceptance criteria:
+
+- DSM fixtures confirm unguarded writes still fail.
+- Guarded + sanitized fixtures remain visible but do not fail.
+- Exclusions only apply to JS/REST/HTML cases, not real PHP writes.
