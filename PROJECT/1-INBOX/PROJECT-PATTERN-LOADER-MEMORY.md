@@ -308,12 +308,84 @@ fi
 
 ## Testing Plan
 
-1. **Baseline measurement:** Time current pattern loading with `PROFILE=1`
-2. **Implementation:** Add registry loader and modify scanner
-3. **Performance test:** Compare before/after with same codebase
-4. **Fallback test:** Delete PATTERN-LIBRARY.json and verify graceful degradation
-5. **Compatibility test:** Test on Bash 3 and Bash 4+ environments
-6. **Large codebase test:** Measure improvement on WooCommerce or similar
+This section focuses on validating the **Phase 2 registry-backed loader** and its fallbacks. Performance-focused work (Phase 3/4) remains for later iterations.
+
+### 1. Pre-checks: Registry availability and validity
+
+- [ ] Ensure the pattern registry exists and is valid JSON:
+
+  ```bash
+  # From repository root
+  cd dist
+  ./bin/check-pattern-library-json.sh
+  ```
+
+  **Expected:** Script exits with status 0 and prints a success message (or no errors). Any JSON parsing error here is a **blocker** for Phase 2.
+
+### 2. Functional regression tests (fixtures + mitigation)
+
+These confirm that preferring the registry in `load_pattern()` does **not** change detection or mitigation behavior.
+
+- [ ] Run the main fixture test suite (local or CI emulation):
+
+  ```bash
+  # Local TTY
+  cd dist
+  ./tests/run-fixture-tests.sh
+
+  # CI-style (no TTY)
+  ./tests/run-tests-ci-mode.sh
+  ```
+
+  **Expected:**
+  - All fixture tests pass (`Passed: N, Failed: 0`).
+  - No new or changed findings for fixtures that exercise registry-backed patterns (e.g. `antipatterns.php`, `clean-code.php`, `file-get-contents-url.php`, `unsanitized-superglobal-read.php`).
+
+- [ ] Run mitigation-focused tests (requires PHP in the environment):
+
+  ```bash
+  cd dist
+  php tests/test-mitigation-detection.php
+  ```
+
+  **Expected:**
+  - All mitigation scenarios still behave as before (severity downgrades, mitigation-enabled flags, validator selection).
+  - No new failures introduced by registry-backed field loading.
+
+> Note: On this dev machine, `php` is not available (`php: command not found`), so this step must be executed either in CI or in a local environment with PHP installed.
+
+### 3. Registry vs. JSON fallback behavior
+
+These checks validate that **fallbacks** still work when the registry is missing or unusable.
+
+- [ ] Run a quick smoke test **without** the registry:
+
+  ```bash
+  cd dist
+  mv PATTERN-LIBRARY.json PATTERN-LIBRARY.json.bak
+  ./tests/run-fixture-tests.sh
+  mv PATTERN-LIBRARY.json.bak PATTERN-LIBRARY.json
+  ```
+
+  **Expected:**
+  - Fixture tests still pass.
+  - No hard dependency on `PATTERN-LIBRARY.json` inside `load_pattern()` (the loader falls back cleanly to per-pattern JSON parsing).
+
+- [ ] Optionally simulate an environment without `python3` (CI image without Python or by temporarily shadowing `python3`).
+
+  **Expected:**
+  - Registry adapter is skipped (`pattern_registry_available` returns false).
+  - Loader uses legacy JSON parsing path; fixture tests remain green.
+
+### 4. CI integration
+
+In CI (GitHub Actions or equivalent), add/verify steps that run **after** any job that regenerates `PATTERN-LIBRARY.json`:
+
+- [ ] `dist/bin/check-pattern-library-json.sh` (registry structural sanity check).
+- [ ] `dist/tests/run-fixture-tests.sh` or `dist/tests/run-tests-ci-mode.sh` (behavioral regression check).
+- [ ] `dist/tests/test-mitigation-detection.php` (when PHP is available in the CI image).
+
+**Success criteria for Phase 2:** All of the above checks pass with no new failures and no drift in expected fixture results vs. pre-registry behavior.
 
 ---
 
@@ -334,4 +406,8 @@ fi
 - **Pattern versioning:** Detect version mismatches between registry and files
 - **Parallel loading:** Load patterns in background while file list builds
 - **Pattern caching:** Cache across multiple scans (with invalidation)
+ - **CI guardrail for registry-backed loader (optional):** Promote the registry-backed loader validation flow into a dedicated GitHub Actions job that runs after any change to `dist/PATTERN-LIBRARY.json` or `dist/lib/pattern-loader.sh`, wiring in:
+   - `dist/bin/check-pattern-library-json.sh`
+   - `dist/tests/run-fixture-tests.sh` or `dist/tests/run-tests-ci-mode.sh`
+   - `dist/tests/test-mitigation-detection.php` (where PHP is available)
 

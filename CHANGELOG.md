@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.31] - 2026-01-17
+
+### Documentation
+- **Pattern Loader Memory Doc** – Recorded the optional CI guardrail idea for the registry-backed loader (dedicated job that runs registry JSON check + fixtures + mitigation tests after registry or loader changes) under "Future Enhancements" so it's tracked as a parked option rather than an immediate requirement.
+
+### Changed
+- **Version:** 1.3.30 → 1.3.31
+
+## [1.3.30] - 2026-01-16
+
+### Documentation
+- **Test Suite README** – Added a brief "Registry-backed loader validation" subsection to `dist/tests/README.md` describing which scripts to run to validate the Phase 2 registry-backed loader and pointing to `PROJECT/1-INBOX/PROJECT-PATTERN-LOADER-MEMORY.md` for the detailed test plan.
+
+### Changed
+- **Version:** 1.3.29 → 1.3.30
+
 ## [1.3.29] - 2026-01-16
 
 ### Changed

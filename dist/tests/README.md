@@ -327,6 +327,25 @@ The test suite is integrated with GitHub Actions in `.github/workflows/test.yml`
 
 ---
 
+## Registry-Backed Loader Validation
+
+Use this flow to validate the Phase 2 registry-backed loader locally and in CI:
+
+```bash
+cd dist
+./bin/check-pattern-library-json.sh         # Registry JSON sanity check
+./tests/run-fixture-tests.sh                # Fixture regression suite (TTY)
+./tests/run-tests-ci-mode.sh                # CI-style run (no TTY)
+# Optional, where PHP is available:
+php tests/test-mitigation-detection.php     # Mitigation wiring regression
+```
+
+For the full rationale, failure modes, and acceptance criteria, see the **"Testing Plan"** section in:
+
+- `PROJECT/1-INBOX/PROJECT-PATTERN-LOADER-MEMORY.md`
+
+---
+
 ## Related Documentation
 
 - **Main README:** `/README.md`
