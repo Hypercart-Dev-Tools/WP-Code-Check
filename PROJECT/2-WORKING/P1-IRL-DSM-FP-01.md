@@ -1,7 +1,7 @@
 # IRL: Direct Superglobal Manipulation (DSM) False Positives
 
 **Created:** 2026-01-17  
-**Status:** Not Started 
+**Status:** In Progress
 **Priority:** P2   
 **Rule:** `spo-002-superglobals` (Direct superglobal manipulation)
 
@@ -26,10 +26,10 @@ Reduce DSM false positives by ~5–20% while keeping the rule loud on genuine ri
 
 Note for LLM: Always mark checklist items as progress is made.
 
-- [ ] Phase 1: Define policy and heuristics (guarded vs unguarded DSM)
+- [x] Phase 1: Define policy and heuristics (guarded vs unguarded DSM)
 - [ ] Phase 2: Implement quick scanner refinements
 - [ ] Phase 3: Benchmark results on representative plugins
-**PAUSE TO DECIDE**
+- [ ] Decision Gate A: After benchmarks, decide if GRA prototype is required
 - [ ] Phase 4: Prototype GRA SuperglobalsRule (optional)
 - [ ] Phase 5: Decide on integration strategy and rollout
 
@@ -120,11 +120,66 @@ Primary path (recommended):
 - Add project-level allowlist pattern:
   - Allow per-project suppression of known bridge code, e.g., `spo-002-superglobals-bridge`.
 
+#### Phase 1 Output: Defined Policies and Decisions
+
+1. Severity and failure criteria
+   - Fail the DSM check only when a finding is classified as unguarded.
+   - Guarded DSM remains visible in output but does not fail the scan.
+   - Guarded + sanitized DSM is downgraded further (info-level).
+
+2. Guard definitions (minimum viable)
+   - Nonce verification: `check_admin_referer`, `wp_verify_nonce`.
+   - Capability checks: `current_user_can`.
+   - Admin gating: `is_admin` counts only as a weak guard (does not fail by itself).
+
+3. Sanitizer detection (writes only)
+   - Recognize `absint`, `sanitize_text_field`, `sanitize_email`, `sanitize_key`, `esc_url_raw`, `sanitize_textarea_field`.
+   - Sanitizer must wrap the superglobal assignment or appear within the same context window as the write.
+
+4. JS/AJAX-in-PHP exclusion policy
+   - Lines inside JavaScript blocks in PHP views are out of scope for DSM.
+   - jQuery patterns like `$.ajax({ type: 'POST', data: { ... } })` are excluded from DSM.
+   - These should be handled by JS-facing rules instead of DSM.
+
+5. Bridge code allowlist
+   - Add per-project suppression pattern `spo-002-superglobals-bridge`.
+   - Bridge suppressions are allowed only in explicitly listed files.
+
+6. Context window
+   - Guard and sanitizer detection uses a small surrounding window (current line plus nearby lines).
+   - Window size should be consistent with existing guard detection to avoid surprising behavior.
+
 ### Phase 2: Implement Quick Scanner Refinements
 
 - Update `detect_guards()` and add `detect_sanitizers()`.
 - Adjust DSM check failure logic to trigger only on unguarded DSM.
 - Update JSON output to include `guarded`, `sanitized`, and `severity` fields as appropriate.
+
+#### Phase 2 Implementation Tasks (Concrete)
+
+- [x] Guard detection updates
+  - [x] Ensure `detect_guards()` recognizes `check_admin_referer`, `wp_verify_nonce`, and `current_user_can`.
+  - [x] Treat `is_admin` as a weak guard only (does not fully downgrade on its own).
+
+- [x] Sanitizer detection for writes
+  - [x] Add `detect_write_sanitizers()` with the Phase 1 sanitizer list.
+  - [x] Limit sanitizer signals to the same context window as the write.
+
+- [x] DSM classification and failure criteria
+  - [x] Compute `guarded` and `sanitized` booleans per finding.
+  - [x] Fail the check only when `guarded=false`.
+  - [x] Downgrade guarded + sanitized to info severity.
+
+- [x] JS/AJAX-in-PHP exclusion
+  - [x] Tighten `is_html_or_rest_config` (or add a dedicated JS detector).
+  - [x] Exclude lines inside JS blocks in PHP views, especially `$.ajax({ type: 'POST' ... })`.
+
+- [ ] Bridge code allowlist
+  - [x] Extend `should_suppress_finding` to support `spo-002-superglobals-bridge`.
+  - [ ] Document expected format in template suppression examples if needed.
+
+- [x] Output consistency
+  - [x] Confirm JSON findings include `guards` list and new `guarded/sanitized/severity` fields.
 
 ### Phase 3: Benchmark Results
 

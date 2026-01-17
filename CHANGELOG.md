@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.15] - 2026-01-17
+
+### Changed
+- **DSM False Positive Reduction**
+  - Updated `spo-002-superglobals` handling to fail only on unguarded writes while keeping guarded findings visible at lower severity.
+  - Added weak-guard handling for `is_admin()` and optional sanitizer-aware downgrades for superglobal writes.
+  - Extended HTML/REST false-positive filters to ignore embedded JS AJAX/fetch lines in PHP views.
+  - Added `spo-002-superglobals-bridge` baseline key support for per-file bridge-code suppression.
+  - JSON findings now include `guarded` and `sanitized` flags for DSM findings.
+
 ## [1.3.14] - 2026-01-17
 
 ### Documentation

@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.14"
+SCRIPT_VERSION="1.3.15"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -1103,8 +1103,8 @@ fi
 # ============================================================================
 
 # Add a finding to the JSON findings array
-# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"]
-# Phase 2 Enhancement: Optional guards and sanitizers parameters for context-aware findings
+# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"] ["guarded"] ["sanitized"]
+# Phase 2 Enhancement: Optional guards, sanitizers, and guard/sanitize flags for context-aware findings
 add_json_finding() {
   local rule_id="$1"
   local severity="$2"
@@ -1115,6 +1115,8 @@ add_json_finding() {
   local code="$7"
   local guards="${8:-}"      # Optional: space-separated list of detected guards
   local sanitizers="${9:-}"  # Optional: space-separated list of detected sanitizers
+  local guarded_flag="${10:-}"   # Optional: true/false
+  local sanitized_flag="${11:-}" # Optional: true/false
 
   # Truncate code snippet to 200 characters for display
   local truncated_code="$code"
@@ -1212,8 +1214,16 @@ add_json_finding() {
     fi
   fi
 
+  local extra_fields=""
+  if [ -n "$guarded_flag" ]; then
+    extra_fields="${extra_fields},\"guarded\":$guarded_flag"
+  fi
+  if [ -n "$sanitized_flag" ]; then
+    extra_fields="${extra_fields},\"sanitized\":$sanitized_flag"
+  fi
+
   local finding=$(cat <<EOF
-{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json}
+{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json${extra_fields}}
 EOF
 )
   JSON_FINDINGS+=("$finding")
@@ -2860,6 +2870,7 @@ if [ "$SUPERGLOBAL_SEVERITY" = "CRITICAL" ] || [ "$SUPERGLOBAL_SEVERITY" = "HIGH
 text_echo "${BLUE}▸ Direct superglobal manipulation ${SUPERGLOBAL_COLOR}[$SUPERGLOBAL_SEVERITY]${NC}"
 SUPERGLOBAL_FAILED=false
 SUPERGLOBAL_FINDING_COUNT=0
+SUPERGLOBAL_UNGUARDED_COUNT=0
 SUPERGLOBAL_VISIBLE=""
 
 # Find all superglobal manipulation patterns
@@ -2889,10 +2900,27 @@ if [ -n "$SUPERGLOBAL_MATCHES" ]; then
     fi
 
     # PHASE 2 ENHANCEMENT: Detect security guards (nonce checks, capability checks)
-    guards=$(detect_guards "$file" "$lineno" 20)
+    guards=$(detect_guards "$file" "$lineno")
+    sanitizers=$(detect_write_sanitizers "$file" "$lineno" 2)
+    guarded=false
+    sanitized=false
+
+    if [ -n "$guards" ]; then
+      if [ "$guards" != "is_admin" ]; then
+        guarded=true
+      fi
+    fi
+
+    if [ -n "$sanitizers" ]; then
+      sanitized=true
+    fi
 
     # If guards are present, still report but with context for triage
     # (Previously we suppressed entirely; now we report with guard info)
+
+    if should_suppress_finding "spo-002-superglobals-bridge" "$file"; then
+      continue
+    fi
 
     if should_suppress_finding "spo-002-superglobals" "$file"; then
       continue
@@ -2900,18 +2928,27 @@ if [ -n "$SUPERGLOBAL_MATCHES" ]; then
 
     # PHASE 2: Downgrade severity if guards are present
     adjusted_severity="$SUPERGLOBAL_SEVERITY"
-    if [ -n "$guards" ]; then
+    finding_severity="error"
+    if [ "$guarded" = true ]; then
       # Downgrade from HIGH to MEDIUM, or CRITICAL to HIGH
       case "$SUPERGLOBAL_SEVERITY" in
         CRITICAL) adjusted_severity="HIGH" ;;
         HIGH)     adjusted_severity="MEDIUM" ;;
         MEDIUM)   adjusted_severity="LOW" ;;
       esac
+      finding_severity="warning"
+      if [ "$sanitized" = true ]; then
+        adjusted_severity="LOW"
+        finding_severity="info"
+      fi
     fi
 
-    SUPERGLOBAL_FAILED=true
+    if [ "$guarded" = false ]; then
+      SUPERGLOBAL_FAILED=true
+      ((SUPERGLOBAL_UNGUARDED_COUNT++))
+    fi
     ((SUPERGLOBAL_FINDING_COUNT++))
-    add_json_finding "spo-002-superglobals" "error" "$adjusted_severity" "$file" "$lineno" "Direct superglobal manipulation" "$code" "$guards" ""
+    add_json_finding "spo-002-superglobals" "$finding_severity" "$adjusted_severity" "$file" "$lineno" "Direct superglobal manipulation" "$code" "$guards" "$sanitizers" "$guarded" "$sanitized"
 
     if [ -z "$SUPERGLOBAL_VISIBLE" ]; then
       SUPERGLOBAL_VISIBLE="$match"
@@ -2936,10 +2973,22 @@ if [ "$SUPERGLOBAL_FAILED" = true ]; then
       format_finding "$match"
     done <<< "$(echo "$SUPERGLOBAL_VISIBLE" | head -5)"
   fi
-  add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "failed" "$SUPERGLOBAL_FINDING_COUNT"
+  add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "failed" "$SUPERGLOBAL_UNGUARDED_COUNT"
 else
-  text_echo "${GREEN}  ✓ Passed${NC}"
-  add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "passed" 0
+  if [ "$SUPERGLOBAL_FINDING_COUNT" -gt 0 ]; then
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+    if [ "$OUTPUT_FORMAT" = "text" ] && [ -n "$SUPERGLOBAL_VISIBLE" ]; then
+      while IFS= read -r match; do
+        [ -z "$match" ] && continue
+        format_finding "$match"
+      done <<< "$(echo "$SUPERGLOBAL_VISIBLE" | head -5)"
+    fi
+    add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "passed" "$SUPERGLOBAL_FINDING_COUNT"
+  else
+    text_echo "${GREEN}  ✓ Passed${NC}"
+    add_json_check "Direct superglobal manipulation" "$SUPERGLOBAL_SEVERITY" "passed" 0
+  fi
 fi
 text_echo ""
 

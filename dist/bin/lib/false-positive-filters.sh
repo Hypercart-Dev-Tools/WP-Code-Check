@@ -136,6 +136,17 @@ is_html_or_rest_config() {
     return 0  # true - is REST config
   fi
 
+  # Check for JavaScript AJAX/fetch patterns embedded in PHP views
+  # These are front-end request descriptors, not PHP superglobal usage.
+  if echo "$code" | grep -qiE "\\$\\.ajax|jQuery\\.ajax|fetch\\(|axios\\.|XMLHttpRequest"; then
+    return 0  # true - is JS AJAX/fetch code
+  fi
+
+  # JS object config line for POST requests (e.g., type: 'POST', method: "POST")
+  if echo "$code" | grep -qiE "^[[:space:]]*(type|method)[[:space:]]*:[[:space:]]*['\"]POST['\"]"; then
+    return 0  # true - is JS request config
+  fi
+
   return 1  # false - not a false positive pattern
 }
 
@@ -331,6 +342,11 @@ detect_guards() {
     guards="${guards}current_user_can "
   fi
 
+  # Detect admin gating (weak guard)
+  if echo "$context" | grep -qE "is_admin[[:space:]]*\\("; then
+    guards="${guards}is_admin "
+  fi
+
   # Note: user_can() deliberately excluded (see function header comment)
 
   # Trim trailing space
@@ -427,6 +443,55 @@ detect_sanitizers() {
   # Detect WooCommerce sanitizer
   if echo "$code" | grep -qE "wc_clean[[:space:]]*\\([^)]*\\\$_(GET|POST|REQUEST|COOKIE)\\["; then
     sanitizers="${sanitizers}wc_clean "
+  fi
+
+  # Trim trailing space
+  sanitizers=$(echo "$sanitizers" | sed 's/[[:space:]]*$//')
+
+  echo "$sanitizers"
+}
+
+# Detect sanitizers near a superglobal write
+#
+# This function scans a small context window for sanitizers that may
+# wrap the value assigned into a superglobal.
+#
+# Returns: Space-separated list of detected sanitizers (empty if none)
+# Usage: sanitizers=$(detect_write_sanitizers "$file" "$line_num" 2)
+detect_write_sanitizers() {
+  local file="$1"
+  local line_num="$2"
+  local window="${3:-2}"
+  local start_line=$((line_num - window))
+  local end_line=$((line_num + window))
+  local context=""
+  local sanitizers=""
+
+  [ "$start_line" -lt 1 ] && start_line=1
+  context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || echo "")
+
+  if echo "$context" | grep -qE "sanitize_text_field[[:space:]]*\\("; then
+    sanitizers="${sanitizers}sanitize_text_field "
+  fi
+
+  if echo "$context" | grep -qE "sanitize_email[[:space:]]*\\("; then
+    sanitizers="${sanitizers}sanitize_email "
+  fi
+
+  if echo "$context" | grep -qE "sanitize_key[[:space:]]*\\("; then
+    sanitizers="${sanitizers}sanitize_key "
+  fi
+
+  if echo "$context" | grep -qE "sanitize_textarea_field[[:space:]]*\\("; then
+    sanitizers="${sanitizers}sanitize_textarea_field "
+  fi
+
+  if echo "$context" | grep -qE "esc_url_raw[[:space:]]*\\("; then
+    sanitizers="${sanitizers}esc_url_raw "
+  fi
+
+  if echo "$context" | grep -qE "absint[[:space:]]*\\("; then
+    sanitizers="${sanitizers}absint "
   fi
 
   # Trim trailing space
@@ -648,4 +713,3 @@ detect_sql_safety() {
 
 # Export library version for debugging
 FALSE_POSITIVE_FILTERS_VERSION="1.2.0"
-
