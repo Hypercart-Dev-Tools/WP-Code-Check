@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.14] - 2026-01-17
+
+### Documentation
+- **Analysis Docs**
+  - Added `PROJECT/4-MISC/IRL-DSM-FP.md` to document options for reducing 50% false positives for the `spo-002-superglobals` (Direct superglobal manipulation) rule, including quick-scanner heuristic refinements and potential integration with the experimental Golden Rules Analyzer.
+
 ## [1.3.13] - 2026-01-17
 
 ### Documentation
