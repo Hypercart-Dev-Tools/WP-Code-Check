@@ -29,6 +29,7 @@ Note for LLM: Always mark checklist items as progress is made.
 - [ ] Phase 1: Define policy and heuristics (guarded vs unguarded DSM)
 - [ ] Phase 2: Implement quick scanner refinements
 - [ ] Phase 3: Benchmark results on representative plugins
+**PAUSE TO DECIDE**
 - [ ] Phase 4: Prototype GRA SuperglobalsRule (optional)
 - [ ] Phase 5: Decide on integration strategy and rollout
 
