@@ -327,24 +327,80 @@ def main() -> int:
     print(f"  - Needs Review: {counts.get('Needs Review', 0)}", file=sys.stderr)
     print(f"[AI Triage] Overall confidence: {overall_conf}", file=sys.stderr)
 
-    # Minimal executive summary tailored to what we observed in the sample.
-    narrative_parts = []
+    # Minimal executive summary tailored to what we actually observed in the triaged sample.
+    narrative_parts: List[str] = []
     narrative_parts.append(
         "This Phase 2 triage pass reviews a subset of findings to separate likely true issues from policy/heuristic noise (especially in vendored/minified assets)."
     )
-    narrative_parts.append(
-        "Key confirmed items in the reviewed set include shipped `debugger;` statements and missing explicit HTTP timeouts. Several REST and admin capability findings appear to be heuristic/policy-driven and may be acceptable when endpoints are not list-based or when capabilities are enforced by WordPress menu APIs."
+
+    # Derive which high-priority categories were actually seen in the triaged sample.
+    has_debugger = any(
+        (item.get('finding_key') or {}).get('id') == 'spo-001-debug-code'
+        for item in triaged_items
     )
-    narrative_parts.append(
-        "A large portion of findings come from bundled/minified JavaScript or third-party libraries; these are difficult to validate from pattern matching alone and are therefore marked as Needs Review unless a clear mitigation is visible (e.g., regex escaping before `new RegExp()`)."
+    has_http_timeout = any(
+        (item.get('finding_key') or {}).get('id') == 'http-no-timeout'
+        for item in triaged_items
+    )
+    has_rest_pagination = any(
+        (item.get('finding_key') or {}).get('id') == 'rest-no-pagination'
+        for item in triaged_items
+    )
+    has_superglobals = any(
+        (item.get('finding_key') or {}).get('id') in ('spo-002-superglobals', 'unsanitized-superglobal-read')
+        for item in triaged_items
     )
 
-    recommendations = [
-        'Remove/strip `debugger;` statements from shipped JS assets (or upgrade/patch the vendored library that contains them).',
-        'Add explicit `timeout` arguments to `wp_remote_get/wp_remote_post/wp_remote_request` calls where missing.',
-        'For REST endpoints, confirm which routes return potentially large collections; add `per_page`/limit constraints there (action/single-item routes may not need pagination).',
-        'For superglobal reads, ensure values are validated/sanitized before use and that nonce/capability checks exist on the request path.',
-    ]
+    key_items = []
+    if has_debugger:
+        key_items.append("shipped `debugger;` statements in JS assets")
+    if has_http_timeout:
+        key_items.append("remote HTTP requests without explicit timeouts")
+    if has_rest_pagination:
+        key_items.append("REST endpoints missing explicit pagination/limits")
+    if has_superglobals:
+        key_items.append("direct or unsanitized superglobal access")
+
+    if key_items:
+        if len(key_items) == 1:
+            key_summary = key_items[0]
+        else:
+            key_summary = ", ".join(key_items[:-1]) + f" and {key_items[-1]}"
+        narrative_parts.append(
+            f"Key confirmed or high-signal items in the reviewed set include {key_summary}."
+        )
+    else:
+        narrative_parts.append(
+            "In this sampled set, no debugger statements, missing HTTP timeouts, REST pagination, or superglobal patterns were confirmed; most findings remain heuristic or require case-by-case review."
+        )
+
+    narrative_parts.append(
+        "A large portion of findings often come from bundled/minified JavaScript or third-party libraries; these are difficult to validate from pattern matching alone and are therefore marked as Needs Review unless a clear mitigation is visible (e.g., regex escaping before `new RegExp()`)."
+    )
+
+    recommendations: List[str] = []
+
+    if has_debugger:
+        recommendations.append(
+            'Remove/strip `debugger;` statements from shipped JS assets (or upgrade/patch the vendored library that contains them).'
+        )
+    if has_http_timeout:
+        recommendations.append(
+            'Add explicit `timeout` arguments to `wp_remote_get/wp_remote_post/wp_remote_request` calls where missing.'
+        )
+    if has_rest_pagination:
+        recommendations.append(
+            'For REST endpoints, confirm which routes return potentially large collections; add `per_page`/limit constraints there (action/single-item routes may not need pagination).'
+        )
+    if has_superglobals:
+        recommendations.append(
+            'For superglobal reads, ensure values are validated/sanitized before use and that nonce/capability checks exist on the request path.'
+        )
+
+    if not recommendations:
+        recommendations.append(
+            'Review the flagged findings in context and decide which ones to fix versus baseline, focusing first on CRITICAL-impact performance and security patterns.'
+        )
 
     data['ai_triage'] = {
         'performed': True,

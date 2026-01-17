@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-01-17
+
+### Fixed
+- **AI Triage narrative & recommendations** – Updated `dist/bin/ai-triage.py` so that
+  debugger- and HTTP-timeout-related guidance is only included when the underlying
+  deterministic findings include the corresponding rule IDs (for example,
+  `spo-001-debug-code`, `http-no-timeout`, REST pagination, or superglobal rules),
+  preventing misleading AI triage text in reports that do not contain those findings.
+
+### Changed
+- **Version:** 1.3.38 → 2.0.0
+- **Release line:** Mark this multi-file, registry-backed implementation as the
+  beginning of the 2.x series to clearly distinguish it from the earlier
+  monolithic single-file script.
+
 ## [1.3.38] - 2026-01-17
 
 ### Fixed
