@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.16"
+SCRIPT_VERSION="1.3.17"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -6061,9 +6061,14 @@ if [ -f "$SCRIPT_DIR/pattern-library-manager.sh" ]; then
   if [ "$OUTPUT_FORMAT" = "json" ]; then
     # In JSON mode, send output to terminal only (not to log file)
     # Check if /dev/tty is available (not available in CI environments)
+    TTY_OUT="/dev/null"
     if [ -w /dev/tty ] 2>/dev/null; then
-      bash "$SCRIPT_DIR/pattern-library-manager.sh" both > /dev/tty 2>&1 || {
-        echo "⚠️  Pattern library manager failed (non-fatal)" > /dev/tty
+      TTY_OUT="/dev/tty"
+    fi
+
+    if [ "$TTY_OUT" = "/dev/tty" ]; then
+      bash "$SCRIPT_DIR/pattern-library-manager.sh" both > "$TTY_OUT" 2>&1 || {
+        echo "⚠️  Pattern library manager failed (non-fatal)" > "$TTY_OUT"
       }
     else
       # No TTY available (CI environment) - suppress output to avoid corrupting JSON

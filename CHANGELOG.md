@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.17] - 2026-01-17
+
+### Fixed
+- **JSON Output Hygiene**
+  - Suppressed pattern library manager `/dev/tty` writes when no TTY is available to keep JSON logs clean.
+
 ## [1.3.16] - 2026-01-17
 
 ### Fixed
