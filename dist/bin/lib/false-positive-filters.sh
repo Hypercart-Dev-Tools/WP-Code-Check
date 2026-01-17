@@ -311,9 +311,9 @@ detect_guards() {
     fi
   fi
 
-  # PHASE 2.1: Only scan BEFORE the access line (not after)
+  # PHASE 2.1: Scan BEFORE or ON the access line
   # Guards after access are too late to protect it
-  end_line=$((line_num - 1))
+  end_line=$line_num
 
   if [ "$end_line" -lt "$start_line" ]; then
     # Access is at the very start of function - no guards possible

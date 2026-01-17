@@ -160,6 +160,7 @@ Primary path (recommended):
 - [x] Guard detection updates
   - [x] Ensure `detect_guards()` recognizes `check_admin_referer`, `wp_verify_nonce`, and `current_user_can`.
   - [x] Treat `is_admin` as a weak guard only (does not fully downgrade on its own).
+  - [x] Include same-line guard checks (e.g., `wp_verify_nonce` in the condition).
 
 - [x] Sanitizer detection for writes
   - [x] Add `detect_write_sanitizers()` with the Phase 1 sanitizer list.

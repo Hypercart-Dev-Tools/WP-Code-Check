@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.18] - 2026-01-17
+
+### Fixed
+- **JSON Output Hygiene**
+  - Only use `/dev/tty` when stdout is a TTY, preventing post-scan errors from contaminating JSON logs.
+
+### Changed
+- **DSM Guard Detection**
+  - Guard detection now includes the current line so nonce checks embedded in the same condition are recognized.
+
 ## [1.3.17] - 2026-01-17
 
 ### Fixed
