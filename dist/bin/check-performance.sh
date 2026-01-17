@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.15"
+SCRIPT_VERSION="1.3.16"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5977,6 +5977,11 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
 
   # Generate HTML report if running locally (not in GitHub Actions)
   if [ -z "$GITHUB_ACTIONS" ]; then
+    TTY_OUT="/dev/null"
+    if [ -w /dev/tty ] 2>/dev/null; then
+      TTY_OUT="/dev/tty"
+    fi
+
     # Create reports directory if it doesn't exist
     REPORTS_DIR="$PLUGIN_DIR/reports"
     mkdir -p "$REPORTS_DIR"
@@ -5989,22 +5994,22 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
     # This is more reliable than the inline bash function
     # IMPORTANT: Redirect to /dev/tty to prevent output from being captured in JSON log
     if command -v python3 &> /dev/null; then
-      if "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/tty 2>&1; then
-        echo "" > /dev/tty
-        echo "📊 HTML Report: $HTML_REPORT" > /dev/tty
+      if "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > "$TTY_OUT" 2>&1; then
+        echo "" > "$TTY_OUT"
+        echo "📊 HTML Report: $HTML_REPORT" > "$TTY_OUT"
       else
-        echo "⚠ HTML report generation failed (Python converter error)" > /dev/tty
+        echo "⚠ HTML report generation failed (Python converter error)" > "$TTY_OUT"
       fi
     else
-      echo "⚠ HTML report generation skipped (python3 not found)" > /dev/tty
-      echo "   Install Python 3 to enable HTML reports" > /dev/tty
+      echo "⚠ HTML report generation skipped (python3 not found)" > "$TTY_OUT"
+      echo "   Install Python 3 to enable HTML reports" > "$TTY_OUT"
     fi
 
     # Show GitHub issue creation hint if gh CLI is available and scan has AI triage data
     if command -v gh &> /dev/null && jq -e '.ai_triage' "$LOG_FILE" > /dev/null 2>&1; then
-      echo "" > /dev/tty
-      echo "💡 Create GitHub issue from this scan:" > /dev/tty
-      echo "   $SCRIPT_DIR/create-github-issue.sh --scan-id $REPORT_TIMESTAMP --repo owner/repo" > /dev/tty
+      echo "" > "$TTY_OUT"
+      echo "💡 Create GitHub issue from this scan:" > "$TTY_OUT"
+      echo "   $SCRIPT_DIR/create-github-issue.sh --scan-id $REPORT_TIMESTAMP --repo owner/repo" > "$TTY_OUT"
     fi
   fi
 else

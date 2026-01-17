@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.16] - 2026-01-17
+
+### Fixed
+- **JSON Output Hygiene**
+  - Prevented `/dev/tty` errors from contaminating JSON output by falling back to `/dev/null` when no TTY is available during HTML report generation and post-scan hints.
+
 ## [1.3.15] - 2026-01-17
 
 ### Changed
