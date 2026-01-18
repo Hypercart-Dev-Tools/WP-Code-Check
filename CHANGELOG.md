@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.12] - 2026-01-18
+
+### Fixed
+- **Pattern Library temp-file housekeeping** – Updated `dist/bin/pattern-library-manager.sh`
+  to proactively delete any leftover `PATTERN-LIBRARY.*.tmp.*` files from interrupted runs
+  before generating new output. Added explicit `.gitignore` rules for these temp files so
+  they never show up in `git status` if a future run is killed mid-write.
+
+## [2.0.11] - 2026-01-18
+
+### Fixed
+- **Pattern Library Manager Markdown idempotence** – Finished hardening
+  `dist/bin/pattern-library-manager.sh` so that both `dist/PATTERN-LIBRARY.json` **and**
+  `dist/PATTERN-LIBRARY.md` are only rewritten when the underlying registry content changes.
+  The generator now builds Markdown into a temporary file and compares it against the existing
+  output while ignoring volatile timestamp lines (`Last Updated`, `Generated`), avoiding
+  timestamp-only Git diffs during repeated test runs.
+
+## [2.0.10] - 2026-01-18
+
+### Changed
+- **Pattern Library Manager timestamp churn** – Updated `dist/bin/pattern-library-manager.sh`
+  so that pattern registry generation is designed to treat timestamp fields as non-semantic
+  noise for change detection, preparing for the full idempotent behavior delivered in 2.0.11.
+
 ## [2.0.9] - 2026-01-18
 
 ### Fixed
