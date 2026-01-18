@@ -104,7 +104,7 @@ def classify_finding(f: Dict[str, Any]) -> Optional[TriageDecision]:
             ),
         )
 
-    # --- Superglobal findings: often flagged on comments/constants/docblocks.
+    # --- Superglobal findings: prefer structured guarded/sanitized booleans when present.
     if fid == 'spo-002-superglobals':
         # Heuristic: docblocks/comments mentioning $_POST/$_GET; or constants containing 'POST' etc.
         if msg.lower().startswith('direct superglobal'):
@@ -124,6 +124,65 @@ def classify_finding(f: Dict[str, Any]) -> Optional[TriageDecision]:
                     confidence='medium',
                     rationale='Nonce verification is performed via a helper (`verify_request_nonce`) in close proximity; direct access is part of a validated flow.',
                 )
+
+        # Prefer the scanner-provided guarded/sanitized booleans when available. These are
+        # populated for DSM findings in v2.0.3+ and give us a more accurate picture than
+        # re-deriving intent from raw code/guards arrays.
+        guarded = f.get('guarded')
+        sanitized = f.get('sanitized')
+        guarded_b = guarded if isinstance(guarded, bool) else None
+        sanitized_b = sanitized if isinstance(sanitized, bool) else None
+
+        if guarded_b is not None or sanitized_b is not None:
+            # Case 1: Guarded + sanitized DSM – usually acceptable WordPress form handling.
+            if guarded_b is True and sanitized_b is True:
+                return TriageDecision(
+                    classification='False Positive',
+                    confidence='high',
+                    rationale=(
+                        'Direct superglobal manipulation is both guard-protected (nonce/cap checks) '
+                        'and sanitized on write; this matches standard WordPress form-handling patterns '
+                        'and is unlikely to be a true issue.'
+                    ),
+                )
+
+            # Case 2: Guarded but not clearly sanitized – lower risk but worth review.
+            if guarded_b is True and (sanitized_b is False or sanitized_b is None):
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        'Direct superglobal manipulation is guard-protected (nonce/cap checks present) '
+                        'but no write-side sanitization was detected; verify that values are constrained '
+                        'before use and that bridge code does not bypass validation.'
+                    ),
+                )
+
+            # Case 3: Sanitized but unguarded – input is constrained but CSRF/authz risk remains.
+            if guarded_b is False and sanitized_b is True:
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        'Direct superglobal manipulation applies sanitization but no nonce/capability '
+                        'guard was detected; consider adding CSRF/authz checks even if the values are '
+                        'sanitized to reduce attack surface.'
+                    ),
+                )
+
+            # Case 4: Unguarded and unsanitized (or unknown) – treat as confirmed high-signal.
+            if guarded_b is False and (sanitized_b is False or sanitized_b is None):
+                return TriageDecision(
+                    classification='Confirmed',
+                    confidence='high',
+                    rationale=(
+                        'Direct superglobal manipulation without detected guards or sanitization; '
+                        'this is high-risk and should be refactored to add nonce/capability checks '
+                        'and explicit sanitization or to avoid mutating superglobals directly.'
+                    ),
+                )
+
+        # Fallback heuristics for older logs without guarded/sanitized booleans.
 
         # For actual assignments to $_REQUEST, treat as Needs Review.
         if code.strip().startswith('$_REQUEST'):

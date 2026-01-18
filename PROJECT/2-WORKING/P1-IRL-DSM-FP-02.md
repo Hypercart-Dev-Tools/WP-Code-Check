@@ -130,36 +130,48 @@ Primary path (recommended):
 ### Phase 2: Implement Quick Scanner Refinements
 
 - Update `detect_guards()` and add `detect_sanitizers()`.
+  - _Status (2026-01-18): `detect_guards()` and `detect_sanitizers()` are already implemented in `dist/bin/lib/false-positive-filters.sh` and used by the unsanitized superglobal read rule; DSM still needs the classification and failure-criteria changes described below._
 - Adjust DSM check failure logic to trigger only on unguarded DSM.
 - Update JSON output to include `guarded`, `sanitized`, and `severity` fields as appropriate.
 - If any detection inputs are updated (e.g., more precise regex, file patterns), regenerate `dist/PATTERN-LIBRARY.json` so the registry-backed loader stays in sync.
 
 #### Phase 2 Implementation Tasks (Concrete)
 
-- [x] Guard detection updates
+- [ ] Guard detection updates
   - [x] Ensure `detect_guards()` recognizes `check_admin_referer`, `wp_verify_nonce`, and `current_user_can`.
-  - [x] Treat `is_admin` as a weak guard only (does not fully downgrade on its own).
-  - [x] Include same-line guard checks (e.g., `wp_verify_nonce` in the condition).
+    - _Already implemented in `detect_guards()` in `dist/bin/lib/false-positive-filters.sh`; verified 2026-01-18._
+  - [ ] Treat `is_admin` as a weak guard only (does not fully downgrade on its own).
+    - _Current behavior: `is_admin()` is **not** treated as a guard at all (DSM remains unguarded in that case). This item tracks introducing an explicit "weak guard" classification rather than the current "no guard" behavior._
+  - [ ] Include same-line guard checks (e.g., `wp_verify_nonce` in the condition).
+    - _Current behavior: `detect_guards()` scans only earlier lines in the same function (via `get_function_scope_range()`); same-line guards are **not** detected yet._
 
-- [x] Sanitizer detection for writes
+- [ ] Sanitizer detection for writes
   - [x] Add `detect_write_sanitizers()` with the Phase 1 sanitizer list.
+    - _Implemented as a thin wrapper around `detect_sanitizers()` in `dist/bin/lib/false-positive-filters.sh` so DSM can reuse the existing sanitizer heuristics for write context (verified 2026-01-18)._ 
   - [x] Limit sanitizer signals to the same context window as the write.
+    - _DSM now calls `detect_write_sanitizers()` with the current line of code only, so write-side sanitization is treated as a strictly local signal._
 
-- [x] DSM classification and failure criteria
+- [ ] DSM classification and failure criteria
   - [x] Compute `guarded` and `sanitized` booleans per finding.
+    - _Implemented inside the DSM loop in `dist/bin/check-performance.sh` as internal booleans derived from `detect_guards()` and `detect_write_sanitizers()`; these drive severity and failure logic even though we do not yet emit explicit `guarded`/`sanitized` JSON fields._
   - [x] Fail the check only when `guarded=false`.
+    - _DSM now marks `SUPERGLOBAL_FAILED=true` only for unguarded writes; guarded DSM still produces findings but the check is considered passed._
   - [x] Downgrade guarded + sanitized to info severity.
+    - _Finding-level severity is downgraded when both guards and write-side sanitizers are present (e.g., HIGH → MEDIUM → LOW/INFO); the check-level impact remains the configured DSM severity for now._
 
-- [x] JS/AJAX-in-PHP exclusion
+- [ ] JS/AJAX-in-PHP exclusion
   - [x] Tighten `is_html_or_rest_config` (or add a dedicated JS detector).
+    - _Extended `is_html_or_rest_config()` to recognise jQuery AJAX descriptors (`$.ajax`, `$.post`, `$.get`, `jQuery.ajax`) as configuration/JS-only context so DSM ignores them._
   - [x] Exclude lines inside JS blocks in PHP views, especially `$.ajax({ type: 'POST' ... })`.
+    - _JS/AJAX descriptors embedded in PHP views are now filtered by `is_html_or_rest_config()`, addressing the IRL case where Hypercart Server Monitor MKII admin tabs were misclassified as DSM._
 
 - [ ] Bridge code allowlist
-  - [x] Extend `should_suppress_finding` to support `spo-002-superglobals-bridge`.
+  - [ ] Extend `should_suppress_finding` to support `spo-002-superglobals-bridge`.
   - [ ] Document expected format in template suppression examples if needed.
 
 - [x] Output consistency
   - [x] Confirm JSON findings include `guards` list and new `guarded/sanitized/severity` fields.
+    - _JSON findings now include `guards` and `sanitizers` arrays plus explicit `guarded`/`sanitized` boolean fields for DSM (`spo-002-superglobals`) via `add_json_finding()`; non-DSM rules expose these booleans as `null`, allowing downstream consumers like AI triage to feature-detect support without breaking existing clients._
 
 ### Phase 3: Benchmark Results
 
@@ -208,11 +220,6 @@ Primary path (recommended):
 - Risk: GRA integration increases runtime cost.
   - Mitigation: Make it opt-in or only run when DSM hits exist.
 
-## Decision Points
-
-- After Phase 3: If FP reduction is at least 5–10% and unguarded detection remains strong, ship Option A.
-- After Phase 4: If GRA meaningfully reduces noise without performance issues, consider optional integration.
-
 ## Test Fixtures (Not Started)
 
 Goal: Validate that DSM false-positive reductions do not suppress true positives.
@@ -225,8 +232,84 @@ Planned fixture updates:
 - Add nonce-in-condition fixtures (same-line guard detection).
 - Add bridge-code examples with explicit suppression to verify allowlist behavior.
 
+### Minimal Fixture Plan (Short Scope)
+
+Target: 60–70% improvement in DSM false-positive reduction with minimal, stable fixtures.
+
+Scope constraints:
+
+- 5 fixture categories only (no edge-case expansion).
+- No changes to DSM rule logic unless a fixture exposes a clear false positive.
+- Fixtures focused on fail/no-fail behavior, not perfect precision.
+
+Checklist (short scope):
+
+- [ ] Add fixture: Unguarded write (must fail)
+  - Direct `$_POST`/`$_GET` usage without guards or sanitizers.
+  - Expected: DSM check fails with error.
+
+- [ ] Add fixture: Guarded + sanitized (should not fail)
+  - Nonce + capability + sanitizer in same function.
+  - Expected: DSM finding visible but no failure (info/warn).
+
+- [ ] Add fixture: Same-line nonce guard (should not fail)
+  - `wp_verify_nonce( ... $_POST[...] ... )` in condition line.
+  - Expected: DSM finding visible but no failure (info/warn).
+
+- [ ] Add fixture: JS/AJAX-in-PHP exclusion (should not detect)
+  - jQuery/fetch snippet inside PHP admin view.
+  - Expected: No DSM finding.
+
+- [ ] Add fixture: Bridge code allowlist (should suppress)
+  - Known bridge file suppressed by `spo-002-superglobals-bridge`.
+  - Expected: No DSM finding.
+
+- [ ] Update fixture expectations (counts) for DSM checks.
+- [ ] Run fixture tests and confirm acceptance criteria.
+
+### Proposed Fixture Set (Concrete Files + Expected Outputs)
+
+Note: This is a minimal, 5-category fixture set intended to validate DSM
+false-positive reductions without expanding scope. Expected outputs are aligned
+with the current test harness in `dist/tests/run-fixture-tests.sh` and
+`dist/tests/expected/fixture-expectations.json`.
+
+- `dist/tests/fixtures/dsm-unguarded-write.php`
+  - Intent: Direct `$_POST`/`$_GET` assignment with no guards or sanitizers.
+  - Expected: `errors: 1`, `warnings: 0`.
+
+- `dist/tests/fixtures/dsm-guarded-sanitized.php`
+  - Intent: Nonce + capability check in same function plus
+    `wp_unslash()` + `sanitize_text_field()` on the write line.
+  - Expected: `errors: 0`, `warnings: 0` (finding visible but no failure).
+
+- `dist/tests/fixtures/dsm-nonce-same-line.php`
+  - Intent: `wp_verify_nonce( $_POST[...] )` in the condition line with a
+    sanitized write inside the guarded block.
+  - Expected: `errors: 0`, `warnings: 0` (finding visible but no failure).
+
+- `dist/tests/fixtures/dsm-js-ajax-exclusion.php`
+  - Intent: jQuery `$.ajax`/`$.post` snippet inside a PHP admin view (string
+    literal) to confirm `is_html_or_rest_config()` exclusion.
+  - Expected: `errors: 0`, `warnings: 0` (no DSM finding).
+
+- `dist/tests/fixtures/dsm-bridge-allowlist.php`
+  - Intent: Unguarded write located in a known bridge file that should be
+    suppressed via `spo-002-superglobals-bridge`.
+  - Expected: `errors: 0`, `warnings: 0` **once bridge allowlist is wired into**
+    `should_suppress_finding()`; otherwise this fixture should be deferred or
+    the expected result set to fail until that behavior exists.
+
 Acceptance criteria:
 
-- DSM fixtures confirm unguarded writes still fail.
-- Guarded + sanitized fixtures remain visible but do not fail.
-- Exclusions only apply to JS/REST/HTML cases, not real PHP writes.
+- [ ]  DSM fixtures confirm unguarded writes still fail.
+- [ ]  Guarded + sanitized fixtures remain visible but do not fail.
+- [ ]  Exclusions only apply to JS/REST/HTML cases, not real PHP writes.
+- [ ]  Short plan achieved without expanding fixture count beyond the five categories above.
+- [ ] Ensure that any updates to the quick scanner's heuristics are reflected in the pattern library and memory loader.
+- [ ] Validate that the fallback mechanism (per-pattern JSON parsing) remains robust in edge cases.
+
+## Decision Points
+
+- After Phase 3: If FP reduction is at least 5–10% and unguarded detection remains strong, ship Option A.
+- After Phase 4: If GRA meaningfully reduces noise without performance issues, consider optional integration.

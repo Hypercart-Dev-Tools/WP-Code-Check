@@ -5,6 +5,99 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.9] - 2026-01-18
+
+### Fixed
+- **PATTERN-LIBRARY.json traceback noise (disable sitecustomize/usercustomize)** – Run all
+  scanner-managed Python helpers with `python3 -S` so they do not import `site`,
+  `sitecustomize`, or `usercustomize`. This prevents external environment hooks from
+  executing `PATTERN-LIBRARY.json` (or other JSON artifacts) as Python code and fully
+  silences the remaining tracebacks during Magic String Detector, Function Clone Detector,
+  and pattern registry validation/management.
+
+## [2.0.8] - 2026-01-18
+
+### Fixed
+- **PATTERN-LIBRARY.json startup noise (final hardening)** – Explicitly disable
+  `PYTHONSTARTUP` at the top of `dist/bin/check-performance.sh` so that all scanner-run
+  Python helpers execute without inheriting user- or IDE-specific startup scripts. This
+  prevents any environment from accidentally executing `PATTERN-LIBRARY.json` (or other
+  non-Python files) as Python code and eliminates stray tracebacks during Magic String
+  and Function Clone detection.
+
+## [2.0.7] - 2026-01-18
+
+### Fixed
+- **PATTERN-LIBRARY.json startup noise (inline helpers)** – Hardened all internal registry
+  and pattern JSON helpers so they explicitly disable `PYTHONSTARTUP` (`PYTHONSTARTUP=
+  python3 …`) before launching inline Python here-docs. This prevents developer-specific
+  Python startup files (including accidental `PATTERN-LIBRARY.json` assignments) from
+  emitting noisy tracebacks during Magic String / Function Clone detection while keeping
+  registry behaviour unchanged.
+
+## [2.0.6] - 2026-01-18
+
+### Changed
+- **N+1 meta-in-loop detection refinement** – The "Potential N+1 patterns (meta in loops)" rule
+  now scans each candidate file line-by-line and only reports a finding when
+  `get_post_meta` / `get_term_meta` / `get_user_meta` are actually used inside a nearby loop.
+  Findings now include the real line number of the first meta-in-loop occurrence instead of
+  using line `0`, which reduces false positives where meta calls and loops merely coexist in
+  the same file (for example, KISS Woo Order SPC's `spc-settings.php`).
+
+### Added
+- **Function Clone Detector defaults** – Function clone detection now runs by default in the
+  main scanner. Use `--skip-clone-detection` to disable clone analysis for very large projects
+  or when function clone detection is not needed.
+
+## [2.0.4] - 2026-01-18
+
+### Changed
+- **AI triage DSM awareness** – Updated `dist/bin/ai-triage.py` so that triage decisions for
+  Direct Superglobal Manipulation findings (`spo-002-superglobals`) preferentially use the
+  structured `guarded` / `sanitized` booleans emitted by the scanner (when present) to
+  distinguish unguarded/unsanitized writes (treated as confirmed high-signal issues) from
+  guarded-only and guarded+sanitized patterns (downgraded to Needs Review or False Positive
+  with clearer rationale). Older logs without these fields continue to use the previous
+  heuristics.
+
+### Fixed
+- **Version alignment** – Bumped scanner version from `2.0.3` to `2.0.4` in
+  `dist/bin/check-performance.sh` and recorded the AI triage DSM behavior change here.
+
+## [2.0.3] - 2026-01-18
+
+### Changed
+- **DSM JSON schema (spo-002-superglobals)** – Extended `add_json_finding()` in
+  `dist/bin/check-performance.sh` to include explicit `guarded` and `sanitized` boolean fields
+  on DSM findings (and `null` for rules that do not provide this context) so downstream
+  consumers like AI triage can reliably distinguish unguarded vs guarded/sanitized patterns
+  without re-deriving that state from the `guards`/`sanitizers` arrays.
+
+### Fixed
+- **Version alignment** – Bumped scanner version from `2.0.2` to `2.0.3` in
+  `dist/bin/check-performance.sh` and recorded DSM JSON schema changes here.
+
+## [2.0.2] - 2026-01-18
+
+### Changed
+- **DSM classification (spo-002-superglobals)** – Updated the Direct Superglobal Manipulation
+  check in `dist/bin/check-performance.sh` to distinguish between unguarded DSM (still fails
+  the check) and guarded DSM (downgraded severity and does not fail the check), using existing
+  `detect_guards()` infrastructure.
+- **Write-side sanitizer context for DSM** – Reused the Phase 2 sanitizer heuristics via a new
+  `detect_write_sanitizers()` helper in `dist/bin/lib/false-positive-filters.sh` so DSM findings
+  can surface local write-side sanitization on the same line and further downgrade severity when
+  both guards and sanitizers are present.
+- **JS/AJAX-in-PHP exclusion for DSM** – Extended `is_html_or_rest_config()` in
+  `dist/bin/lib/false-positive-filters.sh` to treat jQuery AJAX descriptors inside PHP views
+  (e.g., `$.ajax`, `$.post`, `jQuery.ajax`) as configuration/JS-only context so they are ignored
+  by DSM and reserved for JS-facing rules.
+
+### Fixed
+- **Version alignment** – Bumped scanner version from `2.0.1` to `2.0.2` in
+  `dist/bin/check-performance.sh` and recorded DSM behavior changes here.
+
 ## [2.0.1] - 2026-01-17
 
 ### Fixed

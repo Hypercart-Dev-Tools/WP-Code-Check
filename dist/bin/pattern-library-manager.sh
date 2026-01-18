@@ -91,7 +91,7 @@ build_detection_and_mitigation_json() {
 		return 0
 	fi
 
-	PATTERN_FILE="$pattern_file" python3 <<'EOFPY'
+	PATTERN_FILE="$pattern_file" python3 -S <<'EOFPY'
 import json
 import os
 import sys

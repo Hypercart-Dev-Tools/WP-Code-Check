@@ -43,7 +43,7 @@ pattern_registry_check_state() {
 	fi
 
 	local result
-	result=$(PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 <<'EOFPY' 2>/dev/null
+	result=$(PYTHONSTARTUP= PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 -S <<'EOFPY' 2>/dev/null
 import os
 import sys
 
@@ -144,7 +144,7 @@ _load_pattern_from_registry() {
 	fi
 
 	# Materialise a simple cache from PATTERN-LIBRARY.json on first use.
-	if [ -z "$PATTERN_REGISTRY_CACHE_FILE" ] || [ ! -f "$PATTERN_REGISTRY_CACHE_FILE" ]; then
+		if [ -z "$PATTERN_REGISTRY_CACHE_FILE" ] || [ ! -f "$PATTERN_REGISTRY_CACHE_FILE" ]; then
 		local tmpfile
 		tmpfile="$(mktemp "${TMPDIR:-/tmp}/wpcc-pattern-registry.XXXXXX" 2>/dev/null || echo "")"
 		if [ -z "$tmpfile" ]; then
@@ -163,7 +163,7 @@ _load_pattern_from_registry() {
 			# Each value is prefixed with its byte length and a colon so that the
 			# Bash-side parser can safely recover values that contain spaces.
 			if command -v python3 >/dev/null 2>&1; then
-				PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 <<'EOFPY' >"$tmpfile" 2>/dev/null || true
+				PYTHONSTARTUP= PATTERN_REGISTRY_FILE="$PATTERN_REGISTRY_FILE" python3 -S <<'EOFPY' >"$tmpfile" 2>/dev/null || true
 import json
 import os
 import sys
@@ -392,9 +392,9 @@ load_pattern() {
 	# When the registry has already provided pattern_search (or for
 	# clone_detection, which synthesises its own search strings), we skip
 	# per-file extraction.
-	if [ -z "$pattern_search" ] && [ "$pattern_detection_type" != "clone_detection" ]; then
-	  if command -v python3 &> /dev/null; then
-	    pattern_search=$(python3 <<EOFPYTHON 2>/dev/null
+		if [ -z "$pattern_search" ] && [ "$pattern_detection_type" != "clone_detection" ]; then
+		  if command -v python3 &> /dev/null; then
+		    pattern_search=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	import sys
 	try:
@@ -429,8 +429,8 @@ load_pattern() {
 	    sys.exit(1)
 	EOFPYTHON
 		)
-	  elif command -v python &> /dev/null; then
-	    pattern_search=$(python <<EOFPYTHON 2>/dev/null
+		  elif command -v python &> /dev/null; then
+		    pattern_search=$(PYTHONSTARTUP= python <<EOFPYTHON 2>/dev/null
 	import json
 	import sys
 	try:
@@ -474,9 +474,9 @@ load_pattern() {
 	# Extract file_patterns array from JSON (for JavaScript/TypeScript support)
 	# Use Python for reliable JSON array parsing. If the registry has already
 	# provided file_patterns, we respect that and skip the JSON lookup.
-	if [ -z "$pattern_file_patterns" ]; then
-	  if command -v python3 &> /dev/null; then
-	    pattern_file_patterns=$(python3 <<EOFPYTHON 2>/dev/null
+		if [ -z "$pattern_file_patterns" ]; then
+		  if command -v python3 &> /dev/null; then
+		    pattern_file_patterns=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -499,10 +499,10 @@ load_pattern() {
 	# Extract validator_script path and validator_args for scripted detection type
 	# If the registry has already provided a validator_script, prefer that and
 	# avoid re-parsing the JSON.
-	if [ "$pattern_detection_type" = "scripted" ]; then
-	  if [ -z "$pattern_validator_script" ]; then
-	    if command -v python3 &> /dev/null; then
-	      pattern_validator_script=$(python3 <<EOFPYTHON 2>/dev/null
+		if [ "$pattern_detection_type" = "scripted" ]; then
+		  if [ -z "$pattern_validator_script" ]; then
+		    if command -v python3 &> /dev/null; then
+		      pattern_validator_script=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -513,7 +513,7 @@ load_pattern() {
 	    print('')
 	EOFPYTHON
 	)
-	      pattern_validator_args=$(python3 <<EOFPYTHON 2>/dev/null
+		      pattern_validator_args=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -538,9 +538,9 @@ load_pattern() {
 
 	# Extract mitigation_detection configuration. If the registry has already
 	# provided mitigation wiring, we prefer that and avoid reopening the JSON.
-	if [ -z "$pattern_mitigation_enabled" ] && [ -z "$pattern_mitigation_script" ] && [ -z "$pattern_severity_downgrade" ]; then
-	  if command -v python3 &> /dev/null; then
-	    pattern_mitigation_enabled=$(python3 <<EOFPYTHON 2>/dev/null
+		if [ -z "$pattern_mitigation_enabled" ] && [ -z "$pattern_mitigation_script" ] && [ -z "$pattern_severity_downgrade" ]; then
+		  if command -v python3 &> /dev/null; then
+		    pattern_mitigation_enabled=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -552,7 +552,7 @@ load_pattern() {
 	    print('false')
 	EOFPYTHON
 	)
-	    pattern_mitigation_script=$(python3 <<EOFPYTHON 2>/dev/null
+		    pattern_mitigation_script=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -564,7 +564,7 @@ load_pattern() {
 	    print('')
 	EOFPYTHON
 	)
-	    pattern_mitigation_args=$(python3 <<EOFPYTHON 2>/dev/null
+		    pattern_mitigation_args=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -576,7 +576,7 @@ load_pattern() {
 	    print('')
 	EOFPYTHON
 	)
-	    pattern_severity_downgrade=$(python3 <<EOFPYTHON 2>/dev/null
+		    pattern_severity_downgrade=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:

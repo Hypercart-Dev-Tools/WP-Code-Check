@@ -1,5 +1,9 @@
 # Backlog - Issues to Investigate
 
+2026-01-17
+- [ ] Add new Test Fixtures for DSM patterns 
+- [ ] Research + decision: verify whether `spo-002-superglobals-bridge` should be supported in `should_suppress_finding()` (in `dist/bin/check-performance.sh`) and define the implementation path (add allowlist vs require baseline); update DSM fixture plan accordingly.
+
 ### Checklist - 2026-01-15
 - [x] Add Tier 1 rules - First 6 completed
 - [x] Last TTY fix for HTML output
@@ -341,4 +345,3 @@ actual_count=$(grep -c "$pattern" "$fixture_file")
 3. Already have JSON files but use `run_check` for backward compatibility
 
 **Recommend:** Move this to `PROJECT/3-COMPLETED/` and create a new task for "Advanced Pattern Types" if needed.
-

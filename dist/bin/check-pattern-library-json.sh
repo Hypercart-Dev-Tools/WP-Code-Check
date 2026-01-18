@@ -9,7 +9,7 @@ if [ ! -f "$JSON_FILE" ]; then
   exit 1
 fi
 
-if python3 -m json.tool "$JSON_FILE" >/dev/null 2>&1; then
+if python3 -S -m json.tool "$JSON_FILE" >/dev/null 2>&1; then
   echo "[OK] PATTERN-LIBRARY.json is valid JSON"
   exit 0
 else

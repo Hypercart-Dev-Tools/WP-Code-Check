@@ -110,6 +110,7 @@ is_line_in_comment() {
 # Patterns detected:
 # 1. HTML form method attributes: <form method="POST">
 # 2. REST route method configs: 'methods' => 'POST'
+  # 3. JS/AJAX request descriptors in PHP views: jQuery $.ajax / jQuery.ajax POST blocks
 #
 # Returns: 0 (true) if it's a false positive pattern, 1 (false) otherwise
 # Usage: is_html_or_rest_config "$code_line"
@@ -134,6 +135,18 @@ is_html_or_rest_config() {
   # Must have quotes around 'methods' key to avoid matching $methods variables
   if echo "$code" | grep -qiE "['\"]methods['\"][[:space:]]*=>.*POST"; then
     return 0  # true - is REST config
+  fi
+
+  # JS/AJAX-in-PHP: jQuery AJAX request descriptors inside PHP views
+  # These are front-end HTTP requests, not PHP superglobal manipulation,
+  # and should be handled by JS-facing rules instead of DSM.
+  #
+  # Heuristics:
+  # - $.ajax({ ... }) or jQuery.ajax({ ... })
+  # - $.post( ... ), $.get( ... )
+  if echo "$code" | grep -qiE '\$\.(ajax|post|get)[[:space:]]*\(' || \
+     echo "$code" | grep -qiE 'jQuery\.ajax[[:space:]]*\('; then
+    return 0  # true - is JS/JQuery AJAX config
   fi
 
   return 1  # false - not a false positive pattern
@@ -433,6 +446,22 @@ detect_sanitizers() {
   sanitizers=$(echo "$sanitizers" | sed 's/[[:space:]]*$//')
 
   echo "$sanitizers"
+}
+
+# Detect sanitizers applied in the same line as a superglobal write
+#
+# For DSM (direct superglobal manipulation) we treat write-side
+# sanitization as a local signal only. Rather than introducing a new
+# pattern set, we reuse the same heuristics as detect_sanitizers(),
+# but keep this helper separate so DSM call sites stay self-documenting.
+#
+# Returns: Space-separated list of detected sanitizers (empty if none)
+detect_write_sanitizers() {
+  local code="$1"
+
+  # Reuse existing read-side sanitizer heuristics; DSM only cares
+  # about the immediate write context, so we stay line-local here.
+  detect_sanitizers "$code"
 }
 
 # Check if a variable was sanitized earlier in the function
