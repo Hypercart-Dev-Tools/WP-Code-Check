@@ -1,3 +1,6 @@
+# Attn: LLMs - if you're not sure how to use or complete this template, review:
+# dist/TEMPLATES/_AI_INSTRUCTIONS.md
+#
 # WP Code Check - Project Configuration Template
 # This is a reference template. Copy and customize for your projects.
 

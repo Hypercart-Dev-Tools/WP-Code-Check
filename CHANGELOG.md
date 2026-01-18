@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.19] - 2026-01-17
+
+### Tests
+- **DSM Fixtures**
+  - Added minimal DSM fixture set for guarded/unguarded, same-line nonce, JS/AJAX exclusion, and bridge allowlist behavior.
+  - Extended fixture test runner with expected counts for the new DSM fixtures.
+
 ## [1.3.18] - 2026-01-17
 
 ### Fixed

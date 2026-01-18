@@ -166,6 +166,31 @@ CRON_INTERVAL_EXPECTED_ERRORS=1  # 1 error with 3 findings (lines 15, 24, 33)
 CRON_INTERVAL_EXPECTED_WARNINGS_MIN=0
 CRON_INTERVAL_EXPECTED_WARNINGS_MAX=0
 
+# dsm-unguarded-write.php - DSM unguarded write should fail
+DSM_UNGUARDED_EXPECTED_ERRORS=1
+DSM_UNGUARDED_EXPECTED_WARNINGS_MIN=0
+DSM_UNGUARDED_EXPECTED_WARNINGS_MAX=0
+
+# dsm-guarded-sanitized.php - DSM guarded + sanitized should warn only
+DSM_GUARDED_EXPECTED_ERRORS=0
+DSM_GUARDED_EXPECTED_WARNINGS_MIN=1
+DSM_GUARDED_EXPECTED_WARNINGS_MAX=1
+
+# dsm-same-line-nonce.php - Same-line nonce guard should warn only
+DSM_SAME_LINE_EXPECTED_ERRORS=0
+DSM_SAME_LINE_EXPECTED_WARNINGS_MIN=1
+DSM_SAME_LINE_EXPECTED_WARNINGS_MAX=1
+
+# dsm-js-ajax-exclusion.php - JS/AJAX in PHP should not trigger DSM
+DSM_JS_EXCLUDE_EXPECTED_ERRORS=0
+DSM_JS_EXCLUDE_EXPECTED_WARNINGS_MIN=0
+DSM_JS_EXCLUDE_EXPECTED_WARNINGS_MAX=0
+
+# dsm-bridge-allowlist.php - Bridge allowlist should suppress DSM
+DSM_BRIDGE_EXPECTED_ERRORS=0
+DSM_BRIDGE_EXPECTED_WARNINGS_MIN=0
+DSM_BRIDGE_EXPECTED_WARNINGS_MAX=0
+
 # ============================================================
 # Helper Functions
 # ============================================================
@@ -182,7 +207,9 @@ run_test() {
   local expected_errors="$2"
   local expected_warnings_min="$3"
   local expected_warnings_max="$4"
+  local baseline_file="${5:-}"
   local test_name="$(basename "$fixture_file")"
+  local baseline_args=()
 
   TESTS_RUN=$((TESTS_RUN + 1))
 
@@ -199,11 +226,15 @@ run_test() {
   tmp_output=$(mktemp)
 
   # Debug: Show command being run
-  echo -e "  ${BLUE}[DEBUG] Running: $BIN_DIR/check-performance.sh --format json --paths \"$fixture_file\" --no-log${NC}"
+  if [ -n "$baseline_file" ]; then
+    baseline_args=(--baseline "$baseline_file")
+  fi
+
+  echo -e "  ${BLUE}[DEBUG] Running: $BIN_DIR/check-performance.sh --format json --paths \"$fixture_file\" ${baseline_args[*]} --no-log${NC}"
   trace "Executing check-performance.sh for: $fixture_file"
 
   # Explicitly request JSON format (makes contract clear and protects against default changes)
-  "$BIN_DIR/check-performance.sh" --format json --paths "$fixture_file" --no-log > "$tmp_output" 2>&1 || true
+  "$BIN_DIR/check-performance.sh" --format json --paths "$fixture_file" "${baseline_args[@]}" --no-log > "$tmp_output" 2>&1 || true
   local check_exit=$?
 
   trace "check-performance.sh exit code: $check_exit"
@@ -355,12 +386,51 @@ if [ ! -f "$FIXTURES_DIR/ajax-safe.php" ]; then
   exit 1
 fi
 
+# Verify DSM fixtures
+if [ ! -f "$FIXTURES_DIR/dsm-unguarded-write.php" ]; then
+  echo -e "${RED}Error: dsm-unguarded-write.php fixture not found${NC}"
+  exit 1
+fi
+
+if [ ! -f "$FIXTURES_DIR/dsm-guarded-sanitized.php" ]; then
+  echo -e "${RED}Error: dsm-guarded-sanitized.php fixture not found${NC}"
+  exit 1
+fi
+
+if [ ! -f "$FIXTURES_DIR/dsm-same-line-nonce.php" ]; then
+  echo -e "${RED}Error: dsm-same-line-nonce.php fixture not found${NC}"
+  exit 1
+fi
+
+if [ ! -f "$FIXTURES_DIR/dsm-js-ajax-exclusion.php" ]; then
+  echo -e "${RED}Error: dsm-js-ajax-exclusion.php fixture not found${NC}"
+  exit 1
+fi
+
+if [ ! -f "$FIXTURES_DIR/dsm-bridge-allowlist.php" ]; then
+  echo -e "${RED}Error: dsm-bridge-allowlist.php fixture not found${NC}"
+  exit 1
+fi
+
 # Run tests (passing: errors, warnings_min, warnings_max)
 run_test "$FIXTURES_DIR/antipatterns.php" "$ANTIPATTERNS_EXPECTED_ERRORS" "$ANTIPATTERNS_EXPECTED_WARNINGS_MIN" "$ANTIPATTERNS_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/clean-code.php" "$CLEAN_CODE_EXPECTED_ERRORS" "$CLEAN_CODE_EXPECTED_WARNINGS_MIN" "$CLEAN_CODE_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/ajax-antipatterns.php" "$AJAX_PHP_EXPECTED_ERRORS" "$AJAX_PHP_EXPECTED_WARNINGS_MIN" "$AJAX_PHP_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/ajax-antipatterns.js" "$AJAX_JS_EXPECTED_ERRORS" "$AJAX_JS_EXPECTED_WARNINGS_MIN" "$AJAX_JS_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/ajax-safe.php" "$AJAX_SAFE_EXPECTED_ERRORS" "$AJAX_SAFE_EXPECTED_WARNINGS_MIN" "$AJAX_SAFE_EXPECTED_WARNINGS_MAX" || true
+
+# DSM fixtures
+run_test "$FIXTURES_DIR/dsm-unguarded-write.php" "$DSM_UNGUARDED_EXPECTED_ERRORS" "$DSM_UNGUARDED_EXPECTED_WARNINGS_MIN" "$DSM_UNGUARDED_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/dsm-guarded-sanitized.php" "$DSM_GUARDED_EXPECTED_ERRORS" "$DSM_GUARDED_EXPECTED_WARNINGS_MIN" "$DSM_GUARDED_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/dsm-same-line-nonce.php" "$DSM_SAME_LINE_EXPECTED_ERRORS" "$DSM_SAME_LINE_EXPECTED_WARNINGS_MIN" "$DSM_SAME_LINE_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/dsm-js-ajax-exclusion.php" "$DSM_JS_EXCLUDE_EXPECTED_ERRORS" "$DSM_JS_EXCLUDE_EXPECTED_WARNINGS_MIN" "$DSM_JS_EXCLUDE_EXPECTED_WARNINGS_MAX" || true
+
+BRIDGE_BASELINE_FILE="$FIXTURES_DIR/.hcc-baseline-dsm-bridge"
+cat > "$BRIDGE_BASELINE_FILE" << 'EOF'
+spo-002-superglobals-bridge|tests/fixtures/dsm-bridge-allowlist.php|0|1|*
+EOF
+run_test "$FIXTURES_DIR/dsm-bridge-allowlist.php" "$DSM_BRIDGE_EXPECTED_ERRORS" "$DSM_BRIDGE_EXPECTED_WARNINGS_MIN" "$DSM_BRIDGE_EXPECTED_WARNINGS_MAX" "$BRIDGE_BASELINE_FILE" || true
+rm -f "$BRIDGE_BASELINE_FILE"
 
 # ============================================================
 # JSON Output Format Test

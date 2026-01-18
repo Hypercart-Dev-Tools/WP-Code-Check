@@ -254,27 +254,27 @@ Scope constraints:
 
 Checklist (short scope):
 
-- [ ] Add fixture: Unguarded write (must fail)
+- [x] Add fixture: Unguarded write (must fail)
   - Direct `$_POST`/`$_GET` usage without guards or sanitizers.
   - Expected: DSM check fails with error.
 
-- [ ] Add fixture: Guarded + sanitized (should not fail)
+- [x] Add fixture: Guarded + sanitized (should not fail)
   - Nonce + capability + sanitizer in same function.
   - Expected: DSM finding visible but no failure (info/warn).
 
-- [ ] Add fixture: Same-line nonce guard (should not fail)
+- [x] Add fixture: Same-line nonce guard (should not fail)
   - `wp_verify_nonce( ... $_POST[...] ... )` in condition line.
   - Expected: DSM finding visible but no failure (info/warn).
 
-- [ ] Add fixture: JS/AJAX-in-PHP exclusion (should not detect)
+- [x] Add fixture: JS/AJAX-in-PHP exclusion (should not detect)
   - jQuery/fetch snippet inside PHP admin view.
   - Expected: No DSM finding.
 
-- [ ] Add fixture: Bridge code allowlist (should suppress)
+- [x] Add fixture: Bridge code allowlist (should suppress)
   - Known bridge file suppressed by `spo-002-superglobals-bridge`.
   - Expected: No DSM finding.
 
-- [ ] Update fixture expectations (counts) for DSM checks.
+- [x] Update fixture expectations (counts) for DSM checks.
 - [ ] Run fixture tests and confirm acceptance criteria.
 
 Acceptance criteria:
