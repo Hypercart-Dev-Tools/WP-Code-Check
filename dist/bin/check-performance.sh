@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 1.3.6
+# Version: 1.3.20
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -61,7 +61,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="1.3.19"
+SCRIPT_VERSION="1.3.20"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -2898,6 +2898,38 @@ if [ -n "$SUPERGLOBAL_MATCHES" ]; then
     if is_html_or_rest_config "$code"; then
       continue
     fi
+
+	  # PHASE 2 ENHANCEMENT (DSM calibration): treat nonce/capability guards as read-only
+	  #
+	  # For spo-002-superglobals we only care about actual writes/unsets to
+	  # superglobals. Canonical WordPress patterns like Hypercart Helper's
+	  # handle_self_test() use $_POST purely for nonce + capability checks:
+	  #
+	  #   if ( ! isset( $_POST['nonce'] ) ||
+	  #        ! wp_verify_nonce( $_POST['nonce'], 'action' ) ) { ... }
+	  #
+	  # These are reads, not writes, and should be handled (or explicitly
+	  # ignored) by the unsanitized-superglobal rules instead of DSM. To avoid
+	  # flagging these as direct superglobal manipulation, we skip lines that:
+	  #   - do not contain an assignment or unset(), and
+	  #   - clearly belong to an isset()/nonce/capability guard.
+	  if ! echo "$code" | grep -q '='; then
+	    if ! echo "$code" | grep -q 'unset('; then
+	      # Read-only superglobal usage inside guards – safe for DSM purposes.
+	      if echo "$code" | grep -Fq 'isset( $_GET[' || \
+	         echo "$code" | grep -Fq 'isset( $_POST[' || \
+	         echo "$code" | grep -Fq 'isset( $_REQUEST['; then
+	        continue
+	      fi
+	      if echo "$code" | grep -Fq 'wp_verify_nonce( $_GET[' || \
+	         echo "$code" | grep -Fq 'wp_verify_nonce( $_POST[' || \
+	         echo "$code" | grep -Fq 'wp_verify_nonce( $_REQUEST[' || \
+	         echo "$code" | grep -Fq 'check_ajax_referer(' || \
+	         echo "$code" | grep -Fq 'check_admin_referer('; then
+	        continue
+	      fi
+	    fi
+	  fi
 
     # PHASE 2 ENHANCEMENT: Detect security guards (nonce checks, capability checks)
     guards=$(detect_guards "$file" "$lineno")

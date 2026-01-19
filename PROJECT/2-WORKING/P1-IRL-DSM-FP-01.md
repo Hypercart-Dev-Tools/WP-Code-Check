@@ -176,9 +176,16 @@ Primary path (recommended):
   - [x] Tighten `is_html_or_rest_config` (or add a dedicated JS detector).
   - [x] Exclude lines inside JS blocks in PHP views, especially `$.ajax({ type: 'POST' ... })`.
 
+- [ ] Literal/string guard calibration
+  - [ ] Ensure DSM patterns require an actual `$_` token in PHP code, so purely textual mentions like `'REQUEST_TIME_FLOAT ...'` don’t match.
+  - [x] Keep the common WordPress nonce-guard pattern as an explicit, tested guard:
+    - `isset( $_POST['nonce'] )` followed by `wp_verify_nonce( $_POST['nonce'], '...' )` and capability checks.
+    - Use Hypercart Helper’s `handle_self_test()` flow as a regression fixture (initial nonce/capability guard calibration shipped in v1.3.20; see CHANGELOG).
+
 - [ ] Bridge code allowlist
   - [x] Extend `should_suppress_finding` to support `spo-002-superglobals-bridge`.
   - [ ] Document expected format in template suppression examples if needed.
+  - [ ] Identify stable test/debug helpers (e.g., Hypercart’s `class-hpm-tests.php` and admin debug blocks) that can be safely baselined behind the bridge allowlist.
 
 - [x] Output consistency
   - [x] Confirm JSON findings include `guards` list and new `guarded/sanitized/severity` fields.
@@ -207,6 +214,10 @@ Primary path (recommended):
    - Before (2026-01-10-012836-UTC.json): DSM total = 16.
    - After (2026-01-17-225644-UTC.json): DSM total = 18; unguarded (fail) = 9; guarded/info = 9.
    - Net: Failing DSM count reduced by 7, with additional guarded/info visibility.
+
+4. Hypercart Helper
+   - Role: Real-world calibration fixture for DSM around the `handle_self_test()` nonce + capability guard.
+   - Result: DSM no longer flags the nonce/capability guard lines after v1.3.20 nonce-guard calibration (see CHANGELOG); keep this pattern as a long-term regression fixture.
 
 ### Phase 4 (Optional): GRA SuperglobalsRule
 
@@ -288,3 +299,9 @@ Acceptance criteria:
 
 - After Phase 3: If FP reduction is at least 5–10% and unguarded detection remains strong, ship Option A.
 - After Phase 4: If GRA meaningfully reduces noise without performance issues, consider optional integration.
+
+### Related rule calibrations (non-DSM)
+
+- `spo-004-missing-cap-check` (Admin functions without capability checks) was reviewed against Hypercart Helper on 2026-01-18.
+  - Conclusion: for Hypercart Helper these are defence-in-depth/style hints rather than exploitable bugs, because the settings pages are registered via `add_options_page`/`add_submenu_page` with `manage_options`, and the enqueue callbacks early-return when `$hook !== 'settings_page_hypercart-helper'`.
+  - Decision: keep `spo-004` as a heuristic/error-level hint for now and use Hypercart Helper as a reality-check fixture when revisiting this rule.

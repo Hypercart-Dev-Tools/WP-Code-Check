@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.20] - 2026-01-18
+
+### Changed
+- **DSM Nonce-Guard Calibration**
+  - Updated `spo-002-superglobals` handling in `dist/bin/check-performance.sh` so canonical WordPress nonce + capability guard patterns (e.g. `isset( $_POST['nonce'] )` combined with `wp_verify_nonce( $_POST['nonce'], 'action' )` and `current_user_can()`) are treated as read-only access and no longer cause the **Direct superglobal manipulation** check to fail.
+  - This change is grounded in the real-world Hypercart Helper `handle_self_test()` pattern and reduces false positives for secure self-test handlers and similar admin flows.
+
+### Tests
+- **Fixture Expectations**
+  - Updated `dist/tests/expected/fixture-expectations.json` for `ajax-antipatterns.php` to allow one `http-no-timeout` warning, keeping the fixture aligned with the strengthened HTTP timeout detection.
+
 ## [1.3.19] - 2026-01-17
 
 ### Tests
