@@ -184,6 +184,46 @@ These patterns **create security vulnerabilities or severe performance issues** 
 | **Admin functions without capability checks** | Privilege escalation vulnerability | Subscribers can access admin functions, modify settings, or delete data |
 | **WooCommerce N+1 patterns** | Query multiplication in WC loops | 100 orders × 3 meta queries = 300 queries → 5-10 second page loads |
 
+#### Direct superglobal manipulation (DSM) behavior
+
+WP Code Check implements direct superglobal manipulation as rule `spo-002-superglobals`. It triggers when it sees **writes or unsets** to PHP superglobals:
+
+- `unset( $_GET['foo'] );`, `unset( $_POST['foo'] );`
+- Assignments like `$_POST['foo'] = ...;`, `$_REQUEST = ...;`, or `$_COOKIE['foo'] = ...;`
+
+Reads that only appear inside **nonce/capability guards** (for example `isset( $_POST['nonce'] )` combined with `wp_verify_nonce()` and `current_user_can()`) are treated as guard code and handled by the **Unsanitized `$_GET`/`$_POST` read** checks instead of DSM.
+
+For each DSM match the scanner classifies it as:
+
+- **Unguarded** – no nonce/capability guard detected. These cause the DSM check to fail at the configured severity.
+- **Guarded** – nonce and/or capability checks are present. These are still reported but **downgraded** (for example, error → warning).
+- **Guarded + sanitized** – when write-side sanitizers (e.g. `sanitize_text_field()`, `absint()`, `sanitize_email()`, `sanitize_key()`, `esc_url_raw()`) are detected near the write. These are downgraded further (often to info level).
+
+This keeps the focus on **unguarded writes/unsets** while still showing guarded/sanitized DSM for triage.
+
+#### Bridge allowlist for known DSM noise (`spo-002-superglobals-bridge`)
+
+Some projects have **bridge or debug/test helper files** where guarded/sanitized DSM is expected (for example, internal self-test handlers or admin debug tabs). Instead of disabling DSM globally, you can use a dedicated **bridge rule** that plugs into the baseline system:
+
+- The scanner exposes a pseudo-rule id `spo-002-superglobals-bridge`.
+- When a baseline entry exists for this rule and a given file, DSM findings in that file are suppressed **before** the normal `spo-002-superglobals` baseline is applied.
+- New DSM uses above the baselined count in that file will still surface as issues.
+
+Recommended workflow:
+
+1. Identify a **small, stable set of low-risk files** where DSM noise is acceptable (test harnesses, developer-only debug UIs, IRL diagnostic tools).
+2. Run the analyzer with `--generate-baseline` and review the generated `.hcc-baseline` file.
+3. Keep (or add) entries for those files under the `spo-002-superglobals-bridge` rule, and remove any bridge entries for normal production code.
+4. Commit `.hcc-baseline` so CI uses the same bridge behavior.
+
+Example baseline line (simplified):
+
+`spo-002-superglobals-bridge|admin/class-my-plugin-debug.php|0|3|*`
+
+This says: up to **3** DSM findings in `admin/class-my-plugin-debug.php` are treated as bridged and suppressed; a 4th finding in that file will appear as a new issue.
+
+Bridge suppression only applies when baseline is enabled (a `.hcc-baseline` file is present and `--ignore-baseline` is **not** used). It is intended as a **surgical escape hatch** for well-understood debug/test helpers, not as a blanket way to hide DSM problems across a codebase.
+
 ### ⚠️ Medium Priority Warnings
 
 These patterns **degrade performance** and should be fixed:
