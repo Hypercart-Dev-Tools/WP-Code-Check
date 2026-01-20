@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-01-20
+
+### Changed
+- **N+1 heuristic calibration** – Tightened the meta-in-loop detector in
+  `dist/bin/check-performance.sh` to require a `get_*_meta()` call near a loop
+  boundary within the same function scope, and added a lower-severity warning
+  when pagination cues (per-page/LIMIT) are detected so results stay visible but
+  more nuanced.
+
+### Changed
+- **Version:** 2.0.3 → 2.0.4
+
 ## [2.0.3] - 2026-01-20
 
 ### Fixed
