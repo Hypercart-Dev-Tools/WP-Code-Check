@@ -1,4 +1,4 @@
-# WP Code Check by Hypercart
+# WP Code Check by Hypercart - snapshot/1.3.18
 
 **Fast, zero-dependency WordPress performance analyzer that catches critical issues before they crash your site.**
 
