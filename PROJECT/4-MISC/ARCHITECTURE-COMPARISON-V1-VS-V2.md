@@ -5,15 +5,105 @@
 | # | Aspect | v1.x (Development) | v2.x (Current) | Impact |
 |---|--------|-------------------|-----------------|--------|
 | **1** | **Architecture** | Monolithic (~6087 lines) | Modular + External Patterns (~6082 core) | v2 separates concerns; easier to maintain & extend |
-| **2** | **Pattern Management** | 34 individual JSON files loaded ad-hoc | 53 patterns + centralized registry | v2 has 56% more patterns; better organization |
+| **2** | **Pattern Loading** | **Loads patterns one-at-a-time per scan** | **Loads patterns one-at-a-time per scan** | ✅ **BOTH IDENTICAL** - No memory difference |
 | **3** | **Pattern Registry** | None (files discovered at runtime) | `PATTERN-LIBRARY.json` (Single Source of Truth) | v2 enables pattern discovery, versioning, metadata |
-| **4** | **Helper Libraries** | 3 shared libs (colors, common-helpers, false-positive-filters) | 4 shared libs + `json-helpers.sh` | v2 adds JSON parsing utilities for consistency |
-| **5** | **HTML Generation** | Bash-based (`json-to-html.sh`) | Python-based (`json-to-html.py`) | v2 is faster, more reliable, no bash subprocess issues |
-| **6** | **AI Integration** | None | `ai-triage.py` (Phase 2 AI triage) | v2 enables AI-assisted false positive filtering |
-| **7** | **MCP Support** | None | `mcp-server.js` (Tier 1 - Resources) | v2 integrates with Claude Desktop, Cline, other AI tools |
-| **8** | **Pattern Count** | 34 patterns | 53 patterns | v2 covers 56% more issues (19 CRITICAL, 16 HIGH) |
+| **4** | **Pattern Count** | 34 patterns | 53 patterns | v2 covers 56% more issues (19 CRITICAL, 16 HIGH) |
+| **5** | **Helper Libraries** | 3 shared libs (colors, common-helpers, false-positive-filters) | 4 shared libs + `json-helpers.sh` | v2 adds JSON parsing utilities for consistency |
+| **6** | **HTML Generation** | Bash-based (`json-to-html.sh`) | Python-based (`json-to-html.py`) | v2 is faster, more reliable, no bash subprocess issues |
+| **7** | **AI Integration** | None | `ai-triage.py` (Phase 2 AI triage) | v2 enables AI-assisted false positive filtering |
+| **8** | **MCP Support** | None | `mcp-server.js` (Tier 1 - Resources) | v2 integrates with Claude Desktop, Cline, other AI tools |
 | **9** | **External Tools** | 2 tools (json-to-html.sh, pattern-library-manager.sh) | 6+ tools (Python converters, MCP, triage, GitHub integration) | v2 has richer ecosystem for automation |
 | **10** | **Metadata Storage** | Embedded in individual JSON files | Centralized `PATTERN-LIBRARY.json` with statistics | v2 enables pattern discovery, filtering, documentation |
+
+---
+
+## ⚠️ CRITICAL CORRECTION: Pattern Loading Memory Model
+
+### Pattern Loading: v1.x vs v2.x (IDENTICAL)
+
+**Both versions load patterns ONE-AT-A-TIME, NOT into memory:**
+
+#### v1.x Pattern Loading Loop
+```bash
+# v1.x: Discovers patterns at runtime, loads one per iteration
+SIMPLE_PATTERNS=$(find "$REPO_ROOT/patterns" -name "*.json" -type f | while read -r pattern_file; do
+  detection_type=$(grep '"detection_type"' "$pattern_file" | head -1 | sed 's/.*"detection_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  if [ "$detection_type" = "simple" ]; then
+    echo "$pattern_file"
+  fi
+done)
+
+# Process each pattern ONE AT A TIME
+while IFS= read -r pattern_file; do
+  [ -z "$pattern_file" ] && continue
+
+  # Load pattern metadata (reads JSON file)
+  if load_pattern "$pattern_file"; then
+    # Run grep scan
+    matches=$(cached_grep $include_args -E "$pattern_search" || true)
+    # Process matches
+  fi
+done <<< "$SIMPLE_PATTERNS"
+```
+
+#### v2.x Pattern Loading Loop
+```bash
+# v2.x: Tries registry first, falls back to file discovery
+if SIMPLE_PATTERNS=$(get_patterns_from_registry "simple:direct" "php" "false"); then
+  :
+else
+  # Fallback: Discover patterns at runtime (same as v1.x)
+  SIMPLE_PATTERNS=$(find "$REPO_ROOT/patterns" -maxdepth 1 -name "*.json" -type f 2>/dev/null | while read -r pattern_file; do
+    # Extract detection type
+    detection_info=$(python3 -S <<EOFPYTHON 2>/dev/null
+import json
+try:
+  with open('$pattern_file', 'r') as f:
+    data = json.load(f)
+    root_type = data.get('detection_type', '') or ''
+    sub_type = data.get('detection', {}).get('type', '') or ''
+  print("%s %s" % (root_type, sub_type))
+except Exception:
+  pass
+EOFPYTHON
+)
+    # Filter patterns
+    if [ "$detection_type" = "simple" ] || [ "$detection_type" = "grep" ]; then
+      echo "$pattern_file"
+    fi
+  done)
+fi
+
+# Process each pattern ONE AT A TIME (identical to v1.x)
+while IFS= read -r pattern_file; do
+  [ -z "$pattern_file" ] && continue
+
+  # Load pattern metadata (reads JSON file)
+  if load_pattern "$pattern_file"; then
+    # Run grep scan
+    matches=$(cached_grep $include_args -E "$pattern_search" || true)
+    # Process matches
+  fi
+done <<< "$SIMPLE_PATTERNS"
+```
+
+### Key Finding: ✅ BOTH VERSIONS ARE IDENTICAL
+
+**Memory Model:**
+- ✅ v1.x: Loads patterns one-at-a-time
+- ✅ v2.x: Loads patterns one-at-a-time
+- ✅ **NO difference in memory usage**
+
+**The difference is in DISCOVERY:**
+- v1.x: Discovers patterns by scanning `dist/patterns/` directory at runtime
+- v2.x: Tries to use `PATTERN-LIBRARY.json` registry first (faster), falls back to file discovery
+
+**Why v2.x registry is better (but not for memory):**
+- Registry enables pattern discovery without filesystem scan
+- Enables filtering by severity/category
+- Enables version tracking
+- Enables documentation generation
+- **Does NOT load all patterns into memory**
 
 ---
 
@@ -133,16 +223,24 @@
 
 ## Summary: Why v2.x is Better
 
-✅ **Maintainability:** Modular design, external patterns, centralized registry  
-✅ **Extensibility:** Easy to add new patterns without modifying core  
-✅ **Coverage:** 56% more patterns (53 vs 34)  
-✅ **AI-Ready:** Built-in AI triage and MCP support  
-✅ **Reliability:** Python-based HTML generation (no bash subprocess issues)  
-✅ **Automation:** Rich tooling ecosystem for CI/CD integration  
-✅ **Discovery:** Centralized pattern registry enables filtering and documentation  
+### Memory & Performance
+- ⚠️ **Pattern Loading:** IDENTICAL in both versions (one-at-a-time, not bulk-loaded)
+- ✅ **Pattern Discovery:** v2.x registry is faster (no filesystem scan needed)
+- ✅ **HTML Generation:** v2.x Python-based is faster and more reliable
+
+### Architecture & Maintainability
+✅ **Maintainability:** Modular design, external patterns, centralized registry
+✅ **Extensibility:** Easy to add new patterns without modifying core
+✅ **Coverage:** 56% more patterns (53 vs 34)
+
+### AI & Automation
+✅ **AI-Ready:** Built-in AI triage and MCP support
+✅ **Automation:** Rich tooling ecosystem for CI/CD integration
+✅ **Discovery:** Centralized pattern registry enables filtering and documentation
 
 ---
 
-**Generated:** 2026-01-20  
+**Generated:** 2026-01-20
+**Updated:** 2026-01-20 (Pattern loading verification)
 **Comparison:** v1.x (development branch) vs v2.x (current workspace)
 
