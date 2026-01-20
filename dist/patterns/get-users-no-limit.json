@@ -1,28 +1,18 @@
 {
   "id": "get-users-no-limit",
   "version": "1.0.0",
-  "added_in_scanner_version": "1.0.65",
   "enabled": true,
-  "detection_type": "direct",
   "category": "performance",
   "severity": "CRITICAL",
   "title": "get_users() without 'number' limit",
   "description": "Detects get_users() calls without the 'number' parameter, which can fetch ALL users from the database and cause memory exhaustion on large sites.",
   "rationale": "On sites with 10,000+ users, unbounded get_users() queries can consume gigabytes of memory and cause timeouts or crashes. Always limit user queries with the 'number' parameter.",
   "detection": {
-    "type": "grep",
+    "type": "scripted",
     "file_patterns": ["*.php"],
-    "search_pattern": "get_users\\(",
-    "exclude_patterns": [
-      "'number'\\s*=>",
-      "\"number\"\\s*=>",
-      "//.*get_users"
-    ],
-    "post_process": {
-      "enabled": true,
-      "type": "context_analysis",
-      "description": "Check if 'number' parameter appears in the same function call (within 5 lines). Skip if 'number' is present."
-    }
+    "search_pattern": "get_users[[:space:]]*\\(",
+    "validator_script": "validators/parameter-presence-check.sh",
+    "validator_args": ["number", "10"]
   },
   "test_fixture": {
     "path": null,

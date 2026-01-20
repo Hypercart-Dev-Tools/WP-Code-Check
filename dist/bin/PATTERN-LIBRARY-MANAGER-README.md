@@ -62,6 +62,11 @@ Canonical JSON registry with:
   - Mitigation detection status
   - Heuristic classification
   - Source file reference
+  - Detection & mitigation fields for advanced loaders:
+    - `search_pattern`
+    - `file_patterns`
+    - `validator_script`, `validator_args`
+    - `mitigation_details` (enabled, script, args, severity_downgrade)
 
 **Example:**
 ```json
@@ -210,6 +215,12 @@ Edit `dist/bin/pattern-library-manager.sh`:
 
 ---
 
+## ✅ Verification
+
+To validate the registry JSON, run `dist/bin/check-pattern-library-json.sh` to ensure `dist/PATTERN-LIBRARY.json` is valid JSON.
+
+---
+
 ## 🚨 Troubleshooting
 
 ### Script Fails Silently
@@ -234,7 +245,7 @@ If patterns are missing from the registry:
 
 ---
 
-**Last Updated:** 2026-01-07  
+**Last Updated:** 2026-01-16  
 **Version:** 1.0.0  
 **Author:** Pattern Library Manager
 

@@ -200,6 +200,76 @@ These patterns **degrade performance** and should be fixed:
 
 ---
 
+## 🔧 How Rules Are Defined
+
+**All detection rules are defined as JSON patterns** in `dist/patterns/`. This makes rules:
+- ✅ **Data-driven** – Easy to add, modify, and version control
+- ✅ **Self-documenting** – Each rule includes description, rationale, and remediation
+- ✅ **Testable** – Rules can be validated independently
+- ✅ **Extensible** – New detection types can be added without changing core logic
+
+### Rule Structure
+
+Each JSON rule file contains:
+
+```json
+{
+  "id": "unbounded-posts-per-page",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "CRITICAL",
+  "title": "Unbounded posts_per_page",
+  "description": "Detects WordPress queries that disable pagination",
+  "rationale": "Unbounded queries can fetch all posts at once, leading to timeouts",
+
+  "detection": {
+    "type": "simple",
+    "file_patterns": ["*.php"],
+    "grep": {
+      "include": ["-E posts_per_page[[:space:]]*=>[[:space:]]*-1"]
+    }
+  },
+
+  "remediation": {
+    "summary": "Add pagination or a reasonable LIMIT",
+    "examples": [
+      {
+        "bad": "WP_Query(['posts_per_page' => -1])",
+        "good": "WP_Query(['posts_per_page' => 50, 'paged' => $paged])"
+      }
+    ]
+  }
+}
+```
+
+### Pattern Categories
+
+Rules are organized by domain:
+
+| Directory | Purpose | Examples |
+|-----------|---------|----------|
+| `dist/patterns/core/` | Core performance/security rules | Unbounded queries, missing nonces, N+1 patterns |
+| `dist/patterns/dry/` | DRY/duplication detection | Duplicate option names, transient keys, capabilities |
+| `dist/patterns/headless/` | Headless WordPress patterns | API key exposure, missing auth headers |
+| `dist/patterns/js/` | JavaScript-specific patterns | Duplicate storage keys, polling antipatterns |
+| `dist/patterns/nodejs/` | Node.js-specific patterns | Command injection, path traversal |
+
+### Detection Types
+
+- **`simple`** – Basic grep pattern matching (most rules)
+- **`aggregated`** – DRY/clone detection with grouping and thresholds
+- **`contextual`** – Context-aware rules (e.g., nonce + capability in same function)
+- **`scripted`** – Complex rules requiring custom validator scripts
+
+### Adding New Rules
+
+**For contributors:** See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed instructions on adding new JSON-based rules.
+
+**Note:** Inline rules in `check-performance.sh` are legacy and will be migrated to JSON. All new rules MUST be defined as JSON patterns.
+
+---
+
 ## 📊 Command Reference
 
 ### Basic Usage

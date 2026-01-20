@@ -330,8 +330,12 @@
         <div class="value">{{TOTAL_WARNINGS}}</div>
       </div>
       <div class="stat-card">
-        <div class="label">DRY Violations</div>
-        <div class="value" style="color: #ffc107;">{{MAGIC_STRING_VIOLATIONS_COUNT}}</div>
+        <div class="label">Magic Strings</div>
+        <div class="value" style="color: #ffc107;">{{MAGIC_STRING_COUNT}}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Function Clones</div>
+        <div class="value" style="color: #ffc107;">{{FUNCTION_CLONE_COUNT}}</div>
       </div>
       <div class="stat-card baselined">
         <div class="label">Baselined</div>
@@ -351,11 +355,18 @@
         {{FINDINGS_HTML}}
       </div>
 
-      <!-- DRY Violations Section (Magic Strings + Function Clones) -->
+      <!-- Magic Strings Section -->
       <div class="section">
-        <h2>🔄 DRY Violations ({{MAGIC_STRING_VIOLATIONS_COUNT}})</h2>
-        <p style="color: #6c757d; margin-bottom: 20px;">Includes magic strings and duplicate functions</p>
-        {{MAGIC_STRING_VIOLATIONS_HTML}}
+        <h2>🔤 Magic Strings ({{MAGIC_STRING_COUNT}})</h2>
+        <p style="color: #6c757d; margin-bottom: 20px;">Hardcoded values that should be constants</p>
+        {{MAGIC_STRINGS_HTML}}
+      </div>
+
+      <!-- Function Clones Section -->
+      <div class="section">
+        <h2>🔄 Function Clones ({{FUNCTION_CLONE_COUNT}})</h2>
+        <p style="color: #6c757d; margin-bottom: 20px;">Duplicate functions detected across files</p>
+        {{FUNCTION_CLONES_HTML}}
       </div>
 
       <!-- Checks Summary -->

@@ -1,0 +1,297 @@
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  WP Code Check by Hypercart - Performance Analyzer v1.3.38[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[1mProject:[0m Beaver Builder Plugin (Pro Version) v2.9.1 [0;34m[plugin][0m
+
+Scanning paths: /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin
+Strict mode: false
+Logging to: /Users/noelsaw/Documents/GH Repos/wp-code-check/dist/logs/2026-01-17-212543-UTC.log
+
+[0;34m→ Starting: Critical Checks[0m
+[0;31m━━━ CRITICAL CHECKS (will fail build) ━━━[0m
+
+[0;34m▸ Debug code in production [0;31m[CRITICAL][0m[0m
+[0;32m  ✓ Passed[0m
+
+
+[0;34m▸ Sensitive data in localStorage/sessionStorage [0;31m[CRITICAL][0m[0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Serialization of objects to client storage [0;31m[CRITICAL][0m[0m
+[0;32m  ✓ Passed[0m
+
+
+[0;34m▸ User input in RegExp without escaping (HCC-008) [1;33m[MEDIUM][0m[0m
+[0;32m  ✓ Passed[0m
+
+
+[0;34m▸ Direct superglobal manipulation [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+
+[0;34m▸ Unsanitized superglobal read ($_GET/$_POST) [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Insecure data deserialization [0;31m[CRITICAL][0m[0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Direct file write with user-controlled path [0;31m[CRITICAL][0m[0m
+[0;32m  ✓ Passed[0m
+
+
+[0;34m▸ Direct database queries without $wpdb->prepare() [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Admin functions without capability checks [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ wp_ajax handlers without nonce validation [0;31m[HIGH][0m
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-export.php: wp_ajax handler missing nonce validation
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-global-import-export.php: wp_ajax handler missing nonce validation
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/modules/subscribe-form/subscribe-form.php: wp_ajax handler missing nonce validation
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/modules/contact-form/contact-form.php: wp_ajax handler missing nonce validation
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/modules/search/search.php: wp_ajax handler missing nonce validation
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded wc_get_orders/wc_get_products limit [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+
+[0;34m▸ get_users without number limit [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ get_terms without number limit [0;31m[CRITICAL][0m
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-loop.php: get_terms() may be missing 'number' parameter [Mitigated by: parent-scoped,ids-only]
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-ui-settings-forms.php: get_terms() may be missing 'number' parameter
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/extensions/fl-theme-builder-core/classes/class-fl-theme-builder-rules-location.php: get_terms() may be missing 'number' parameter
+  /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/modules/menu/menu.php: get_terms() may be missing 'number' parameter
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded wc_get_orders() calls [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded wc_get_products() calls [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded WP_Query/get_posts calls [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ WP_User_Query without meta caching disabled [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Potential query limit multipliers (count() * N) [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unvalidated cron intervals [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m→ Starting: Warning Checks[0m
+[1;33m━━━ WARNING CHECKS (review recommended) ━━━[0m
+
+[0;34m▸ Potential N+1 patterns (meta in loops) [0;31m[CRITICAL][0m
+[0;31m  ✗ FAILED[0m
+    - /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-compatibility.php
+    - /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-wpcli-command.php
+    - /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-history-manager.php
+    - /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-module-blocks.php
+    - /Users/noelsaw/Library/Mobile Documents/com~apple~CloudDocs/Documents/00-WordPress plugins/Beaver Builder/bb-plugin/classes/class-fl-builder-revisions.php
+
+[0;34m▸ WooCommerce N+1 patterns (WC functions in loops) [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ WooCommerce coupon logic in thank-you context [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ WooCommerce Smart Coupons performance issues [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ HTML-escaping in JSON response URL fields (heuristic) [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m→ Starting: Magic String Detector[0m
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  SIMPLE PATTERN CHECKS (JSON-DEFINED)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;34m▸ Dangerous eval() usage in PHP [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Duplicate transient keys across files [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Direct file write with user-controlled path [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Direct database queries without $wpdb->prepare() [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unsanitized superglobal read ($_GET/$_POST/$_REQUEST) [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Shell command execution functions in PHP (shell_exec/exec/system/passthru) [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Hardcoded credentials in PHP [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Duplicate capability strings across files [1;33m[LOW][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unsanitized superglobal read ($_GET/$_POST) [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded wc_get_products() [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Query limit multiplier derived from count() [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded wc_get_orders() [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Duplicate option names across files [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ WP_User_Query Full Meta Hydration [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Dynamic PHP include/require with variables [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ LIKE queries with leading wildcards [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+[0;34m▸ array_merge() inside loops (heuristic) [1;33m[LOW][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ pre_get_posts Hook Sets Unbounded Query [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded AJAX polling (setInterval + fetch/ajax) [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Transients without expiration [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ HTTP requests without timeout [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded SQL on wp_terms/wp_term_taxonomy [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Unbounded WP_Query/get_posts [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ REST endpoints without pagination/limits [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Timezone-sensitive patterns (current_time/date) [1;33m[LOW][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ WooCommerce Subscriptions queries without limits [1;33m[MEDIUM][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ get_users() without 'number' limit [0;31m[CRITICAL][0m
+[0;32m  ✓ Passed[0m
+
+[0;34m▸ Expensive WP functions in polling intervals (HCC-005) [0;31m[HIGH][0m
+[0;32m  ✓ Passed[0m
+
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  MAGIC STRING DETECTOR ("DRY")[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+[0;34m▸ Duplicate transient keys across files[0m
+[0;32m  ✓ No violations[0m
+
+[0;34m▸ Duplicate localStorage/sessionStorage keys across files[0m
+[0;32m  ✓ No violations[0m
+
+[0;34m▸ Duplicate capability strings across files[0m
+[0;32m  ✓ No violations[0m
+
+[0;34m▸ Duplicate option names across files[0m
+[0;32m  ✓ No violations[0m
+
+[0;34m→ Starting: Function Clone Detector[0m
+Traceback (most recent call last):
+  File "/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/PATTERN-LIBRARY.json", line 31, in <module>
+    "enabled": true,
+NameError: name 'true' is not defined
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  FUNCTION CLONE DETECTOR[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[1;33m  ○ Skipped (use --enable-clone-detection to run)[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  SUMMARY[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  Errors:   [0;31m1[0m
+  Warnings: [1;33m0[0m
+
+[0;31m✗ Check failed with 1 error type(s)[0m
+
+[0;32m✓ Detection verified: 20 test fixtures passed[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PERFORMANCE PROFILE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    6830 ms  MAGIC_STRING_DETECTOR
+    1730 ms  CRITICAL_CHECKS
+     669 ms  WARNING_CHECKS
+     183 ms  FUNCTION_CLONE_DETECTOR
+
+  Total scan time: 9s (9454ms)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGISTRY DEBUG: state=fresh hits=37 misses=0
+
+🔄 Updating pattern library registry...
+⚠️  Warning: Bash 4+ required for full functionality. Using fallback mode.
+🔍 Scanning pattern library...
+✓ Found 53 patterns
+📝 Generating JSON registry...
+✓ JSON registry saved to: /Users/noelsaw/Documents/GH Repos/wp-code-check/dist/bin/../PATTERN-LIBRARY.json
+📝 Generating Markdown documentation...
+✓ Markdown documentation saved to: /Users/noelsaw/Documents/GH Repos/wp-code-check/dist/bin/../PATTERN-LIBRARY.md
+
+✅ Pattern Library Manager Complete
+
+📊 Summary:
+  Total Patterns: 53
+  Enabled: 53
+  By Type: PHP (42), Headless (6), Node.js (4), JS (1)
+  With Mitigation Detection: 7
+  Heuristic: 17
+
+📁 Output Files:
+  JSON: /Users/noelsaw/Documents/GH Repos/wp-code-check/dist/bin/../PATTERN-LIBRARY.json
+  Markdown: /Users/noelsaw/Documents/GH Repos/wp-code-check/dist/bin/../PATTERN-LIBRARY.md
+

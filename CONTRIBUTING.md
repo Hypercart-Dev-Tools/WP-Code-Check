@@ -42,23 +42,72 @@ Thank you for your interest in contributing to **WP Code Check**! We welcome con
 
 ### Adding New Performance Checks
 
-All checks should follow this pattern:
+**⚠️ IMPORTANT:** All new rules MUST be defined as JSON patterns in `dist/patterns/`. Inline rules in `check-performance.sh` are legacy and will be removed.
 
-```bash
-# In dist/bin/check-performance.sh
+**JSON Rule Structure:**
 
-run_check "ERROR|WARNING" "CRITICAL|HIGH|MEDIUM|LOW" \
-  "Check name" "rule-id" \
-  "-E pattern1" \
-  "-E pattern2"
+Create a new JSON file in `dist/patterns/` (or add to an existing category file):
+
+```json
+{
+  "id": "unbounded-posts-per-page",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "performance",
+  "severity": "CRITICAL",
+  "title": "Unbounded posts_per_page",
+  "description": "Detects WordPress queries that disable pagination and can crash large sites.",
+  "rationale": "Unbounded queries can fetch all posts at once, leading to timeouts and memory exhaustion.",
+
+  "detection": {
+    "type": "simple",
+    "file_patterns": ["*.php"],
+    "grep": {
+      "include": [
+        "-E posts_per_page[[:space:]]*=>[[:space:]]*-1"
+      ],
+      "override_include": "--include=*.php"
+    }
+  },
+
+  "remediation": {
+    "summary": "Add pagination or a reasonable LIMIT to queries to avoid loading all records at once.",
+    "examples": [
+      {
+        "bad": "WP_Query(['posts_per_page' => -1])",
+        "good": "WP_Query(['posts_per_page' => 50, 'paged' => $paged])",
+        "note": "Use paged queries and reasonable limits for production sites."
+      }
+    ]
+  }
+}
 ```
 
-**Example:**
+**Detection Types:**
+
+- `"simple"` – Basic grep pattern matching (most common)
+- `"aggregated"` – DRY/clone detection with grouping and thresholds
+- `"contextual"` – Context-aware rules (requires custom validator)
+- `"scripted"` – Complex rules requiring custom validator scripts
+
+**File Organization:**
+
+- `dist/patterns/core/*.json` – Core performance/security rules
+- `dist/patterns/dry/*.json` – DRY/duplication detection rules
+- `dist/patterns/headless/*.json` – Headless WordPress patterns
+- `dist/patterns/js/*.json` – JavaScript-specific patterns
+- `dist/patterns/nodejs/*.json` – Node.js-specific patterns
+
+**Legacy Inline Format (DO NOT USE):**
+
 ```bash
+# ❌ DEPRECATED - Do not add new rules this way
 run_check "ERROR" "CRITICAL" \
   "Unbounded posts_per_page" "unbounded-posts-per-page" \
   "-E posts_per_page[[:space:]]*=>[[:space:]]*-1"
 ```
+
+See `PROJECT/2-WORKING/PATTERN-MIGRATION-TO-JSON.md` for the migration plan.
 
 ### Test Fixtures
 

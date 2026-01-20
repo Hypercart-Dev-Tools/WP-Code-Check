@@ -110,6 +110,7 @@ is_line_in_comment() {
 # Patterns detected:
 # 1. HTML form method attributes: <form method="POST">
 # 2. REST route method configs: 'methods' => 'POST'
+  # 3. JS/AJAX request descriptors in PHP views: jQuery $.ajax / jQuery.ajax POST blocks
 #
 # Returns: 0 (true) if it's a false positive pattern, 1 (false) otherwise
 # Usage: is_html_or_rest_config "$code_line"
@@ -136,15 +137,16 @@ is_html_or_rest_config() {
     return 0  # true - is REST config
   fi
 
-  # Check for JavaScript AJAX/fetch patterns embedded in PHP views
-  # These are front-end request descriptors, not PHP superglobal usage.
-  if echo "$code" | grep -qiE "\\$\\.ajax|jQuery\\.ajax|fetch\\(|axios\\.|XMLHttpRequest"; then
-    return 0  # true - is JS AJAX/fetch code
-  fi
-
-  # JS object config line for POST requests (e.g., type: 'POST', method: "POST")
-  if echo "$code" | grep -qiE "^[[:space:]]*(type|method)[[:space:]]*:[[:space:]]*['\"]POST['\"]"; then
-    return 0  # true - is JS request config
+  # JS/AJAX-in-PHP: jQuery AJAX request descriptors inside PHP views
+  # These are front-end HTTP requests, not PHP superglobal manipulation,
+  # and should be handled by JS-facing rules instead of DSM.
+  #
+  # Heuristics:
+  # - $.ajax({ ... }) or jQuery.ajax({ ... })
+  # - $.post( ... ), $.get( ... )
+  if echo "$code" | grep -qiE '\$\.(ajax|post|get)[[:space:]]*\(' || \
+     echo "$code" | grep -qiE 'jQuery\.ajax[[:space:]]*\('; then
+    return 0  # true - is JS/JQuery AJAX config
   fi
 
   return 1  # false - not a false positive pattern
@@ -451,53 +453,20 @@ detect_sanitizers() {
   echo "$sanitizers"
 }
 
-# Detect sanitizers near a superglobal write
+# Detect sanitizers applied in the same line as a superglobal write
 #
-# This function scans a small context window for sanitizers that may
-# wrap the value assigned into a superglobal.
+# For DSM (direct superglobal manipulation) we treat write-side
+# sanitization as a local signal only. Rather than introducing a new
+# pattern set, we reuse the same heuristics as detect_sanitizers(),
+# but keep this helper separate so DSM call sites stay self-documenting.
 #
 # Returns: Space-separated list of detected sanitizers (empty if none)
-# Usage: sanitizers=$(detect_write_sanitizers "$file" "$line_num" 2)
 detect_write_sanitizers() {
-  local file="$1"
-  local line_num="$2"
-  local window="${3:-2}"
-  local start_line=$((line_num - window))
-  local end_line=$((line_num + window))
-  local context=""
-  local sanitizers=""
+  local code="$1"
 
-  [ "$start_line" -lt 1 ] && start_line=1
-  context=$(sed -n "${start_line},${end_line}p" "$file" 2>/dev/null || echo "")
-
-  if echo "$context" | grep -qE "sanitize_text_field[[:space:]]*\\("; then
-    sanitizers="${sanitizers}sanitize_text_field "
-  fi
-
-  if echo "$context" | grep -qE "sanitize_email[[:space:]]*\\("; then
-    sanitizers="${sanitizers}sanitize_email "
-  fi
-
-  if echo "$context" | grep -qE "sanitize_key[[:space:]]*\\("; then
-    sanitizers="${sanitizers}sanitize_key "
-  fi
-
-  if echo "$context" | grep -qE "sanitize_textarea_field[[:space:]]*\\("; then
-    sanitizers="${sanitizers}sanitize_textarea_field "
-  fi
-
-  if echo "$context" | grep -qE "esc_url_raw[[:space:]]*\\("; then
-    sanitizers="${sanitizers}esc_url_raw "
-  fi
-
-  if echo "$context" | grep -qE "absint[[:space:]]*\\("; then
-    sanitizers="${sanitizers}absint "
-  fi
-
-  # Trim trailing space
-  sanitizers=$(echo "$sanitizers" | sed 's/[[:space:]]*$//')
-
-  echo "$sanitizers"
+  # Reuse existing read-side sanitizer heuristics; DSM only cares
+  # about the immediate write context, so we stay line-local here.
+  detect_sanitizers "$code"
 }
 
 # Check if a variable was sanitized earlier in the function

@@ -375,3 +375,30 @@ function search_products_by_sku_prefix_good( $sku_prefix ) {
     ) );
 }
 
+// ============================================================
+// WARNING: array_merge in loop (should WARN)
+// ============================================================
+
+/**
+ * Antipattern 19: array_merge in loop
+ * Risk: Quadratic memory usage
+ */
+function merge_results_bad() {
+    $result = array();
+    foreach ( get_posts() as $post ) {
+        $result = array_merge( $result, get_post_meta( $post->ID ) );  // 🚨 ANTIPATTERN
+    }
+    return $result;
+}
+
+/**
+ * GOOD: array_merge outside loop
+ */
+function merge_results_good() {
+    $chunks = array();
+    foreach ( get_posts() as $post ) {
+        $chunks[] = get_post_meta( $post->ID );
+    }
+    return array_merge( ...$chunks );  // ✓ Single merge operation
+}
+

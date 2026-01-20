@@ -104,7 +104,7 @@ def classify_finding(f: Dict[str, Any]) -> Optional[TriageDecision]:
             ),
         )
 
-    # --- Superglobal findings: often flagged on comments/constants/docblocks.
+    # --- Superglobal findings: prefer structured guarded/sanitized booleans when present.
     if fid == 'spo-002-superglobals':
         # Heuristic: docblocks/comments mentioning $_POST/$_GET; or constants containing 'POST' etc.
         if msg.lower().startswith('direct superglobal'):
@@ -124,6 +124,65 @@ def classify_finding(f: Dict[str, Any]) -> Optional[TriageDecision]:
                     confidence='medium',
                     rationale='Nonce verification is performed via a helper (`verify_request_nonce`) in close proximity; direct access is part of a validated flow.',
                 )
+
+        # Prefer the scanner-provided guarded/sanitized booleans when available. These are
+        # populated for DSM findings in v2.0.3+ and give us a more accurate picture than
+        # re-deriving intent from raw code/guards arrays.
+        guarded = f.get('guarded')
+        sanitized = f.get('sanitized')
+        guarded_b = guarded if isinstance(guarded, bool) else None
+        sanitized_b = sanitized if isinstance(sanitized, bool) else None
+
+        if guarded_b is not None or sanitized_b is not None:
+            # Case 1: Guarded + sanitized DSM – usually acceptable WordPress form handling.
+            if guarded_b is True and sanitized_b is True:
+                return TriageDecision(
+                    classification='False Positive',
+                    confidence='high',
+                    rationale=(
+                        'Direct superglobal manipulation is both guard-protected (nonce/cap checks) '
+                        'and sanitized on write; this matches standard WordPress form-handling patterns '
+                        'and is unlikely to be a true issue.'
+                    ),
+                )
+
+            # Case 2: Guarded but not clearly sanitized – lower risk but worth review.
+            if guarded_b is True and (sanitized_b is False or sanitized_b is None):
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        'Direct superglobal manipulation is guard-protected (nonce/cap checks present) '
+                        'but no write-side sanitization was detected; verify that values are constrained '
+                        'before use and that bridge code does not bypass validation.'
+                    ),
+                )
+
+            # Case 3: Sanitized but unguarded – input is constrained but CSRF/authz risk remains.
+            if guarded_b is False and sanitized_b is True:
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        'Direct superglobal manipulation applies sanitization but no nonce/capability '
+                        'guard was detected; consider adding CSRF/authz checks even if the values are '
+                        'sanitized to reduce attack surface.'
+                    ),
+                )
+
+            # Case 4: Unguarded and unsanitized (or unknown) – treat as confirmed high-signal.
+            if guarded_b is False and (sanitized_b is False or sanitized_b is None):
+                return TriageDecision(
+                    classification='Confirmed',
+                    confidence='high',
+                    rationale=(
+                        'Direct superglobal manipulation without detected guards or sanitization; '
+                        'this is high-risk and should be refactored to add nonce/capability checks '
+                        'and explicit sanitization or to avoid mutating superglobals directly.'
+                    ),
+                )
+
+        # Fallback heuristics for older logs without guarded/sanitized booleans.
 
         # For actual assignments to $_REQUEST, treat as Needs Review.
         if code.strip().startswith('$_REQUEST'):
@@ -327,69 +386,80 @@ def main() -> int:
     print(f"  - Needs Review: {counts.get('Needs Review', 0)}", file=sys.stderr)
     print(f"[AI Triage] Overall confidence: {overall_conf}", file=sys.stderr)
 
-    # Build dynamic narrative and recommendations from actual findings
-    narrative_parts = []
+    # Minimal executive summary tailored to what we actually observed in the triaged sample.
+    narrative_parts: List[str] = []
     narrative_parts.append(
         "This Phase 2 triage pass reviews a subset of findings to separate likely true issues from policy/heuristic noise (especially in vendored/minified assets)."
     )
 
-    # Collect issue types found in triaged items
-    issue_types_found = defaultdict(int)
-    for item in triaged_items:
-        finding_id = item['finding_key']['id']
-        classification = item['classification']
-        if classification in ('Confirmed', 'Needs Review'):
-            issue_types_found[finding_id] += 1
-
-    # Build narrative from actual findings
-    if issue_types_found:
-        confirmed_count = counts.get('Confirmed', 0)
-        needs_review_count = counts.get('Needs Review', 0)
-        false_positive_count = counts.get('False Positive', 0)
-
-        narrative_summary = f"Of {reviewed} findings reviewed: {confirmed_count} confirmed issues, {false_positive_count} false positives, {needs_review_count} need further review."
-        narrative_parts.append(narrative_summary)
-
-        # Add context about issue categories found
-        if issue_types_found:
-            issue_list = ', '.join(sorted(issue_types_found.keys()))
-            narrative_parts.append(f"Issue categories identified: {issue_list}.")
-    else:
-        narrative_parts.append("No findings were triaged in this pass.")
-
-    narrative_parts.append(
-        "Findings in vendored/minified code are difficult to validate from pattern matching alone and are marked as Needs Review unless a clear mitigation is visible."
+    # Derive which high-priority categories were actually seen in the triaged sample.
+    has_debugger = any(
+        (item.get('finding_key') or {}).get('id') == 'spo-001-debug-code'
+        for item in triaged_items
+    )
+    has_http_timeout = any(
+        (item.get('finding_key') or {}).get('id') == 'http-no-timeout'
+        for item in triaged_items
+    )
+    has_rest_pagination = any(
+        (item.get('finding_key') or {}).get('id') == 'rest-no-pagination'
+        for item in triaged_items
+    )
+    has_superglobals = any(
+        (item.get('finding_key') or {}).get('id') in ('spo-002-superglobals', 'unsanitized-superglobal-read')
+        for item in triaged_items
     )
 
-    # Build recommendations only for issues actually found
-    recommendations = []
+    key_items = []
+    if has_debugger:
+        key_items.append("shipped `debugger;` statements in JS assets")
+    if has_http_timeout:
+        key_items.append("remote HTTP requests without explicit timeouts")
+    if has_rest_pagination:
+        key_items.append("REST endpoints missing explicit pagination/limits")
+    if has_superglobals:
+        key_items.append("direct or unsanitized superglobal access")
 
-    # Recommendation templates mapped to finding IDs
-    recommendation_map = {
-        'spo-001-debug-code': 'Remove/strip `debugger;` statements from shipped JS assets (or upgrade/patch the vendored library that contains them).',
-        'http-no-timeout': 'Add explicit `timeout` arguments to `wp_remote_get/wp_remote_post/wp_remote_request` calls where missing.',
-        'rest-no-pagination': 'For REST endpoints, confirm which routes return potentially large collections; add `per_page`/limit constraints there (action/single-item routes may not need pagination).',
-        'spo-002-superglobals': 'For superglobal reads, ensure values are validated/sanitized before use and that nonce/capability checks exist on the request path.',
-        'unsanitized-superglobal-read': 'Sanitize all superglobal reads ($_GET, $_POST, $_REQUEST) before use in sensitive operations.',
-        'spo-004-missing-cap-check': 'Add capability checks to admin functions and hooks using current_user_can().',
-        'wpdb-query-no-prepare': 'Use $wpdb->prepare() for all database queries with external input.',
-    }
-
-    # Only add recommendations for issues that were actually found
-    for finding_id, rec_text in recommendation_map.items():
-        if finding_id in issue_types_found:
-            recommendations.append(rec_text)
-
-    # If no recommendations were generated, add a generic one
-    if not recommendations:
-        recommendations.append('Review the triaged findings and address any confirmed issues according to their severity.')
-
-    # Validation: Ensure recommendations don't hallucinate issues not in findings
-    print(f"[AI Triage] Validating recommendations against findings...", file=sys.stderr)
-    if issue_types_found:
-        print(f"[AI Triage] ✅ Validation passed: {len(recommendations)} recommendations match actual findings", file=sys.stderr)
+    if key_items:
+        if len(key_items) == 1:
+            key_summary = key_items[0]
+        else:
+            key_summary = ", ".join(key_items[:-1]) + f" and {key_items[-1]}"
+        narrative_parts.append(
+            f"Key confirmed or high-signal items in the reviewed set include {key_summary}."
+        )
     else:
-        print(f"[AI Triage] ℹ️  No actionable findings to recommend; generic guidance provided", file=sys.stderr)
+        narrative_parts.append(
+            "In this sampled set, no debugger statements, missing HTTP timeouts, REST pagination, or superglobal patterns were confirmed; most findings remain heuristic or require case-by-case review."
+        )
+
+    narrative_parts.append(
+        "A large portion of findings often come from bundled/minified JavaScript or third-party libraries; these are difficult to validate from pattern matching alone and are therefore marked as Needs Review unless a clear mitigation is visible (e.g., regex escaping before `new RegExp()`)."
+    )
+
+    recommendations: List[str] = []
+
+    if has_debugger:
+        recommendations.append(
+            'Remove/strip `debugger;` statements from shipped JS assets (or upgrade/patch the vendored library that contains them).'
+        )
+    if has_http_timeout:
+        recommendations.append(
+            'Add explicit `timeout` arguments to `wp_remote_get/wp_remote_post/wp_remote_request` calls where missing.'
+        )
+    if has_rest_pagination:
+        recommendations.append(
+            'For REST endpoints, confirm which routes return potentially large collections; add `per_page`/limit constraints there (action/single-item routes may not need pagination).'
+        )
+    if has_superglobals:
+        recommendations.append(
+            'For superglobal reads, ensure values are validated/sanitized before use and that nonce/capability checks exist on the request path.'
+        )
+
+    if not recommendations:
+        recommendations.append(
+            'Review the flagged findings in context and decide which ones to fix versus baseline, focusing first on CRITICAL-impact performance and security patterns.'
+        )
 
     data['ai_triage'] = {
         'performed': True,
