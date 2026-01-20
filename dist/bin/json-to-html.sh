@@ -168,7 +168,8 @@ if [ -n "$project_name" ] && [ "$project_name" != "Unknown" ]; then
     project_info_html+="<div>Author: $project_author</div>"
   fi
   if [ "$files_analyzed" != "0" ]; then
-    project_info_html+="<div>Files Analyzed: $files_analyzed PHP files</div>"
+    formatted_files=$(printf "%'d" "$files_analyzed" 2>/dev/null || echo "$files_analyzed")
+    project_info_html+="<div>Files Analyzed: $formatted_files PHP files</div>"
   fi
   if [ "$lines_of_code" != "0" ]; then
     # Format with commas for readability
@@ -346,4 +347,3 @@ elif command -v xdg-open &> /dev/null; then
 fi
 
 exit 0
-

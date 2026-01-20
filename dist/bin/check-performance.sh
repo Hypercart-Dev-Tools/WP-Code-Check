@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.2
+# Version: 2.0.3
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -66,7 +66,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.2"
+SCRIPT_VERSION="2.0.3"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -1555,7 +1555,8 @@ generate_html_report() {
       project_info_html+="<div>Author: $project_author</div>"
     fi
     if [ "$files_analyzed" != "0" ]; then
-      project_info_html+="<div>Files Analyzed: $files_analyzed PHP files</div>"
+      local formatted_files=$(printf "%'d" "$files_analyzed" 2>/dev/null || echo "$files_analyzed")
+      project_info_html+="<div>Files Analyzed: $formatted_files PHP files</div>"
     fi
     if [ "$lines_of_code" != "0" ]; then
       # Format with commas for readability
