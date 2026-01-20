@@ -169,7 +169,11 @@ def main():
         if project_author:
             project_info_html += f"<div>Author: {project_author}</div>"
         if files_analyzed:
-            project_info_html += f"<div>Files Analyzed: {files_analyzed} PHP files</div>"
+            try:
+                formatted_files = f"{int(files_analyzed):,}"
+            except (TypeError, ValueError):
+                formatted_files = files_analyzed
+            project_info_html += f"<div>Files Analyzed: {formatted_files} PHP files</div>"
         if lines_of_code:
             project_info_html += f"<div>Lines Reviewed: {lines_of_code:,} lines of code</div>"
     
@@ -516,5 +520,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 

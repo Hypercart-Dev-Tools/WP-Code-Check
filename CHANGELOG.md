@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.13] - 2026-01-20
+
+### Fixed
+- **Registry loader heredoc execution** – Updated the registry-backed loader in
+  `dist/bin/check-performance.sh` to pass `-` to Python so the embedded heredoc
+  is read from stdin instead of attempting to execute `PATTERN-LIBRARY.json`
+  as code.
+- **Report formatting for files analyzed** – Added thousands separators to the
+  “Files Analyzed” line in `dist/bin/json-to-html.py`, `dist/bin/json-to-html.sh`,
+  and the inline HTML output path in `dist/bin/check-performance.sh` for
+  consistent project info display.
+
+### Changed
+- **N+1 heuristic calibration** – Tightened the meta-in-loop detector in
+  `dist/bin/check-performance.sh` to require a `get_*_meta()` call near a loop
+  boundary within the same function scope, and added a lower-severity warning
+  when pagination cues (per-page/LIMIT) are detected so results stay visible but
+  more nuanced.
+- **Version:** 2.0.12 → 2.0.13
+
 ## [2.0.12] - 2026-01-18
 
 ### Fixed

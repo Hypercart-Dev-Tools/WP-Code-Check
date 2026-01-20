@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.4
+# Version: 2.0.13
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -75,7 +75,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.12"
+SCRIPT_VERSION="2.0.13"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -252,7 +252,7 @@ get_patterns_from_registry() {
 	    return 1
 	  fi
 
-	  PYTHONSTARTUP= python3 -S <<'EOFPY' "$PATTERN_REGISTRY_FILE" "$REPO_ROOT" "$detection_filter" "$pattern_type_filter" "$include_disabled"
+	  PYTHONSTARTUP= python3 -S - "$PATTERN_REGISTRY_FILE" "$REPO_ROOT" "$detection_filter" "$pattern_type_filter" "$include_disabled" <<'EOFPY'
 import json
 import os
 import sys
@@ -1583,7 +1583,8 @@ generate_html_report() {
       project_info_html+="<div>Author: $project_author</div>"
     fi
     if [ "$files_analyzed" != "0" ]; then
-      project_info_html+="<div>Files Analyzed: $files_analyzed PHP files</div>"
+      local formatted_files=$(printf "%'d" "$files_analyzed" 2>/dev/null || echo "$files_analyzed")
+      project_info_html+="<div>Files Analyzed: $formatted_files PHP files</div>"
     fi
     if [ "$lines_of_code" != "0" ]; then
       # Format with commas for readability
@@ -4851,6 +4852,36 @@ has_meta_cache_optimization() {
 	grep -qE "update_meta_cache|update_postmeta_cache|update_termmeta_cache" "$file" 2>/dev/null
 }
 
+has_pagination_guard() {
+	local file="$1"
+	grep -qE "get_items_per_page|posts_per_page|per_page|paged|LIMIT" "$file" 2>/dev/null
+}
+
+find_meta_in_loop_line() {
+	local file="$1"
+	local loop_matches
+	loop_matches=$(grep -nE "foreach[[:space:]]*\\(|for[[:space:]]*\\(|while[[:space:]]*\\(" "$file" 2>/dev/null | head -50 || true)
+	[ -z "$loop_matches" ] && return 1
+
+	while IFS= read -r match; do
+		[ -z "$match" ] && continue
+		local lineno="${match%%:*}"
+		local scope_range
+		scope_range=$(get_function_scope_range "$file" "$lineno" 80)
+		local scope_end="${scope_range##*:}"
+		local window_end=$((lineno + 80))
+		if [ "$window_end" -gt "$scope_end" ]; then
+			window_end="$scope_end"
+		fi
+
+		if awk -v s="$lineno" -v e="$window_end" 'NR>=s && NR<=e { if ($0 ~ /get_(post|term|user)_meta[[:space:]]*\(/) { print NR; exit } }' "$file"; then
+			return 0
+		fi
+	done <<< "$loop_matches"
+
+	return 1
+}
+
 # N+1 pattern check (meta in loops) - includes post, term, and user meta
 # Smart detection: Downgrades severity to INFO if update_meta_cache() is detected
 N1_SEVERITY=$(get_severity "n-plus-one-pattern" "MEDIUM")
@@ -4862,28 +4893,17 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 		           xargs -I{} grep -l "foreach\|while[[:space:]]*(" {} 2>/dev/null | head -5 || true)
 		N1_FINDING_COUNT=0
 		N1_OPTIMIZED_COUNT=0
+		N1_PAGINATED_COUNT=0
 		VISIBLE_N1_FILES=""
 		VISIBLE_N1_OPTIMIZED=""
+		VISIBLE_N1_PAGINATED=""
 		if [ -n "$N1_FILES" ]; then
 		  # Collect findings, applying baseline per file
 		  while IFS= read -r f; do
 		    [ -z "$f" ] && continue
 		    if ! should_suppress_finding "n-plus-1-pattern" "$f"; then
-		      # Only flag when get_*_meta actually appears inside a loop window
-		      N1_LINE=$(awk 'BEGIN { window = 50; loop_window = 0 } \
-{
-  if ($0 ~ /(foreach|for|while)[[:space:]]*\()/) {
-    loop_window = window
-  }
-  if (loop_window > 0) {
-    if ($0 ~ /get_post_meta|get_term_meta|get_user_meta/) {
-      print NR
-      exit 0
-    }
-    loop_window--
-  }
-}
-END { exit 1 }' "$f" 2>/dev/null || true)
+		      # Only flag when get_*_meta appears near a loop within the same function scope
+		      N1_LINE=$(find_meta_in_loop_line "$f")
 		      # If no meta-in-loop found, skip this file entirely
 		      if [ -z "$N1_LINE" ]; then
 		        continue
@@ -4892,18 +4912,23 @@ END { exit 1 }' "$f" 2>/dev/null || true)
 		      if has_meta_cache_optimization "$f"; then
 		        # File uses update_meta_cache() - likely optimized, downgrade to INFO
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "File contains get_*_meta in loops but uses update_meta_cache() - verify optimization" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop), but update_meta_cache() is present - verify optimization" ""
 		        ((N1_OPTIMIZED_COUNT++)) || true
+		      elif has_pagination_guard "$f"; then
+		        VISIBLE_N1_PAGINATED="${VISIBLE_N1_PAGINATED}${f}"$'\n'
+		        add_json_finding "n-plus-1-pattern" "warning" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop). File appears paginated (per_page/LIMIT) - review impact" ""
+		        ((N1_PAGINATED_COUNT++)) || true
 		      else
 		        # No caching detected - standard warning
 		        VISIBLE_N1_FILES="${VISIBLE_N1_FILES}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "File may contain N+1 query pattern (meta in loops)" ""
+		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "Potential N+1 query pattern: meta call inside loop (heuristic). Review pagination/caching" ""
 		        ((N1_FINDING_COUNT++)) || true
 		      fi
 		    fi
 		  done <<< "$N1_FILES"
 
-	  if [ "$N1_FINDING_COUNT" -gt 0 ]; then
+	  N1_TOTAL_COUNT=$((N1_FINDING_COUNT + N1_PAGINATED_COUNT))
+	  if [ "$N1_TOTAL_COUNT" -gt 0 ]; then
 	    if [ "$N1_SEVERITY" = "CRITICAL" ] || [ "$N1_SEVERITY" = "HIGH" ]; then
 	      text_echo "${RED}  ✗ FAILED${NC}"
 	      ((ERRORS++))
@@ -4913,8 +4938,9 @@ END { exit 1 }' "$f" 2>/dev/null || true)
 	    fi
 	    if [ "$OUTPUT_FORMAT" = "text" ]; then
 	      echo "$VISIBLE_N1_FILES" | while read f; do [ -n "$f" ] && echo "    - $f"; done
+	      echo "$VISIBLE_N1_PAGINATED" | while read f; do [ -n "$f" ] && echo "    - $f"; done
 	    fi
-	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "failed" "$N1_FINDING_COUNT"
+	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "failed" "$N1_TOTAL_COUNT"
 	  elif [ "$N1_OPTIMIZED_COUNT" -gt 0 ]; then
 	    text_echo "${GREEN}  ✓ Passed${NC} ${BLUE}(${N1_OPTIMIZED_COUNT} file(s) use meta caching - likely optimized)${NC}"
 	    add_json_check "Potential N+1 patterns (meta in loops)" "$N1_SEVERITY" "passed" 0
