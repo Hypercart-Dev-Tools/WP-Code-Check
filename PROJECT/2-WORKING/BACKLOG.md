@@ -1,6 +1,20 @@
 # Backlog - Issues to Investigate
 
+# Investigate: PATTERN-LIBRARY.json executed as Python - 2026-01-19
+**Status:** In Progress
+**Priority:** High
+
+During the WooCommerce end-to-end scan, the Magic String Detector and Function Clone Detector both crashed with `NameError: name 'true' is not defined` pointing to line 31 of `dist/PATTERN-LIBRARY.json`. Line 31 is a standard JSON boolean (`"enabled": true`), so the error indicates Python is trying to execute the JSON file as a script rather than loading it as data.
+
+The most likely root cause is the registry loader in `dist/bin/check-performance.sh` at `get_patterns_from_registry()`. The command is written as `python3 <<'EOFPY' "$PATTERN_REGISTRY_FILE" ...`, which in POSIX shells treats `$PATTERN_REGISTRY_FILE` as the first script argument, not stdin. That means `python3` executes `PATTERN-LIBRARY.json` as the script, which immediately fails on JSON booleans like `true` and produces the observed `NameError`.
+
+This aligns with the scan output: the error repeats multiple times right when the detectors start, and the JSON report marks `clone_detection_ran: false`. The file itself is valid JSON (see `dist/bin/check-pattern-library-json.sh`), so the failure is execution mode, not malformed content.
+
+Proposed fix is to force Python to read the heredoc from stdin, e.g. `python3 - "$PATTERN_REGISTRY_FILE" "$REPO_ROOT" ... <<'EOFPY'`, or move the args before the heredoc redirection while adding `-` to indicate stdin. After patching, re-run a scan to verify the registry-backed loader works and the DRY detectors no longer error out.
+
 ### Checklist - 2026-01-15
+**Status:** Completed
+
 - [x] Add Tier 1 rules - First 6 completed
 - [x] Last TTY fix for HTML output
 - [x] Grep optimization complete (Phase 2.5) - 10-50x faster on large directories
@@ -13,11 +27,13 @@
   - Should show: "DRY Violations (0) - Magic Strings: 0, Function Clones: Skipped"
   - Or split into two sections: "Magic Strings" and "Function Clones (Skipped)"
   - Related: Both Magic String Detector and Function Clone Detector add to same DRY_VIOLATIONS array
- - [ ] **P1: Align fixture expectations with current pattern library + registry-backed loader**
+- [ ] **P1: Align fixture expectations with current pattern library + registry-backed loader**
    - 7/10 fixture tests are currently failing due to `total_errors` / `total_warnings` mismatches (e.g. `antipatterns.php`, `clean-code.php`, `file-get-contents-url.php`, `cron-interval-validation.php`).
    - Before simply updating expected counts, audit each failing fixture to confirm whether new findings represent **desired behavior** or **false positives** (especially in `clean-code.php`).
    - Once semantics are confirmed, either (a) adjust the underlying patterns/validators to restore the intended behavior, or (b) update the expected counts in `dist/tests/run-fixture-tests.sh` to match the new, correct semantics.
    - Re-run `./tests/run-fixture-tests.sh --trace` and ensure all fixtures pass under the registry-backed loader path.
+
+#
 
 ## ✅ COMPLETED: Phase 3 Performance Optimization (Magic String & Clone Detection)
 
@@ -341,4 +357,3 @@ actual_count=$(grep -c "$pattern" "$fixture_file")
 3. Already have JSON files but use `run_check` for backward compatibility
 
 **Recommend:** Move this to `PROJECT/3-COMPLETED/` and create a new task for "Advanced Pattern Types" if needed.
-

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.1
+# Version: 2.0.2
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -66,7 +66,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.1"
+SCRIPT_VERSION="2.0.2"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -243,7 +243,7 @@ get_patterns_from_registry() {
 	    return 1
 	  fi
 
-	  python3 <<'EOFPY' "$PATTERN_REGISTRY_FILE" "$REPO_ROOT" "$detection_filter" "$pattern_type_filter" "$include_disabled"
+	  python3 - "$PATTERN_REGISTRY_FILE" "$REPO_ROOT" "$detection_filter" "$pattern_type_filter" "$include_disabled" <<'EOFPY'
 import json
 import os
 import sys

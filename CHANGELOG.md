@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-01-19
+
+### Fixed
+- **Registry loader heredoc execution** – Ensured the registry-backed loader in
+  `dist/bin/check-performance.sh` reads the embedded Python script from stdin
+  (`python3 -`) instead of trying to execute `PATTERN-LIBRARY.json` as code, which
+  was causing `NameError: name 'true' is not defined` and skipping Magic String /
+  Clone detection during scans.
+
+### Changed
+- **Version:** 2.0.1 → 2.0.2
+
 ## [2.0.1] - 2026-01-17
 
 ### Fixed
