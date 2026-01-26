@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.14] - 2026-01-26
+
+### Fixed
+- **AI triage "needs review" visibility in GitHub issues** – Updated `dist/bin/create-github-issue.sh` so that when AI triage summaries report items needing review but per-finding classifications are missing, the generated GitHub issue reflects the correct "needs review" count instead of incorrectly stating "No issues need review."
+- **Per-finding AI triage JSON for GitHub integration** – Ensured scan logs can include an `ai_triage.triaged_findings` array with per-finding classifications to drive accurate "Most Critical but Unconfirmed" sections in generated issues.
+
+### Changed
+- **Version:** 2.0.13 → 2.0.14
+
 ## [2.0.13] - 2026-01-20
 
 ### Fixed

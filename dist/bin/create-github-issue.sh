@@ -203,8 +203,16 @@ while IFS= read -r finding; do
 done < <(jq -c '.ai_triage.triaged_findings[] | select(.classification != "Confirmed" and .classification != "False Positive")' "$JSON_FILE" 2>/dev/null | head -5)
 
 if [[ -z "$NEEDS_REVIEW" ]]; then
-    NEEDS_REVIEW="No issues need review."
-fi
+	    # Fallback: if per-finding triage details are missing, but the summary reports
+	    # items needing review, reflect that count instead of claiming there are none.
+	    NEEDS_REVIEW_COUNT=$(jq -r '.ai_triage.summary.needs_review // 0' "$JSON_FILE" 2>/dev/null || echo "0")
+	    if [[ "$NEEDS_REVIEW_COUNT" =~ ^[0-9]+$ ]] && [[ "$NEEDS_REVIEW_COUNT" -gt 0 ]]; then
+	        NEEDS_REVIEW+="- [ ] **${NEEDS_REVIEW_COUNT} issue(s) need review**"$'\n'
+	        NEEDS_REVIEW+="  _AI triage summary reports ${NEEDS_REVIEW_COUNT} open item(s) needing review, but per-finding classifications were not available in this log. See the HTML/JSON report for details._"$'\n'
+	    else
+	        NEEDS_REVIEW="No issues need review."
+	    fi
+	fi
 
 ISSUE_BODY+="$NEEDS_REVIEW"
 
