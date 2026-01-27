@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### New Detection Pattern: WordPress Template Tags in Loops (N+1 Queries)
+
+Source: IRL - Smart Coupons Plugin
+
 - **Pattern ID:** `wp-template-tags-in-loops` – New scripted pattern that detects WordPress template tag functions (`get_the_title()`, `get_the_content()`, `get_permalink()`, etc.) called with explicit post ID parameters inside loops. This is one of the most common WordPress performance anti-patterns found in plugins and themes.
 
 - **Detection logic:** Uses grep to find `foreach` and `while` loops, then validates with `dist/bin/validators/wp-template-tags-in-loops.sh` to check if template tags are called with parameters (e.g., `get_the_title($post_id)`) instead of using the global `$post` context.
