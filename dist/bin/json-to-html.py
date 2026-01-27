@@ -494,8 +494,26 @@ def main():
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    # Write HTML file
+    # Generate metadata comment block for top of HTML file
+    metadata_comment = f"""<!--
+WP Code Check Performance Report
+================================
+Plugin/Theme: {project_name}{f' v{project_version}' if project_version else ''}
+Type: {project_type}
+{f'Author: {project_author}' if project_author else ''}
+Scanned: {timestamp}
+Files Analyzed: {files_analyzed}
+Lines of Code: {lines_of_code:,}
+Total Errors: {total_errors}
+Total Warnings: {total_warnings}
+Path: {paths}
+Scanner Version: {version}
+-->
+"""
+
+    # Write HTML file with metadata comment at the top
     with open(output_html, 'w') as f:
+        f.write(metadata_comment)
         f.write(html_content)
 
     # Get file size

@@ -6063,9 +6063,23 @@ debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
     REPORTS_DIR="$PLUGIN_DIR/reports"
     mkdir -p "$REPORTS_DIR"
 
-    # Generate timestamped HTML report filename
+    # Generate timestamped HTML report filename with plugin slug
     REPORT_TIMESTAMP=$(timestamp_filename)
-    HTML_REPORT="$REPORTS_DIR/$REPORT_TIMESTAMP.html"
+
+    # Extract plugin/theme name from JSON and create 4-char slug
+    PLUGIN_SLUG=""
+    if [ -f "$LOG_FILE" ]; then
+      PLUGIN_NAME=$(jq -r '.project.name // empty' "$LOG_FILE" 2>/dev/null)
+      if [ -n "$PLUGIN_NAME" ]; then
+        # Convert to lowercase, take first 4 chars of first word
+        PLUGIN_SLUG=$(echo "$PLUGIN_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g' | cut -c1-4)
+        if [ -n "$PLUGIN_SLUG" ]; then
+          PLUGIN_SLUG="-${PLUGIN_SLUG}"
+        fi
+      fi
+    fi
+
+    HTML_REPORT="$REPORTS_DIR/${REPORT_TIMESTAMP}${PLUGIN_SLUG}.html"
 
 	    # Generate the HTML report using standalone Python converter
 	    # This is more reliable than the inline bash function

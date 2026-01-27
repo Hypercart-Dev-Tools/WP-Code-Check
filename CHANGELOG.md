@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### HTML Report Usability Improvements
+
+- **Plugin slug in HTML filename:** HTML reports now automatically append the first 4 characters of the plugin/theme name to the filename for easier identification. Example: `2026-01-27-220926-UTC-wooc.html` for "WooCommerce Smart Coupons" instead of just `2026-01-27-220926-UTC.html`. This makes it much easier to find specific reports later when scanning multiple plugins.
+
+- **Metadata comments at top of HTML file:** Added HTML comment block at the very top of report files containing key metadata (plugin name, version, type, author, scan timestamp, files analyzed, LOC, errors, warnings, path, scanner version). This allows quick inspection of report metadata in any text editor without opening the file in a browser or scrolling down the page.
+
+  Example metadata comment:
+  ```html
+  <!--
+  WP Code Check Performance Report
+  ================================
+  Plugin/Theme: WooCommerce Smart Coupons v9.64.0
+  Type: plugin
+  Author: StoreApps
+  Scanned: 2026-01-27T22:09:26Z
+  Files Analyzed: 122
+  Lines of Code: 63,525
+  Total Errors: 3
+  Total Warnings: 0
+  Path: /path/to/plugin
+  Scanner Version: 2.0.16
+  -->
+  ```
+
 #### New Detection Pattern: WordPress Template Tags in Loops (N+1 Queries)
 
 Source: IRL - Smart Coupons Plugin
