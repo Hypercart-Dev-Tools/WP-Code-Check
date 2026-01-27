@@ -16,7 +16,7 @@ Post DB Query constructur pattern
 - [z] Update the CHANGELOG with the new pattern
 - [x] Adjust the fixture test expectations after adding the DB query in constructor pattern (currently expects 4 errors, but detects 6) - **COMPLETED 2026-01-27**: Updated `dist/tests/expected/fixture-expectations.json` to expect 6 errors (includes 2 false positives with safety guards). CHANGELOG updated with rationale.
 
-- [ ] Re-integrate the Local VS Code Editor jump buttons
+- [x] Re-integrate the Local VS Code Editor jump buttons
 
 2026-01-17
 - [ ] Add new Test Fixtures for DSM patterns 
