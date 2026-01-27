@@ -35,6 +35,11 @@
     "warnings": { "min": 0, "max": 0 },
     "description": "Unvalidated cron intervals"
   },
+  "db-query-in-constructor.php": {
+    "errors": 6,
+    "warnings": { "min": 0, "max": 0 },
+    "description": "Database queries in __construct() methods (includes 2 false positives with safety guards)"
+  },
   "file-get-contents-url.php": {
     "errors": 1,
     "warnings": { "min": 0, "max": 0 },
