@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.13
+# Version: 2.0.15
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -75,7 +75,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.13"
+SCRIPT_VERSION="2.0.14"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -4892,6 +4892,60 @@ has_pagination_guard() {
 	grep -qE "get_items_per_page|posts_per_page|per_page|paged|LIMIT" "$file" 2>/dev/null
 }
 
+# Check if file path indicates a WordPress admin view where meta cache is pre-primed
+# These are typically hooked to show_user_profile/edit_user_profile where WP_User is pre-loaded
+is_wp_cache_primed_view() {
+	local file="$1"
+	local file_lower
+	file_lower=$(echo "$file" | tr '[:upper:]' '[:lower:]')
+
+	# User admin/profile views - WordPress primes user meta cache on user-edit.php
+	if [[ "$file_lower" =~ (user-admin|user_admin|user-profile|user_profile) ]]; then
+		if [[ "$file_lower" =~ (/views/|/templates/|view-) ]]; then
+			return 0
+		fi
+	fi
+
+	# Custom field views for users - typically iterate over fields for ONE user
+	if [[ "$file_lower" =~ (custom-field|custom_field) ]] && [[ "$file_lower" =~ user ]]; then
+		if [[ "$file_lower" =~ (/views/|view-) ]]; then
+			return 0
+		fi
+	fi
+
+	return 1
+}
+
+# Check if the loop iterates over fields (single object) vs objects (true N+1)
+# Returns 0 if iterating over fields for a single object (likely false positive)
+# Returns 1 if iterating over multiple objects (true N+1) or unknown
+is_single_object_field_loop() {
+	local file="$1"
+
+	# Patterns indicating iteration over FIELDS for a single object (likely false positive)
+	# These loops call get_*_meta with the SAME object ID each iteration
+	local field_patterns='foreach.*\$field|foreach.*\$custom_field|foreach.*\$meta_key|foreach.*\$registration_form_fields|foreach.*\$file_fields'
+
+	# Patterns indicating iteration over MULTIPLE objects (true N+1)
+	# These loops call get_*_meta with DIFFERENT object IDs each iteration
+	local object_patterns='foreach.*\$users|foreach.*\$posts|foreach.*\$orders|foreach.*\$products|foreach.*\$comments|foreach.*get_users|foreach.*get_posts|WP_User_Query|WP_Query|wc_get_orders|wc_get_products'
+
+	# Check for multi-object patterns first (these are definitely N+1)
+	if grep -qE "$object_patterns" "$file" 2>/dev/null; then
+		return 1  # True N+1 - iterating over multiple objects
+	fi
+
+	# Check for single-object field patterns
+	if grep -qE "$field_patterns" "$file" 2>/dev/null; then
+		# Additional check: verify the meta call uses a constant ID (e.g., $user->ID, $post->ID)
+		if grep -qE '\$user->ID|\$post->ID|\$userID|\$user_id.*get_user_meta' "$file" 2>/dev/null; then
+			return 0  # Single object - likely false positive
+		fi
+	fi
+
+	return 1  # Unknown or multi-object
+}
+
 find_meta_in_loop_line() {
 	local file="$1"
 	local loop_matches
@@ -4943,18 +4997,34 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 		      if [ -z "$N1_LINE" ]; then
 		        continue
 		      fi
-		      # Smart detection: Check if file uses meta caching
-		      if has_meta_cache_optimization "$f"; then
+		      # Smart detection: Prioritized checks for false positives and severity adjustment
+
+		      # Priority 1: Check if this is a WordPress admin view where cache is pre-primed
+		      if is_wp_cache_primed_view "$f"; then
+		        # WordPress primes meta cache on admin pages like user-edit.php
+		        # These are likely false positives - downgrade to INFO
+		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 in WP admin view - likely false positive (WordPress pre-primes meta cache on user-edit.php)" ""
+		        ((N1_OPTIMIZED_COUNT++)) || true
+		      # Priority 2: Check if loop iterates over fields for a single object (not multiple objects)
+		      elif is_single_object_field_loop "$f"; then
+		        # Iterating over fields for ONE object - WordPress caches all meta on first call
+		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 but loop iterates over fields for single object - WordPress caches all meta on first call" ""
+		        ((N1_OPTIMIZED_COUNT++)) || true
+		      # Priority 3: Check if file uses explicit meta caching
+		      elif has_meta_cache_optimization "$f"; then
 		        # File uses update_meta_cache() - likely optimized, downgrade to INFO
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
 		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop), but update_meta_cache() is present - verify optimization" ""
 		        ((N1_OPTIMIZED_COUNT++)) || true
+		      # Priority 4: Check for pagination guards
 		      elif has_pagination_guard "$f"; then
 		        VISIBLE_N1_PAGINATED="${VISIBLE_N1_PAGINATED}${f}"$'\n'
 		        add_json_finding "n-plus-1-pattern" "warning" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop). File appears paginated (per_page/LIMIT) - review impact" ""
 		        ((N1_PAGINATED_COUNT++)) || true
 		      else
-		        # No caching detected - standard warning
+		        # No mitigations detected - standard warning (likely true N+1)
 		        VISIBLE_N1_FILES="${VISIBLE_N1_FILES}${f}"$'\n'
 		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "Potential N+1 query pattern: meta call inside loop (heuristic). Review pagination/caching" ""
 		        ((N1_FINDING_COUNT++)) || true

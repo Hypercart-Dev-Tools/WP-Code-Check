@@ -1,5 +1,13 @@
 # Backlog - Issues to Investigate
 
+## 2026-01-27
+Post DB Query constructur pattern
+- [z] Update the pattern description to document the limitations
+- [z] Update the CHANGELOG with the new pattern
+- [x] Adjust the fixture test expectations after adding the DB query in constructor pattern (currently expects 4 errors, but detects 6) - **COMPLETED 2026-01-27**: Updated `dist/tests/expected/fixture-expectations.json` to expect 6 errors (includes 2 false positives with safety guards). CHANGELOG updated with rationale.
+
+- [ ] Re-integrate the Local VS Code Editor jump buttons
+
 2026-01-17
 - [ ] Add new Test Fixtures for DSM patterns 
 - [ ] Research + decision: verify whether `spo-002-superglobals-bridge` should be supported in `should_suppress_finding()` (in `dist/bin/check-performance.sh`) and define the implementation path (add allowlist vs require baseline); update DSM fixture plan accordingly.

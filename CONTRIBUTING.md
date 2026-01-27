@@ -124,6 +124,31 @@ Every new check **must** have test fixtures:
 - **Functions**: One responsibility per function
 - **Variables**: Use descriptive names (`FINDING_COUNT` not `fc`)
 
+### Updating the Cache-Primed Hooks Dictionary
+
+The **cache-primed hooks dictionary** (`WP_CACHE_PRIMED_HOOKS`) is located in `dist/bin/ai-triage.py`. This dictionary maps WordPress hooks to object types and is critical for reducing false positives in N+1 detection.
+
+#### Steps to Update:
+1. **Identify New Hooks**:
+   - Look for WordPress hooks that pre-cache metadata for objects (e.g., `user`, `post`, `comment`).
+2. **Add to the Dictionary**:
+   - Open `dist/bin/ai-triage.py` and add the new hook to the `WP_CACHE_PRIMED_HOOKS` dictionary.
+3. **Test Your Changes**:
+   - Run the test suite to ensure no regressions.
+   - Add new test cases if necessary.
+4. **Submit a Pull Request**:
+   - Include a clear description of the added hooks and their purpose.
+
+#### Example:
+```python
+WP_CACHE_PRIMED_HOOKS = {
+    'show_user_profile': 'user',
+    'edit_user_profile': 'user',
+    'add_meta_boxes': 'post',
+    # Add new hooks here
+}
+```
+
 ---
 
 ## 🧪 Testing

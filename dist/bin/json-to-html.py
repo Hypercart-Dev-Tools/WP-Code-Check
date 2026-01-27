@@ -212,8 +212,12 @@ def main():
             impact = finding.get('impact', 'MEDIUM').lower()
 
             # Build absolute file path
-            if file_path and not os.path.isabs(file_path):
-                abs_file = os.path.join(abs_path, file_path)
+            if file_path:
+                if os.path.isabs(file_path):
+                    abs_file = file_path
+                else:
+                    # Convert relative path to absolute based on current working directory
+                    abs_file = os.path.abspath(file_path)
             else:
                 abs_file = file_path
 

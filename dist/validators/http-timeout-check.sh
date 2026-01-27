@@ -55,8 +55,21 @@ fi
 # Check for timeout in context (case-insensitive)
 # Look for: 'timeout' => N or "timeout" => N or 'timeout' : N
 if echo "$context" | grep -qiE "'timeout'[[:space:]]*=>|\"timeout\"[[:space:]]*=>|'timeout'[[:space:]]*:"; then
-    # Timeout FOUND - this is a false positive (timeout exists)
-    exit 1
+    # Timeout FOUND - but check if it's being filtered away
+    # If the options/args array is passed through apply_filters(), the timeout can be removed
+    # This is a real vulnerability because a filter could strip the timeout
+
+    # Check if apply_filters is used with the options/args variable
+    # Pattern: apply_filters(..., $options) or apply_filters(..., $args)
+    # This catches cases like: $options = apply_filters(..., $options)
+    if echo "$context" | grep -qiE "apply_filters.*\\\$.*options|apply_filters.*\\\$.*args"; then
+        # Timeout is set BUT then filtered - a filter could remove it
+        # This is a CONFIRMED ISSUE (exit 0)
+        exit 0
+    else
+        # Timeout is set and NOT filtered - this is a false positive
+        exit 1
+    fi
 else
     # Timeout NOT found - this is an issue (no timeout)
     exit 0
