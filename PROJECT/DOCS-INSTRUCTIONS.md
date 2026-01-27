@@ -3,7 +3,7 @@
 ## Folder Structure
 - **1-INBOX**: All new documents start here
 All files should be named with Prefix of P1-P3 followed by a dash and the name of the document. This will help us to quickly understand the priority of the document and the status without opening it up. This should be reflected in the metadata of the document as well.
-- **2-IN PROGRESS**: Active work only (max 3 documents)
+- **2-WORKING**: Active work only (max 3 documents)
 - **3-COMPLETED**: Finished documents with completion dates
 - **4-MISC**: Archives and uncertain status items
 
@@ -25,11 +25,14 @@ Goal: [Brief purpose statement]
 2. **Activate**: Move to `2-IN PROGRESS` when starting. 
 3. **Complete**: Move to `3-COMPLETED`. Replace prefix with `DONE-YYYY-MM-DD-`
 4. **Archive**: Move to `4-MISC` if reference/uncertain status
+5. Do not create any new docs unless specifically requested. 
+6. Do not create summary docs unless specifically requested. 
+7. Do update current project docs for checkmarks, todos, and statuses after completion. 
 
 ## File Operations
 - **New docs**: Only in `1-INBOX`
 - **Active work**: Only in `2-IN PROGRESS` (max 3 simultaneous)
-- **Updates**: Only touch files in `2-IN PROGRESS`
+- **Updates**: Only touch files in `2-WORKING`
 - **Never delete**: Archive to `3-COMPLETED` or `4-MISC` instead
 
 ## Continuous Scanning (Every Interaction)
