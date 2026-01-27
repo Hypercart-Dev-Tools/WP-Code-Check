@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.15] - 2026-01-27
+
+### Added
+
+#### AI Triage Enhancements (`dist/bin/ai-triage.py`)
+- **WordPress-aware N+1 false positive detection** – Enhanced `dist/bin/ai-triage.py` with intelligent detection of WordPress meta cache priming patterns. The script now recognizes when WordPress has pre-loaded objects (WP_User, WP_Post) and cached their meta, correctly classifying these as false positives instead of confirmed issues.
+
+- **File path-based context inference** – Added fallback detection logic that uses file path patterns (e.g., `user-admin`, `custom-field`, `/views/`) to infer context when code snippets are sparse or missing. This improves accuracy for findings where the scanner captures limited surrounding code.
+
+- **Single-object vs multi-object iteration detection** – New helper function `is_single_object_meta_loop()` distinguishes between:
+  - Iterating over fields for ONE object (false positive – WP caches on first call)
+  - Iterating over MULTIPLE objects (true N+1 – needs fix)
+
+- **7-priority N+1 classification system** – Restructured N+1 pattern analysis with prioritized checks:
+  1. WordPress meta cache priming → False Positive (high confidence)
+  2. Single-object field iteration → False Positive (medium confidence)
+  3. Explicit caching mechanisms → False Positive
+  4. Email/low-frequency contexts → Needs Review
+  5. Bounded loops → Needs Review
+  6. Admin-only context → Needs Review
+  7. True N+1 with multi-object iteration → Confirmed
+
+- **WordPress cache-primed hooks dictionary** – Added `WP_CACHE_PRIMED_HOOKS` mapping WordPress hooks (e.g., `show_user_profile`, `edit_user_profile`, `add_meta_boxes`) to their object types, enabling automatic detection of contexts where meta is pre-cached.
+
+#### Grep Pattern Detector Enhancements (`dist/bin/check-performance.sh`)
+- **`is_wp_cache_primed_view()` helper function** – New function that detects WordPress admin views where meta cache is pre-primed based on file path patterns. Matches files like `view-wwlc-custom-fields-on-user-admin.php` and downgrades severity to INFO since WordPress primes user meta cache on `user-edit.php` before hooks fire.
+
+- **`is_single_object_field_loop()` helper function** – New function that distinguishes between:
+  - **Field iteration patterns** (`$field`, `$custom_field`, `$meta_key`) → Likely false positive
+  - **Object iteration patterns** (`$users`, `$posts`, `get_users()`, `WP_Query`) → True N+1
+
+  When a loop iterates over fields for a single object (same ID each iteration), WordPress caches all meta on the first call, making subsequent calls cache hits.
+
+- **4-priority detection cascade** – Updated N+1 detection logic with prioritized checks:
+  1. WordPress admin view (cache pre-primed) → INFO severity
+  2. Single-object field loop → INFO severity
+  3. Explicit `update_meta_cache()` present → INFO severity
+  4. Pagination guards present → LOW severity warning
+  5. No mitigations → Standard warning (likely true N+1)
+
+### Changed
+- **Version:** 2.0.14 → 2.0.15
+
+### Technical Details
+The enhancement addresses a common false positive scenario: when a view file iterates over custom fields for a single user on the WordPress user-edit.php page, the scanner would flag `get_user_meta()` calls inside the loop as N+1 patterns. However, WordPress automatically primes the user meta cache when loading the WP_User object, so all subsequent `get_user_meta()` calls hit the object cache (0 additional DB queries).
+
+**Example correctly classified as False Positive:**
+```
+File: view-wwlc-custom-fields-on-user-admin.php:26
+Code: get_user_meta($user->ID, $field['id'], true) inside foreach loop
+Classification: False Positive (high confidence)
+Reason: WordPress primes user meta cache on user-edit.php before hooks fire
+```
+
 ## [2.0.14] - 2026-01-26
 
 ### Fixed

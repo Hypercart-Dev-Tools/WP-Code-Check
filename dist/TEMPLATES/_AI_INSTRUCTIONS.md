@@ -613,7 +613,11 @@ Understanding these patterns helps AI agents provide accurate triage assessments
 | `get-users-no-limit` | Args passed through `apply_filters()` hook that adds limit | Look for `apply_filters()` wrapping the args array |
 | `direct-db-query` | Query uses `$wpdb->prepare()` on adjacent line (multi-line query) | Check 1-3 lines above/below for `$wpdb->prepare()` |
 | `admin-no-cap-check` | Function is only called from another function that has cap check | Trace function calls to see if parent has `current_user_can()` |
-| `n-plus-1-pattern` | File has "meta" in variable name but not actual meta query in loop | Verify if `get_post_meta()` or `get_user_meta()` is actually called in loop |
+| `n-plus-1-pattern` | Meta call in view/template with bounded field count | Check if loop iterates over small, fixed set of custom fields |
+| `n-plus-1-pattern` | Meta call in email context (low frequency) | Verify email send frequency and whether it runs async |
+| `n-plus-1-pattern` | Caching present nearby (transients/object cache) | Look for `get_transient()`, `set_transient()`, or `wp_cache_get()` |
+| `n-plus-1-pattern` | Loop is bounded by LIMIT or array_slice | Verify maximum iteration count is small (< 20) |
+| `n-plus-1-pattern` | Admin-only context with low traffic | Check if page is high-traffic or dataset could grow large |
 | `unsafe-regexp` | RegExp pattern is static/hardcoded, not user input | Check if pattern comes from variable or is a string literal |
 | `debug-code` | Debug code in vendor/node_modules directory | Check file path - third-party code is not under developer control |
 

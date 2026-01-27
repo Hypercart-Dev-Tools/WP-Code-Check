@@ -37,6 +37,54 @@ MINIFIED_HINTS = (
     '.min.css',
 )
 
+# WordPress hooks where the object's meta cache is already primed by WP core
+# When these hooks fire, WordPress has already loaded the object and cached its meta
+WP_CACHE_PRIMED_HOOKS = {
+    # User profile hooks - WP_User object passed with meta already cached
+    'show_user_profile': 'user',
+    'edit_user_profile': 'user',
+    'personal_options': 'user',
+    'profile_personal_options': 'user',
+    'user_profile': 'user',
+    # Post edit hooks - WP_Post object passed with meta already cached
+    'edit_form_after_title': 'post',
+    'edit_form_after_editor': 'post',
+    'add_meta_boxes': 'post',
+    'save_post': 'post',
+    'the_post': 'post',
+    # Comment hooks - comment object passed with meta cached
+    'edit_comment': 'comment',
+    'comment_post': 'comment',
+    # Term hooks - term object passed with meta cached
+    'edit_term': 'term',
+    'created_term': 'term',
+}
+
+# Patterns indicating WordPress has pre-loaded the object (meta cache is primed)
+WP_OBJECT_PRELOADED_PATTERNS = (
+    # Function receives WP_User object - meta already cached
+    '$user->ID',
+    '$user->id',
+    # Function receives WP_Post object - meta already cached
+    '$post->ID',
+    '$post->id',
+    'get_the_ID()',
+    # Global post object in loop - meta cached by WP_Query
+    'global $post',
+    # Current user - always cached after init
+    'get_current_user_id()',
+    'wp_get_current_user()',
+)
+
+# Meta functions that benefit from WP's internal cache priming
+WP_META_FUNCTIONS = (
+    'get_user_meta',
+    'get_post_meta',
+    'get_term_meta',
+    'get_comment_meta',
+    'get_metadata',
+)
+
 
 def is_vendor_or_third_party(path: str) -> bool:
     p = path.replace('\\', '/')
@@ -46,6 +94,164 @@ def is_vendor_or_third_party(path: str) -> bool:
 def is_minified(path: str) -> bool:
     p = path.lower()
     return any(h in p for h in MINIFIED_HINTS)
+
+
+def is_wp_cache_primed_context(file_path: str, code: str, context: List[Dict[str, Any]], message: str = '') -> Optional[str]:
+    """Check if this code runs in a context where WordPress has already primed the meta cache.
+
+    Returns a description of why the cache is primed, or None if not detected.
+
+    This function uses multiple signals:
+    1. File path patterns (most reliable when context is sparse)
+    2. Code patterns in context
+    3. Message/finding details
+    """
+    ctx_code = ''.join([code] + [(c.get('code') or '') for c in context])
+    file_lower = file_path.lower()
+
+    # ==========================================================================
+    # FILE PATH-BASED DETECTION (works even when code/context is sparse)
+    # ==========================================================================
+
+    # Pattern: User admin views (hooked to show_user_profile/edit_user_profile)
+    # These receive a WP_User object with meta already cached by WordPress
+    if ('user-admin' in file_lower or 'user_admin' in file_lower or
+        'user-profile' in file_lower or 'user_profile' in file_lower):
+        if '/views/' in file_path or '/templates/' in file_path or 'view-' in file_lower:
+            return (
+                "This is a user admin/profile view file. Views in this location are typically "
+                "hooked to show_user_profile or edit_user_profile actions, which receive a pre-loaded "
+                "WP_User object. WordPress primes ALL user meta cache when loading the WP_User on "
+                "user-edit.php, so get_user_meta() calls hit the object cache (0 DB queries)."
+            )
+
+    # Pattern: User custom fields views
+    if 'custom-field' in file_lower or 'custom_field' in file_lower:
+        if 'user' in file_lower and ('/views/' in file_path or 'view-' in file_lower):
+            return (
+                "This appears to be a user custom fields view. Custom field displays on user profile "
+                "pages are hooked to show_user_profile/edit_user_profile. The WP_User object passed "
+                "to these hooks has its meta cache pre-primed by WordPress core."
+            )
+
+    # Pattern: Post edit/meta box views
+    if ('post-edit' in file_lower or 'meta-box' in file_lower or 'metabox' in file_lower):
+        if '/views/' in file_path or '/templates/' in file_path:
+            return (
+                "This is a post edit/meta box view. WordPress primes post meta cache when loading "
+                "the post on post.php, so get_post_meta() calls hit the object cache."
+            )
+
+    # ==========================================================================
+    # CODE PATTERN-BASED DETECTION
+    # ==========================================================================
+
+    # Check for pre-loaded object patterns in code
+    for pattern in WP_OBJECT_PRELOADED_PATTERNS:
+        if pattern in ctx_code:
+            if '$user' in pattern or 'current_user' in pattern.lower():
+                return f"WP_User object is pre-loaded (detected '{pattern}'). WordPress primes user meta cache when loading WP_User objects."
+            elif '$post' in pattern or 'get_the_ID' in pattern:
+                return f"WP_Post object is pre-loaded (detected '{pattern}'). WordPress primes post meta cache when loading posts."
+
+    # Check for admin user profile view patterns (fallback if file path didn't match)
+    if 'user-admin' in file_lower or 'user_admin' in file_lower:
+        # Even without code context, the file path is a strong signal
+        if not ctx_code.strip():
+            return (
+                "This is a user admin file. Based on WordPress conventions, user admin views "
+                "are typically rendered after WordPress has loaded and cached user data."
+            )
+        if any(meta_fn in ctx_code for meta_fn in ('get_user_meta', 'get_metadata')):
+            return "This appears to be a user admin view. WordPress primes user meta cache on user-edit.php before hooks fire."
+
+    # Check for view files that receive pre-loaded objects
+    if '/views/' in file_path or '/templates/' in file_path:
+        if '$user' in ctx_code and 'get_user_meta' in ctx_code:
+            return "View receives $user object parameter. If hooked to show_user_profile/edit_user_profile, WordPress has already cached all user meta."
+        if '$post' in ctx_code and 'get_post_meta' in ctx_code:
+            return "View receives $post object parameter. If in the post edit screen or loop, WordPress has already cached all post meta."
+
+    return None
+
+
+def is_single_object_meta_loop(code: str, context: List[Dict[str, Any]], file_path: str = '') -> bool:
+    """Check if the N+1 pattern is iterating over fields for a SINGLE object.
+
+    When you call get_user_meta($user_id) for the same user_id multiple times,
+    WordPress only queries the DB once (on first call) and caches ALL meta for that user.
+    Subsequent calls for the same user_id hit the cache.
+
+    This is different from iterating over multiple users/posts (true N+1).
+    """
+    ctx_code = ''.join([code] + [(c.get('code') or '') for c in context])
+    file_lower = file_path.lower()
+
+    # Pattern: foreach over fields, not over users/posts
+    field_iteration_patterns = (
+        '$field',
+        '$custom_field',
+        '$meta_key',
+        '$key',
+        '$registration_form_fields',
+        '$file_fields',
+        '$fields',
+    )
+
+    # Pattern: iterating over multiple objects (true N+1)
+    object_iteration_patterns = (
+        '$users',
+        '$posts',
+        '$orders',
+        '$products',
+        '$comments',
+        '$terms',
+        'get_users(',
+        'get_posts(',
+        'wc_get_orders(',
+        'wc_get_products(',
+        'WP_User_Query',
+        'WP_Query',
+    )
+
+    has_field_iteration = any(p in ctx_code for p in field_iteration_patterns)
+    has_object_iteration = any(p in ctx_code for p in object_iteration_patterns)
+
+    # If iterating over fields (not objects), and using same ID, it's single-object
+    if has_field_iteration and not has_object_iteration:
+        # Check if the ID is constant within the loop
+        if '$user->ID' in ctx_code or '$post->ID' in ctx_code or '$userID' in ctx_code:
+            return True
+
+    # ==========================================================================
+    # FILE PATH-BASED INFERENCE (when code context is sparse)
+    # ==========================================================================
+
+    # If context code is very sparse but we have clear file path signals
+    if not ctx_code.strip() or len(ctx_code) < 50:
+        # User custom fields view - typically iterates over field definitions for ONE user
+        if 'custom-field' in file_lower or 'custom_field' in file_lower:
+            if 'user' in file_lower:
+                return True
+
+        # User admin views - typically display fields for ONE user being edited
+        if 'user-admin' in file_lower or 'user_admin' in file_lower:
+            if '/views/' in file_path or 'view-' in file_lower:
+                return True
+
+        # Profile views - display data for ONE user
+        if 'profile' in file_lower and ('/views/' in file_path or 'view-' in file_lower):
+            return True
+
+    # If we have some context, check for explicit multi-object patterns
+    if has_object_iteration:
+        return False
+
+    # If the file path strongly suggests single-object context
+    if 'user-admin' in file_lower and 'view-' in file_lower:
+        return True
+
+    return False
 
 
 def classify_finding(f: Dict[str, Any]) -> Optional[TriageDecision]:
@@ -319,6 +525,163 @@ def classify_finding(f: Dict[str, Any]) -> Optional[TriageDecision]:
             classification='Confirmed',
             confidence='medium',
             rationale='Remote requests should pass an explicit timeout to avoid long hangs under network issues.',
+        )
+
+    # --- N+1 query patterns: meta calls in loops can cause severe performance issues.
+    # However, WordPress has internal meta caching that can make some patterns false positives.
+    if fid == 'n-plus-1-pattern':
+        ctx = ''.join([code] + [(c.get('code') or '') for c in context])
+
+        # =======================================================================
+        # PRIORITY 1: Check for WordPress meta cache priming (FALSE POSITIVES)
+        # =======================================================================
+        # WordPress automatically caches ALL meta for an object when you first
+        # access it. If the object is pre-loaded (e.g., WP_User passed to hook),
+        # subsequent get_*_meta() calls hit the cache, not the database.
+
+        cache_primed_reason = is_wp_cache_primed_context(file_path, code, context, msg)
+        if cache_primed_reason:
+            # Additional check: is this iterating over fields for a SINGLE object?
+            if is_single_object_meta_loop(code, context, file_path):
+                return TriageDecision(
+                    classification='False Positive',
+                    confidence='high',
+                    rationale=(
+                        f'WordPress meta cache is pre-primed in this context. {cache_primed_reason} '
+                        'The loop iterates over fields/keys for a single object (same ID), not multiple objects. '
+                        'WordPress caches ALL meta for an object on first access, so subsequent get_*_meta() '
+                        'calls for the same object ID hit the object cache (0 additional DB queries). '
+                        'This is NOT a true N+1 pattern.'
+                    ),
+                )
+            else:
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        f'WordPress meta cache may be pre-primed. {cache_primed_reason} '
+                        'However, could not confirm this is a single-object iteration. '
+                        'Verify: (1) Is the loop iterating over fields for ONE object, or multiple objects? '
+                        '(2) If single object, this is a false positive. (3) If multiple objects, consider '
+                        'using update_meta_cache() to batch-prime the cache before the loop.'
+                    ),
+                )
+
+        # =======================================================================
+        # PRIORITY 2: Check for single-object field iteration (likely FALSE POSITIVE)
+        # =======================================================================
+        # Even without explicit cache priming detection, if we're iterating over
+        # fields for a single object, WordPress will cache on first call.
+
+        if is_single_object_meta_loop(code, context, file_path):
+            return TriageDecision(
+                classification='False Positive',
+                confidence='medium',
+                rationale=(
+                    'This appears to iterate over fields/keys for a SINGLE object (same ID in each iteration). '
+                    'WordPress caches ALL meta for an object on the first get_*_meta() call. '
+                    'Subsequent calls for the same object ID hit the object cache, not the database. '
+                    'Only the first iteration triggers a DB query; the rest are cache hits. '
+                    'This is likely NOT a true N+1 pattern. Verify the object ID is constant within the loop.'
+                ),
+            )
+
+        # =======================================================================
+        # PRIORITY 3: Check for explicit caching mechanisms
+        # =======================================================================
+        if 'get_transient' in ctx or 'set_transient' in ctx or 'wp_cache_get' in ctx or 'wp_cache_set' in ctx:
+            return TriageDecision(
+                classification='False Positive',
+                confidence='medium',
+                rationale=(
+                    'N+1 pattern detected but caching mechanism (transients or object cache) is present '
+                    'in the surrounding code. Verify that the cache key is appropriate and cache invalidation '
+                    'is handled correctly.'
+                ),
+            )
+
+        # =======================================================================
+        # PRIORITY 4: Check for email/low-frequency contexts
+        # =======================================================================
+        if '/email' in file_path.lower() or 'email' in file_path.lower():
+            if 'attachment' in msg.lower() or 'file_field' in ctx or 'file' in ctx.lower():
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        'N+1 pattern in email generation context. Email sending is typically low-frequency, '
+                        'so performance impact may be acceptable. However, if emails are sent in bulk or '
+                        'triggered frequently, consider pre-fetching meta values or caching. '
+                        'Verify: (1) email send frequency, (2) typical loop iteration count, (3) whether '
+                        'this runs synchronously or via background job.'
+                    ),
+                )
+
+        # =======================================================================
+        # PRIORITY 5: Check for bounded loops
+        # =======================================================================
+        if 'LIMIT' in ctx.upper() or 'array_slice' in ctx or 'array_chunk' in ctx:
+            return TriageDecision(
+                classification='Needs Review',
+                confidence='medium',
+                rationale=(
+                    'N+1 pattern detected but loop appears to be bounded. Verify the maximum iteration count '
+                    'is small (< 20) and consider pre-fetching meta values if the bound could increase.'
+                ),
+            )
+
+        # =======================================================================
+        # PRIORITY 6: Check for admin-only context
+        # =======================================================================
+        if 'is_admin()' in ctx or '/admin/' in file_path or 'wp-admin' in file_path:
+            # But NOT if it's a user-admin view (those are usually cache-primed)
+            if 'user-admin' not in file_path.lower() and 'user_admin' not in file_path.lower():
+                return TriageDecision(
+                    classification='Needs Review',
+                    confidence='medium',
+                    rationale=(
+                        'N+1 pattern in admin context. Admin pages typically have lower traffic, but this can '
+                        'still cause slowdowns for admins managing large datasets. Consider: (1) Is this on a '
+                        'high-traffic admin page? (2) Could the dataset grow large? (3) Can meta values be '
+                        'pre-fetched before the loop using update_meta_cache()?'
+                    ),
+                )
+
+        # =======================================================================
+        # PRIORITY 7: Check for true N+1 patterns (iterating over MULTIPLE objects)
+        # =======================================================================
+        true_n_plus_1_patterns = (
+            '$users', '$posts', '$orders', '$products', '$comments', '$terms',
+            'get_users(', 'get_posts(', 'wc_get_orders(', 'wc_get_products(',
+            'WP_User_Query', 'WP_Query', 'WC_Order_Query',
+        )
+
+        if any(p in ctx for p in true_n_plus_1_patterns):
+            return TriageDecision(
+                classification='Confirmed',
+                confidence='high',
+                rationale=(
+                    'TRUE N+1 pattern detected: iterating over MULTIPLE objects and calling get_*_meta() '
+                    'for each one. This causes N separate database queries (one per object). '
+                    'Fix: Use update_meta_cache() to batch-prime the cache before the loop. Example: '
+                    'update_meta_cache("user", wp_list_pluck($users, "ID")) before iterating. '
+                    'This reduces N queries to 1 query.'
+                ),
+            )
+
+        # =======================================================================
+        # DEFAULT: Needs Review (insufficient context to determine)
+        # =======================================================================
+        return TriageDecision(
+            classification='Needs Review',
+            confidence='low',
+            rationale=(
+                'N+1 query pattern detected but context is ambiguous. Could not determine if this is: '
+                '(1) A single-object field iteration (false positive - WP caches on first call), or '
+                '(2) A multi-object iteration (true N+1 - needs fix). '
+                'Manual review required. Check: Is the loop iterating over fields for ONE object, '
+                'or over MULTIPLE objects? If multiple objects, use update_meta_cache() to batch-prime.'
+            ),
         )
 
     # Default: do not triage.
