@@ -1,0 +1,79 @@
+{
+  "id": "wp-template-tags-in-loops",
+  "version": "1.0.0",
+  "added_in_scanner_version": "2.0.16",
+  "enabled": true,
+  "detection_type": "scripted",
+  "category": "performance",
+  "severity": "CRITICAL",
+  "title": "WordPress template tags in loops (N+1 queries)",
+  "description": "Detects WordPress template tag functions (get_the_title, get_the_content, get_permalink, etc.) called inside loops without proper post context. These functions trigger individual database queries for each iteration, causing N+1 query patterns.",
+  "rationale": "WordPress template tags like get_the_title() are designed for use within The Loop where the global $post is set. When called with explicit post IDs in custom loops (foreach over post IDs), each call triggers a separate database query. Example: 100 posts × 3 template tags = 300 queries instead of 1. This is one of the most common WordPress performance anti-patterns found in plugins and themes.",
+  "detection": {
+    "type": "scripted",
+    "file_patterns": ["*.php"],
+    "search_pattern": "foreach[[:space:]]*\\(|while[[:space:]]*\\(",
+    "validator_script": "validators/wp-template-tags-in-loops.sh",
+    "description": "Find loops, then check if loop body contains template tag calls with post ID parameters"
+  },
+  "template_tags_detected": [
+    "get_the_title() - Post title",
+    "get_the_content() - Post content",
+    "get_the_excerpt() - Post excerpt",
+    "get_permalink() - Post URL",
+    "get_the_author() - Author name",
+    "get_the_date() - Post date",
+    "get_the_time() - Post time",
+    "get_the_modified_date() - Last modified date",
+    "get_the_category() - Post categories",
+    "get_the_tags() - Post tags",
+    "get_post_thumbnail_id() - Featured image ID",
+    "get_the_post_thumbnail() - Featured image HTML",
+    "get_the_post_thumbnail_url() - Featured image URL"
+  ],
+  "remediation": {
+    "summary": "Use WP_Query with proper post setup, or pre-fetch all data in a single query before the loop.",
+    "examples": [
+      {
+        "bad": "foreach ($post_ids as $post_id) {\n  $title = get_the_title($post_id); // ❌ N+1: Separate query per post\n  $link = get_permalink($post_id);  // ❌ N+1: Another query\n  echo \"<a href='$link'>$title</a>\";\n}",
+        "good": "$posts = get_posts(array('include' => $post_ids, 'posts_per_page' => count($post_ids)));\nforeach ($posts as $post) {\n  setup_postdata($post); // ✅ Sets global $post\n  $title = get_the_title(); // ✅ Uses global $post, no query\n  $link = get_permalink();  // ✅ Uses global $post, no query\n  echo \"<a href='$link'>$title</a>\";\n}\nwp_reset_postdata();",
+        "note": "Use setup_postdata() to set global $post, then call template tags without parameters"
+      },
+      {
+        "bad": "foreach ($post_ids as $post_id) {\n  $post = get_post($post_id); // ❌ N+1: Fetches post object\n  echo $post->post_title;\n}",
+        "good": "$posts = get_posts(array('include' => $post_ids, 'posts_per_page' => count($post_ids)));\nforeach ($posts as $post) {\n  echo $post->post_title; // ✅ Already loaded, no query\n}",
+        "note": "Fetch all posts in one query, then access properties directly"
+      },
+      {
+        "bad": "while ($query->have_posts()) {\n  $query->the_post();\n  $author_name = get_the_author_meta('display_name', get_the_author_meta('ID')); // ❌ Redundant\n}",
+        "good": "while ($query->have_posts()) {\n  $query->the_post();\n  $author_name = get_the_author(); // ✅ Uses cached data from WP_Query\n}",
+        "note": "WP_Query pre-loads author data, use simple template tags"
+      }
+    ],
+    "best_practices": [
+      "Use WP_Query instead of manual loops over post IDs",
+      "Call setup_postdata($post) before using template tags",
+      "Always call wp_reset_postdata() after custom loops",
+      "Pre-fetch all data with get_posts() if you need custom ordering",
+      "Use $post object properties directly when possible (e.g., $post->post_title instead of get_the_title($post->ID))"
+    ]
+  },
+  "references": [
+    "https://developer.wordpress.org/reference/functions/setup_postdata/",
+    "https://developer.wordpress.org/reference/classes/wp_query/",
+    "https://developer.wordpress.org/reference/functions/get_posts/",
+    "https://developer.wordpress.org/apis/handbook/performance/caching/"
+  ],
+  "notes": "This pattern has low false positive rate because template tags with explicit post ID parameters are almost always N+1 issues. The validator script checks for loops containing template tag calls with parameters (e.g., get_the_title($id) vs get_the_title()).",
+  "false_positive_scenarios": [
+    "Single template tag call outside a loop (not N+1)",
+    "Template tags called within The Loop using global $post (correct usage)",
+    "Loops with proper setup_postdata() calls (validator should detect and skip)"
+  ],
+  "impact_examples": [
+    "100 posts with get_the_title($id) + get_permalink($id) = 200 queries instead of 1",
+    "E-commerce product listing with 50 products × 5 template tags = 250 queries",
+    "Archive page with 20 posts × 3 template tags = 60 queries per page load"
+  ]
+}
+

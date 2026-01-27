@@ -1,6 +1,16 @@
 # Backlog - Issues to Investigate
 
+
+
 ## 2026-01-27
+Smart Coupons IRL
+
+Pattern regex needs quotes: The unbounded-posts-per-page pattern uses posts_per_page[[:space:]]*=> but PHP code typically has 'posts_per_page' => with quotes.
+
+- [x] **COMPLETED 2026-01-27**: Missing N+1 pattern for get_the_title(): We don't have a pattern that detects get_the_title() inside a loop. **RESOLUTION**: Created new pattern `wp-template-tags-in-loops` (v2.0.16) that detects 13 WordPress template tag functions called with parameters inside loops. Pattern includes validator script, fixture test with 6 violations and 6 safe patterns, and comprehensive documentation. See CHANGELOG v2.0.16 for details.
+
+False positive noise: Many patterns are firing on every line (17 findings each), indicating overly broad regex patterns.
+
 Post DB Query constructur pattern
 - [z] Update the pattern description to document the limitations
 - [z] Update the CHANGELOG with the new pattern

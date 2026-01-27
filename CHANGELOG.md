@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.16] - 2026-01-27
+
+### Added
+
+#### New Detection Pattern: WordPress Template Tags in Loops (N+1 Queries)
+- **Pattern ID:** `wp-template-tags-in-loops` – New scripted pattern that detects WordPress template tag functions (`get_the_title()`, `get_the_content()`, `get_permalink()`, etc.) called with explicit post ID parameters inside loops. This is one of the most common WordPress performance anti-patterns found in plugins and themes.
+
+- **Detection logic:** Uses grep to find `foreach` and `while` loops, then validates with `dist/bin/validators/wp-template-tags-in-loops.sh` to check if template tags are called with parameters (e.g., `get_the_title($post_id)`) instead of using the global `$post` context.
+
+- **Severity:** CRITICAL – Each template tag call with a parameter triggers a separate database query. Example: 100 posts × 3 template tags = 300 queries instead of 1 query with proper `WP_Query` usage.
+
+- **Template tags detected:**
+  - `get_the_title()` - Post title
+  - `get_the_content()` - Post content
+  - `get_the_excerpt()` - Post excerpt
+  - `get_permalink()` - Post URL
+  - `get_the_author()` - Author name
+  - `get_the_date()` / `get_the_time()` - Post dates
+  - `get_the_category()` / `get_the_tags()` - Taxonomies
+  - `get_the_post_thumbnail()` / `get_the_post_thumbnail_url()` - Featured images
+  - `get_post()` - Full post object fetch
+
+- **False positive prevention:** The validator script detects proper usage patterns:
+  - Template tags called without parameters (uses global `$post`) → Not flagged
+  - Loops with `setup_postdata($post)` calls → Not flagged
+  - Single template tag calls outside loops → Not flagged
+
+- **Fixture test:** Added `dist/tests/fixtures/wp-template-tags-in-loops.php` with 6 violation examples (template tags with parameters in loops) and 6 safe patterns (proper `WP_Query` usage, `setup_postdata()`, direct property access).
+
+- **Rationale:** This pattern addresses a gap identified during real-world testing of WooCommerce Smart Coupons plugin. The example code `foreach ($coupon_ids as $coupon_id) { $title = get_the_title($coupon_id); }` was not detected by existing N+1 patterns, which focus on meta functions and WooCommerce-specific functions.
+
+- **Impact examples:**
+  - 100 posts with `get_the_title($id)` + `get_permalink($id)` = 200 queries instead of 1
+  - E-commerce product listing with 50 products × 5 template tags = 250 queries
+  - Archive page with 20 posts × 3 template tags = 60 queries per page load
+
 ## [2.0.15] - 2026-01-27
 
 ### Added
