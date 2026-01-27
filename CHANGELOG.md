@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   6. Admin-only context → Needs Review
   7. True N+1 with multi-object iteration → Confirmed
 
-- **WordPress cache-primed hooks dictionary** – Added `WP_CACHE_PRIMED_HOOKS` mapping WordPress hooks (e.g., `show_user_profile`, `edit_user_profile`, `add_meta_boxes`) to their object types, enabling automatic detection of contexts where meta is pre-cached.
+- **WordPress cache-primed hooks dictionary** – Added `WP_CACHE_PRIMED_HOOKS` mapping WordPress hooks (e.g., `show_user_profile`, `edit_user_profile`, `add_meta_boxes`) to their object types, enabling automatic detection of contexts where meta is pre-cached. The dictionary is located in `dist/bin/ai-triage.py`. Developers can update it by adding new hooks and testing changes to ensure no regressions.
 
 #### Grep Pattern Detector Enhancements (`dist/bin/check-performance.sh`)
 - **`is_wp_cache_primed_view()` helper function** – New function that detects WordPress admin views where meta cache is pre-primed based on file path patterns. Matches files like `view-wwlc-custom-fields-on-user-admin.php` and downgrades severity to INFO since WordPress primes user meta cache on `user-edit.php` before hooks fire.
@@ -1500,6 +1500,7 @@ Reason: WordPress primes user meta cache on user-edit.php before hooks fire
   - **Pattern Library:** Now 28 total patterns (was 27)
   - **Impact:** Helps identify and fix severe thank-you page performance issues on WooCommerce sites
   - **Test Status:** ✅ Tested against Binoid site - successfully detected Smart Coupons with `wc_get_coupon_id_by_code()` calls
+
 - **Main Scanner Integration** - Both coupon patterns now integrated into `check-performance.sh`
   - **`wc-coupon-in-thankyou`** - Integrated at line 4627-4695 (after WooCommerce N+1 check)
   - **`wc-smart-coupons-thankyou-perf`** - Integrated at line 4699-4778 (after coupon-in-thankyou check)
@@ -2153,58 +2154,6 @@ Reason: WordPress primes user meta cache on user-edit.php before hooks fire
 ## [1.0.76] - 2026-01-02
 
 ### Changed
-- Increased default fixture validation coverage to run eight proof-of-detection checks, covering AJAX, REST routes, admin capability callbacks, and direct database access patterns.
-
-### Added
-- Made fixture validation count configurable via `FIXTURE_COUNT` template option or the `FIXTURE_VALIDATION_COUNT` environment variable (default: 8).
-
-## [1.0.75] - 2026-01-02
-
-### Added
-- **Context-Aware Admin Capability Detection** - Dramatically reduced false positives for admin callback functions
-  - Created `find_callback_capability_check()` helper function to search for callback definitions in same file
-  - Extracts callback names from multiple patterns: string callbacks, array callbacks, class array callbacks
-  - Checks callback function body (next 50 lines) for capability checks
-  - Recognizes direct capability checks: `current_user_can()`, `user_can()`, `is_super_admin()`
-  - Recognizes WordPress menu functions with capability parameters (`add_menu_page`, `add_submenu_page`, etc.)
-  - Handles static method definitions (`public static function`)
-  - **Impact:** Reduced admin capability check false positives from 15 to 3 (80% reduction)
-
-### Changed
-- **Enhanced Admin Functions Without Capability Checks** - Improved detection logic
-  - Updated immediate context check to recognize menu functions with capability parameters
-  - Added callback lookup for `add_action`, `add_filter`, and menu registration functions
-  - Supports multiple callback syntax patterns (string, array, class array)
-  - Checks both immediate context (next 10 lines) and callback function body (next 50 lines)
-
-### Technical Details
-- **Files Modified:** `dist/bin/check-performance.sh`
-  - Lines 1048-1099: New helper function `find_callback_capability_check()`
-  - Lines 2041-2072: Enhanced admin capability check with callback lookup
-- **Patterns Detected:**
-  - `add_action('hook', 'callback')` - String callback
-  - `add_action('hook', [$this, 'callback'])` - Array callback
-  - `add_action('hook', [__CLASS__, 'callback'])` - Class array callback
-  - `add_action('hook', array($this, 'callback'))` - Legacy array syntax
-- **Capability Enforcement Patterns:**
-  - Direct: `current_user_can('capability')`
-  - Menu functions: `add_submenu_page(..., 'manage_options', ...)`
-
-### Testing
-- **Test Case:** PTT-MKII plugin (30 files, 8,736 LOC)
-- **Before:** 15 findings (many false positives)
-- **After:** 3 findings (legitimate issues)
-- **False Positives Eliminated:** 12 (80% reduction)
-- **Remaining Findings:** Legitimate security issues (admin enqueue scripts without capability checks)
-
-### Performance
-- **Impact:** Minimal - callback lookup only performed when admin patterns detected
-- **Scope:** Same-file lookup only (no cross-file analysis)
-- **Efficiency:** Uses grep and sed for fast pattern matching
-
-## [1.0.74] - 2026-01-02
-
-### Changed
 - **Terminology Update: "DRY Violations" → "Magic String Detector"** - Renamed feature for clarity
   - "DRY Violation Detection" is now "Magic String Detector ('DRY')"
   - User-facing text updated in all scripts, templates, and documentation
@@ -2374,11 +2323,10 @@ Tested against real WordPress plugin:
     - `top_k_groups`: Maximum number of violations to report (default: 15)
     - `report_format`: Template for violation messages
     - `sort_by`: Sort order for violations (`"file_count_desc"` or `"total_count_desc"`)
-
-- **Text Output** - Added Magic String Detection ("DRY") section
-  - New section displayed after all direct pattern checks
-  - Shows pattern title and violation status for each aggregated pattern
-  - Displays "✓ No violations" or "⚠ Found magic strings" for each pattern
+  - **Text Output** - Added Magic String Detection ("DRY") section
+    - New section displayed after all direct pattern checks
+    - Shows pattern title and violation status for each aggregated pattern
+    - Displays "✓ No violations" or "⚠ Found magic strings" for each pattern
 
 ### Technical Details
 - **Aggregation Algorithm:**
@@ -2677,7 +2625,24 @@ Tested against real WordPress plugin:
 - **jq Integration:** Queries JSON config file directly for each severity lookup
 - **Performance:** Minimal overhead - jq queries are fast and cached by OS
 - **Config Validation:** Validates JSON syntax and severity level values (CRITICAL, HIGH, MEDIUM, LOW)
-- **Comment Field Support:** Underscore-prefixed fields (_comment, _note, etc.) are ignored during parsing
+- **Comment Field Support:** Underscore-prefixed fields (_comment, _note, etc.) are ignored by parser
+    - **Purpose:** Users can document why they changed severity levels
+    - **Examples:** `_comment: "Upgraded per security audit"`, `_ticket: "JIRA-1234"`, `_date: "2025-12-31"`
+    - **Parser Behavior:** Underscore-prefixed fields are filtered out during parsing (won't affect functionality)
+    - **Use Cases:** Document incidents, reference tickets, track authors, add dates, explain decisions
+
+- **Example Configuration File** - Created `/dist/config/severity-levels.example.json` showing how to customize severity levels
+  - **Purpose:** Demonstrates comment field usage and severity customization patterns
+  - **Examples:** Shows upgrading/downgrading severity levels with documentation
+  - **Comment Examples:** Demonstrates `_comment`, `_note`, `_reason`, `_ticket`, `_date`, `_author` fields
+  - **Workflow Guide:** Includes step-by-step instructions in `_notes` section
+
+- **Configuration Documentation** - Created `/dist/config/README.md` with comprehensive usage guide
+  - **Quick Start:** Copy, edit, and use custom config files
+  - **Comment Field Reference:** Table of common underscore field names and their purposes
+  - **Field Reference:** Which fields are editable vs. read-only
+  - **Best Practices:** DOs and DON'Ts for config customization
+  - **Example Workflow:** Complete workflow from copy to CI/CD integration
 
 ## [1.0.60] - 2025-12-31
 
@@ -2690,7 +2655,7 @@ Tested against real WordPress plugin:
   - **Location:** `dist/config/severity-levels.json`
   - **Usage (Day 2):** Users will copy this file, edit `level` fields, and pass `--severity-config <path>` to customize severity rankings
   - **Factory Defaults:** Each check includes `factory_default` field for reference (users can always see original values)
-  - **Self-Documenting:** Includes instructions, version, last_updated, and total_checks in metadata
+  - **Self-Documented:** Includes instructions, version, last_updated, and total_checks in metadata
   - **Comment Field Support:** Any field starting with underscore (`_comment`, `_note`, `_reason`, `_ticket`, etc.) is ignored by parser
     - **Purpose:** Users can document why they changed severity levels
     - **Examples:** `_comment: "Upgraded per security audit"`, `_ticket: "JIRA-1234"`, `_date: "2025-12-31"`
@@ -2887,7 +2852,7 @@ Tested against real WordPress plugin:
     - Disabled `example-caller.yml` triggers (changed to `workflow_dispatch` only)
       - This template file was causing duplicate CI runs
       - Now only runs manually, preventing automatic triggers
-      - Added clear warnings that it's a template/example file
+      - Added clear warnings that it's a template file
     - Created `.github/workflows/README.md` documenting:
       - Why we use a single workflow
       - How to modify CI behavior without creating new files
@@ -3312,7 +3277,7 @@ Tested against real WordPress plugin:
   - Updated `PROJECT/PROJECT.md` "Current State", "Proposed Approach", and "Three-layer system" sections so they reflect the currently implemented toolkit pieces (grep-based CLI, fixture suite, CI wiring, and the Neochrome WP Toolkit demo plugin) and reference GPT 5.1 feedback via `BACKLOG.md` instead of an inline TEMP dump.
 
 - **Version metadata**
-  - Bumped the CLI script and backlog version markers to 1.0.43 to keep JSON output, terminal banners, and documentation in sync with this changelog.
+  - Bumped the CLI script and backlog version markers to 1.0.43 to keep JSON output, log headers, and terminal banners stay in sync with the changelog.
 
 ---
 
