@@ -66,6 +66,12 @@ source "$LIB_DIR/common-helpers.sh"
 # shellcheck source=dist/bin/lib/false-positive-filters.sh
 source "$LIB_DIR/false-positive-filters.sh"
 
+# shellcheck source=dist/bin/lib/ai-triage-backends.sh
+source "$LIB_DIR/ai-triage-backends.sh"
+
+# shellcheck source=dist/bin/lib/claude-triage.sh
+source "$LIB_DIR/claude-triage.sh"
+
 # shellcheck source=dist/lib/pattern-loader.sh
 source "$REPO_ROOT/lib/pattern-loader.sh"
 
@@ -75,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.16"
+SCRIPT_VERSION="2.1.0"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -141,6 +147,15 @@ EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
 DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
+
+# ============================================================
+# AI TRIAGE CONFIGURATION (Phase 1: Claude Code Integration)
+# ============================================================
+AI_TRIAGE=false              # Enable AI triage analysis
+AI_BACKEND="auto"            # Backend: auto|claude|fallback
+AI_TIMEOUT=300               # Timeout in seconds (default: 5 minutes)
+AI_MAX_FINDINGS=200          # Max findings to triage (default: 200)
+AI_VERBOSE=false             # Show AI triage progress
 
 # ============================================================
 # PHASE 1 STABILITY SAFEGUARDS (v1.0.82)
@@ -452,6 +467,15 @@ OPTIONS:
   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
   --ignore-baseline        Ignore baseline file even if present
   --enable-clone-detection Enable function clone detection (disabled by default for performance)
+
+AI TRIAGE OPTIONS:
+
+  --ai-triage              Enable AI-powered finding analysis (auto-detects backend)
+  --ai-backend <name>      Specify backend: claude|fallback (default: auto)
+  --ai-timeout <seconds>   AI analysis timeout in seconds (default: 300)
+  --ai-max-findings <n>    Max findings to analyze (default: 200)
+  --ai-verbose             Show AI triage progress and details
+
   --help                   Show this help message
 
 WHAT IT DETECTS:
@@ -488,6 +512,20 @@ EXAMPLES:
 
   # Use template for frequently-scanned projects
   wp-check --project woocommerce-subscriptions
+
+  # AI TRIAGE EXAMPLES:
+
+  # Auto-detect and run AI triage (uses Claude if available, falls back to built-in)
+  wp-check ~/my-plugin --ai-triage
+
+  # Explicit Claude backend with custom timeout
+  wp-check ~/my-plugin --ai-triage --ai-backend claude --ai-timeout 600
+
+  # With verbose output to see AI triage progress
+  wp-check ~/my-plugin --ai-triage --ai-verbose
+
+  # Limit AI analysis to top 50 findings
+  wp-check ~/my-plugin --ai-triage --ai-max-findings 50
 
   # CI/CD pipeline integration
   wp-check . --format json --strict --no-log || exit 1
@@ -806,6 +844,26 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       shift 2
+      ;;
+    --ai-triage)
+      AI_TRIAGE=true
+      shift
+      ;;
+    --ai-backend)
+      AI_BACKEND="$2"
+      shift 2
+      ;;
+    --ai-timeout)
+      AI_TIMEOUT="$2"
+      shift 2
+      ;;
+    --ai-max-findings)
+      AI_MAX_FINDINGS="$2"
+      shift 2
+      ;;
+    --ai-verbose)
+      AI_VERBOSE=true
+      shift
       ;;
     --help)
       show_help
@@ -6116,6 +6174,37 @@ debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
 	        debug_echo "HTML report generation skipped (python3 not found, no TTY available)"
 	      fi
 	    fi
+  fi
+
+  # ============================================================
+  # AI TRIAGE INTEGRATION (Phase 1: Claude Code)
+  # ============================================================
+  # Run AI triage if enabled and JSON log exists
+  if [ "$AI_TRIAGE" = "true" ] && [ -f "$LOG_FILE" ]; then
+    if [ -w /dev/tty ] 2>/dev/null; then
+      echo "" > /dev/tty
+      echo "🤖 Running AI triage analysis..." > /dev/tty
+    fi
+
+    # Run AI triage (auto-detects backend or uses specified)
+    if run_ai_triage "$LOG_FILE" "$AI_BACKEND" "$AI_TIMEOUT" "$AI_MAX_FINDINGS"; then
+      if [ -w /dev/tty ] 2>/dev/null; then
+        echo "📝 Regenerating HTML report with AI triage..." > /dev/tty
+      fi
+
+      # Regenerate HTML with AI triage data
+      if command -v python3 &> /dev/null; then
+        if [ -w /dev/tty ] 2>/dev/null; then
+          "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/tty 2>&1
+        else
+          "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/null 2>&1
+        fi
+      fi
+    else
+      if [ -w /dev/tty ] 2>/dev/null; then
+        echo "⚠️  AI triage failed or unavailable (continuing without AI analysis)" > /dev/tty
+      fi
+    fi
   fi
 else
   # Summary (text mode)

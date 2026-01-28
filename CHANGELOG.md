@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-01-28
+
+### Added
+
+#### WPCC Branding - Primary Command Alias
+
+- **New primary alias:** `wpcc` (for WP Code Check) replaces `wp-check` as the primary branding
+- **Backward compatibility:** `wp-check` alias remains available for existing workflows
+- **Installation:** Both aliases are automatically configured during `./install.sh`
+- **Tab completion:** Works with both `wpcc` and `wp-check` commands
+- **Documentation:** All examples updated to show `wpcc` as primary command
+
+#### Phase 1: Claude Code AI Triage Integration
+
+- **AI-powered finding analysis:** New `--ai-triage` flag enables automatic AI analysis of scan findings using Claude Code CLI with graceful fallback to built-in Python triage
+- **Backend orchestration:** Modular architecture supports multiple LLM backends (Claude, fallback) with extensibility for future providers (OpenAI, Ollama)
+- **Configurable AI options:**
+  - `--ai-backend <name>` - Specify backend (claude|fallback, default: auto-detect)
+  - `--ai-timeout <seconds>` - AI analysis timeout (default: 300s)
+  - `--ai-max-findings <n>` - Limit findings to analyze (default: 200)
+  - `--ai-verbose` - Show AI triage progress
+- **Automatic HTML regeneration:** After AI triage completes, HTML report is automatically regenerated with AI analysis included
+- **Graceful degradation:** If Claude CLI unavailable or fails, automatically falls back to built-in `ai-triage.py` without interrupting scan
+- **JSON schema integration:** AI triage results injected into JSON log with `ai_triage` section containing classifications, confidence levels, and recommendations
+
+### New Files
+
+- `dist/bin/lib/ai-triage-backends.sh` - Backend orchestration and detection
+- `dist/bin/lib/claude-triage.sh` - Claude Code CLI integration with timeout handling
+
+### Modified Files
+
+- `dist/bin/check-performance.sh`:
+  - Added AI triage variable declarations (lines 147-152)
+  - Added source statements for AI triage libraries (lines 66-70)
+  - Added CLI argument parsing for `--ai-triage`, `--ai-backend`, `--ai-timeout`, `--ai-max-findings`, `--ai-verbose` (lines 810-829)
+  - Added AI triage execution after HTML generation (lines 6156-6185)
+  - Updated help text with AI triage options and examples (lines 469-479, 516-530)
+
+### Example Usage
+
+```bash
+# Auto-detect and run AI triage (uses Claude if available, falls back to built-in)
+wp-check ~/my-plugin --ai-triage
+
+# Explicit Claude backend with custom timeout
+wp-check ~/my-plugin --ai-triage --ai-backend claude --ai-timeout 600
+
+# With verbose output to see AI triage progress
+wp-check ~/my-plugin --ai-triage --ai-verbose
+
+# Limit AI analysis to top 50 findings
+wp-check ~/my-plugin --ai-triage --ai-max-findings 50
+```
+
+### Testing
+
+- ✅ Tested with WooCommerce Smart Coupons plugin (61 findings)
+- ✅ Claude CLI detection working
+- ✅ Fallback to ai-triage.py verified
+- ✅ HTML regeneration with AI triage data confirmed
+- ✅ Graceful degradation when Claude unavailable
+
 ## [2.0.16] - 2026-01-27
 
 ### Added
