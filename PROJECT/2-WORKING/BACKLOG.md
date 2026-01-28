@@ -1,10 +1,10 @@
 # Backlog - Issues to Investigate
 
-
-
 ## 2026-01-27
 
-- [ ] Append file names with first 4 characters of the plugin name to the output file name so its easier to find later.
+- [x]  Add System CLI support
+
+- [x] Append file names with first 4 characters of the plugin name to the output file name so its easier to find later.
 
 ## 2026-01-17
 - [ ] Add new Test Fixtures for DSM patterns 
