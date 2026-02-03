@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.15
+# Version: 2.2.0
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.1.0"
+SCRIPT_VERSION="2.2.1"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -3023,11 +3023,18 @@ run_check() {
     text_echo "  PATHS: $PATHS"
   fi
 
-  # PERFORMANCE: Use cached file list instead of grep -r
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
-    result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+  # PERFORMANCE: Use cached file list instead of grep -r when available.
+  # When there are no PHP files (e.g., JS/Node-only projects), fall back
+  # to recursive grep over the original paths so JS/headless patterns
+  # still run.
+  if [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+    if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+      result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+    else
+      result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+    fi
   else
-    result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+    result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns "$PATHS" 2>/dev/null) || true
   fi
 
   if [ -n "$result" ]; then
@@ -3157,16 +3164,17 @@ else
   PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
 
   if [ "$PHP_FILE_COUNT" -eq 0 ]; then
+    # Relaxed PHP gate: it's valid to have JS/Node-only projects.
+    # We log for debugging but do not exit, so JS/Node/Headless checks can still run.
     debug_echo "No PHP files found in: $PATHS"
     rm -f "$PHP_FILE_LIST_CACHE"
-    echo "Error: No PHP files found in: $PATHS"
-    exit 1
+    PHP_FILE_LIST=""
+  else
+    debug_echo "Cached $PHP_FILE_COUNT PHP files"
+
+    # Export for use in grep commands
+    PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
   fi
-
-  debug_echo "Cached $PHP_FILE_COUNT PHP files"
-
-  # Export for use in grep commands
-  PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
 fi
 
 # Cleanup function to remove cache on exit
@@ -3256,13 +3264,19 @@ cached_grep() {
     fi
   done
 
-  # If single file mode, just use regular grep
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+  # If we have a cached PHP file list, use it; otherwise fall back to
+  # recursive grep on the original paths. This lets JS/Node-only repos
+  # (no PHP files) still be scanned safely without depending on the
+  # PHP_FILE_LIST cache.
+  if [ "$PHP_FILE_COUNT" -eq 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     grep -Hn "${grep_args[@]}" "$pattern" "$PHP_FILE_LIST" 2>/dev/null || true
-  else
+  elif [ "$PHP_FILE_COUNT" -gt 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
     cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+  else
+    # No PHP cache (e.g., JS-only project). Fall back to recursive grep.
+    grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
   fi
 }
 
@@ -3349,7 +3363,9 @@ SUPERGLOBAL_VISIBLE=""
 
 # Find all superglobal manipulation patterns
 # PERFORMANCE: Use cached file list instead of grep -r
-SUPERGLOBAL_MATCHES=$(cached_grep -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
+# NOTE: Explicitly restrict to PHP files so that documentation (e.g. .md) and
+# non-PHP assets are not scanned when running in JS-only or mixed repos.
+SUPERGLOBAL_MATCHES=$(cached_grep --include=*.php -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
   grep -v '//.*\$_' || true)
 
 if [ -n "$SUPERGLOBAL_MATCHES" ]; then
@@ -3515,7 +3531,9 @@ UNSANITIZED_VISIBLE=""
 # Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
 # We'll filter those out in a more sophisticated way below
 # PERFORMANCE: Use cached file list instead of grep -r
-UNSANITIZED_MATCHES=$(cached_grep -E '\$_(GET|POST|REQUEST)\[' | \
+# NOTE: Restrict to PHP files explicitly; in JS-only repos the fallback path in
+# cached_grep will otherwise recurse into documentation and non-PHP assets.
+UNSANITIZED_MATCHES=$(cached_grep --include=*.php -E '\$_(GET|POST|REQUEST)\[' | \
   grep -v 'sanitize_' | \
   grep -v 'esc_' | \
   grep -v 'absint' | \

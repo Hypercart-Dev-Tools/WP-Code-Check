@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-02-03
+
+### Fixed
+
+- **PHP superglobal rules now respect PHP-only scope in JS/Node scans:**
+  - Updated `dist/bin/check-performance.sh` so Direct Superglobal Manipulation (`spo-002-superglobals`) and Unsanitized Superglobal Read rules explicitly restrict grep to `*.php` files.
+  - Prevents PHP-specific security checks from scanning documentation files (e.g., `.md`) and non-PHP assets when running WPCC against JS/Node/React projects.
+  - Resolves false positives where Markdown docs containing PHP examples triggered superglobal findings in JS-only repositories.
+
+## [2.2.0] - 2026-02-03
+
+### Added
+
+- **JS/Node-only project support:** Relaxed the PHP file gate so WP Code Check can analyze pure JavaScript/TypeScript and Node/React codebases.
+  - When no PHP files are found but JS/TS files are present, the scanner now skips PHP-only checks gracefully and runs headless/Node.js/JS pattern sets instead.
+  - Grep helpers fall back to recursive search over the original paths when the PHP file cache is unavailable, preserving performance optimizations for PHP projects while enabling non-WordPress scans.
+  - JSON and HTML report generation remain fully supported for these non-WordPress projects.
+
 ## [2.1.0] - 2026-01-28
 
 ### Added
