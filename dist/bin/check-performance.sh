@@ -1024,8 +1024,82 @@ detect_project_info() {
       project_type="fixture"
       project_name=$(basename "$scan_path")
     else
-      # Generic project
+      # Generic project - detect from package.json or file types
       project_name=$(basename "$scan_path")
+
+      # Check for package.json (Node.js/JS projects)
+      local pkg_json=""
+      if [ -f "$scan_path/package.json" ]; then
+        pkg_json="$scan_path/package.json"
+      elif [ -f "$(dirname "$scan_path")/package.json" ]; then
+        pkg_json="$(dirname "$scan_path")/package.json"
+      fi
+
+      if [ -n "$pkg_json" ]; then
+        # Build comma-separated type list from detected frameworks
+        local detected_types=""
+
+        # Base: it's a Node.js project
+        detected_types="nodejs"
+
+        # Detect TypeScript
+        if grep -qE '"typescript"|"ts-node"' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, typescript"
+        fi
+
+        # Detect React
+        if grep -qE '"react"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, react"
+        fi
+
+        # Detect Next.js (after React, as Next includes React)
+        if grep -qE '"next"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, nextjs"
+        fi
+
+        # Detect Vue.js
+        if grep -qE '"vue"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, vue"
+        fi
+
+        # Detect Nuxt (Vue's Next.js equivalent)
+        if grep -qE '"nuxt"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, nuxt"
+        fi
+
+        # Detect Express.js
+        if grep -qE '"express"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, express"
+        fi
+
+        project_type="$detected_types"
+
+        # Extract name/version from package.json if not already set
+        if [ "$project_name" = "Unknown" ] || [ -z "$project_name" ]; then
+          project_name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_version" ]; then
+          project_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_description" ]; then
+          project_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_author" ]; then
+          project_author=$(grep -o '"author"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+      elif [ -d "$scan_path" ]; then
+        # No package.json - detect by file presence
+        local has_js=$(find "$scan_path" -maxdepth 2 \( -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" \) -type f 2>/dev/null | head -1)
+        local has_php=$(find "$scan_path" -maxdepth 2 -name "*.php" -type f 2>/dev/null | head -1)
+
+        if [ -n "$has_js" ] && [ -n "$has_php" ]; then
+          project_type="php, javascript"
+        elif [ -n "$has_js" ]; then
+          project_type="javascript"
+        elif [ -n "$has_php" ]; then
+          project_type="php"
+        fi
+      fi
     fi
   fi
 
@@ -1194,6 +1268,8 @@ if [ "$ENABLE_LOGGING" = true ]; then
           theme) type_display_log="WordPress Theme" ;;
           fixture) type_display_log="Fixture Test" ;;
           unknown) type_display_log="Unknown" ;;
+          # New types pass through as-is (already descriptive, e.g., "nodejs, react, nextjs")
+          nodejs*|javascript*|php*|react*|vue*|typescript*) type_display_log="$PROJECT_TYPE_LOG" ;;
         esac
         echo "Type:             $type_display_log"
         if [ -n "$PROJECT_AUTHOR_LOG" ]; then
@@ -1633,6 +1709,8 @@ generate_html_report() {
       theme) type_display="WordPress Theme" ;;
       fixture) type_display="Fixture Test" ;;
       unknown) type_display="Unknown" ;;
+      # New types pass through as-is (already descriptive, e.g., "nodejs, react, nextjs")
+      nodejs*|javascript*|php*|react*|vue*|typescript*) type_display="$project_type" ;;
     esac
 
     project_info_html="<div style='font-size: 1.1em; font-weight: 600; margin-bottom: 5px;'>PROJECT INFORMATION</div>"
