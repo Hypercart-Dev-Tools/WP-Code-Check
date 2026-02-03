@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.15
+# Version: 2.2.0
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.1.0"
+SCRIPT_VERSION="2.2.1"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -1024,8 +1024,82 @@ detect_project_info() {
       project_type="fixture"
       project_name=$(basename "$scan_path")
     else
-      # Generic project
+      # Generic project - detect from package.json or file types
       project_name=$(basename "$scan_path")
+
+      # Check for package.json (Node.js/JS projects)
+      local pkg_json=""
+      if [ -f "$scan_path/package.json" ]; then
+        pkg_json="$scan_path/package.json"
+      elif [ -f "$(dirname "$scan_path")/package.json" ]; then
+        pkg_json="$(dirname "$scan_path")/package.json"
+      fi
+
+      if [ -n "$pkg_json" ]; then
+        # Build comma-separated type list from detected frameworks
+        local detected_types=""
+
+        # Base: it's a Node.js project
+        detected_types="nodejs"
+
+        # Detect TypeScript
+        if grep -qE '"typescript"|"ts-node"' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, typescript"
+        fi
+
+        # Detect React
+        if grep -qE '"react"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, react"
+        fi
+
+        # Detect Next.js (after React, as Next includes React)
+        if grep -qE '"next"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, nextjs"
+        fi
+
+        # Detect Vue.js
+        if grep -qE '"vue"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, vue"
+        fi
+
+        # Detect Nuxt (Vue's Next.js equivalent)
+        if grep -qE '"nuxt"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, nuxt"
+        fi
+
+        # Detect Express.js
+        if grep -qE '"express"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, express"
+        fi
+
+        project_type="$detected_types"
+
+        # Extract name/version from package.json if not already set
+        if [ "$project_name" = "Unknown" ] || [ -z "$project_name" ]; then
+          project_name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_version" ]; then
+          project_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_description" ]; then
+          project_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_author" ]; then
+          project_author=$(grep -o '"author"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+      elif [ -d "$scan_path" ]; then
+        # No package.json - detect by file presence
+        local has_js=$(find "$scan_path" -maxdepth 2 \( -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" \) -type f 2>/dev/null | head -1)
+        local has_php=$(find "$scan_path" -maxdepth 2 -name "*.php" -type f 2>/dev/null | head -1)
+
+        if [ -n "$has_js" ] && [ -n "$has_php" ]; then
+          project_type="php, javascript"
+        elif [ -n "$has_js" ]; then
+          project_type="javascript"
+        elif [ -n "$has_php" ]; then
+          project_type="php"
+        fi
+      fi
     fi
   fi
 
@@ -1194,6 +1268,8 @@ if [ "$ENABLE_LOGGING" = true ]; then
           theme) type_display_log="WordPress Theme" ;;
           fixture) type_display_log="Fixture Test" ;;
           unknown) type_display_log="Unknown" ;;
+          # New types pass through as-is (already descriptive, e.g., "nodejs, react, nextjs")
+          nodejs*|javascript*|php*|react*|vue*|typescript*) type_display_log="$PROJECT_TYPE_LOG" ;;
         esac
         echo "Type:             $type_display_log"
         if [ -n "$PROJECT_AUTHOR_LOG" ]; then
@@ -1633,6 +1709,8 @@ generate_html_report() {
       theme) type_display="WordPress Theme" ;;
       fixture) type_display="Fixture Test" ;;
       unknown) type_display="Unknown" ;;
+      # New types pass through as-is (already descriptive, e.g., "nodejs, react, nextjs")
+      nodejs*|javascript*|php*|react*|vue*|typescript*) type_display="$project_type" ;;
     esac
 
     project_info_html="<div style='font-size: 1.1em; font-weight: 600; margin-bottom: 5px;'>PROJECT INFORMATION</div>"
@@ -3023,11 +3101,18 @@ run_check() {
     text_echo "  PATHS: $PATHS"
   fi
 
-  # PERFORMANCE: Use cached file list instead of grep -r
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
-    result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+  # PERFORMANCE: Use cached file list instead of grep -r when available.
+  # When there are no PHP files (e.g., JS/Node-only projects), fall back
+  # to recursive grep over the original paths so JS/headless patterns
+  # still run.
+  if [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+    if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+      result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+    else
+      result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+    fi
   else
-    result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+    result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns "$PATHS" 2>/dev/null) || true
   fi
 
   if [ -n "$result" ]; then
@@ -3157,16 +3242,17 @@ else
   PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
 
   if [ "$PHP_FILE_COUNT" -eq 0 ]; then
+    # Relaxed PHP gate: it's valid to have JS/Node-only projects.
+    # We log for debugging but do not exit, so JS/Node/Headless checks can still run.
     debug_echo "No PHP files found in: $PATHS"
     rm -f "$PHP_FILE_LIST_CACHE"
-    echo "Error: No PHP files found in: $PATHS"
-    exit 1
+    PHP_FILE_LIST=""
+  else
+    debug_echo "Cached $PHP_FILE_COUNT PHP files"
+
+    # Export for use in grep commands
+    PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
   fi
-
-  debug_echo "Cached $PHP_FILE_COUNT PHP files"
-
-  # Export for use in grep commands
-  PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
 fi
 
 # Cleanup function to remove cache on exit
@@ -3256,13 +3342,19 @@ cached_grep() {
     fi
   done
 
-  # If single file mode, just use regular grep
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+  # If we have a cached PHP file list, use it; otherwise fall back to
+  # recursive grep on the original paths. This lets JS/Node-only repos
+  # (no PHP files) still be scanned safely without depending on the
+  # PHP_FILE_LIST cache.
+  if [ "$PHP_FILE_COUNT" -eq 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     grep -Hn "${grep_args[@]}" "$pattern" "$PHP_FILE_LIST" 2>/dev/null || true
-  else
+  elif [ "$PHP_FILE_COUNT" -gt 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
     cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+  else
+    # No PHP cache (e.g., JS-only project). Fall back to recursive grep.
+    grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
   fi
 }
 
@@ -3349,7 +3441,9 @@ SUPERGLOBAL_VISIBLE=""
 
 # Find all superglobal manipulation patterns
 # PERFORMANCE: Use cached file list instead of grep -r
-SUPERGLOBAL_MATCHES=$(cached_grep -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
+# NOTE: Explicitly restrict to PHP files so that documentation (e.g. .md) and
+# non-PHP assets are not scanned when running in JS-only or mixed repos.
+SUPERGLOBAL_MATCHES=$(cached_grep --include=*.php -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
   grep -v '//.*\$_' || true)
 
 if [ -n "$SUPERGLOBAL_MATCHES" ]; then
@@ -3515,7 +3609,9 @@ UNSANITIZED_VISIBLE=""
 # Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
 # We'll filter those out in a more sophisticated way below
 # PERFORMANCE: Use cached file list instead of grep -r
-UNSANITIZED_MATCHES=$(cached_grep -E '\$_(GET|POST|REQUEST)\[' | \
+# NOTE: Restrict to PHP files explicitly; in JS-only repos the fallback path in
+# cached_grep will otherwise recurse into documentation and non-PHP assets.
+UNSANITIZED_MATCHES=$(cached_grep --include=*.php -E '\$_(GET|POST|REQUEST)\[' | \
   grep -v 'sanitize_' | \
   grep -v 'esc_' | \
   grep -v 'absint' | \

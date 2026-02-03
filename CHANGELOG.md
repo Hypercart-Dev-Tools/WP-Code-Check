@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-02-03
+
+### Added
+
+- **Enhanced project type detection for non-WordPress codebases:**
+  - Detects frameworks from `package.json` dependencies: `nodejs`, `react`, `nextjs`, `vue`, `nuxt`, `express`, `typescript`
+  - Comma-separated output when multiple frameworks detected (e.g., `[nodejs, react, nextjs]`)
+  - Extracts project name, version, description, and author from `package.json`
+  - Falls back to file-based detection: `javascript` (JS/TS files), `php` (PHP files), `php, javascript` (mixed)
+  - WordPress plugin/theme detection unchanged and takes precedence
+
+### Fixed
+
+- **PHP superglobal rules now respect PHP-only scope in JS/Node scans:**
+  - Updated `dist/bin/check-performance.sh` so Direct Superglobal Manipulation (`spo-002-superglobals`) and Unsanitized Superglobal Read rules explicitly restrict grep to `*.php` files.
+  - Prevents PHP-specific security checks from scanning documentation files (e.g., `.md`) and non-PHP assets when running WPCC against JS/Node/React projects.
+  - Resolves false positives where Markdown docs containing PHP examples triggered superglobal findings in JS-only repositories.
+
+### Tested
+
+- ✅ PHP file discovery and caching verified (lines 3147-3178)
+- ✅ PHP security patterns have `--include=*.php` guards (lines 3368, 3536)
+- ✅ `cached_grep` fallback handles JS-only projects (lines 3271-3280)
+- ✅ `unsanitized-superglobal-read.php` fixture: detects violations correctly
+- ✅ `wpdb-no-prepare.php` fixture: detects SQL injection risks
+- ✅ JS-only directory (`headless/`): runs without crashing, no false positives
+- ✅ Backwards compatibility confirmed: existing PHP scanning unchanged
+- ✅ Type detection: `nodejs` from package.json
+- ✅ Type detection: `nodejs, react, nextjs` from Next.js project
+- ✅ Type detection: `nodejs, typescript, vue, nuxt` from Nuxt project
+- ✅ Type detection: `php, javascript` from mixed fixtures directory
+
+## [2.2.0] - 2026-02-03
+
+### Added
+
+- **JS/Node-only project support:** Relaxed the PHP file gate so WP Code Check can analyze pure JavaScript/TypeScript and Node/React codebases.
+  - When no PHP files are found but JS/TS files are present, the scanner now skips PHP-only checks gracefully and runs headless/Node.js/JS pattern sets instead.
+  - Grep helpers fall back to recursive search over the original paths when the PHP file cache is unavailable, preserving performance optimizations for PHP projects while enabling non-WordPress scans.
+  - JSON and HTML report generation remain fully supported for these non-WordPress projects.
+
 ## [2.1.0] - 2026-01-28
 
 ### Added
