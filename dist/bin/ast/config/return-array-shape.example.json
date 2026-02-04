@@ -1,0 +1,5 @@
+{
+    "expected_keys": ["customers", "guest_orders", "orders"],
+    "target_scopes": ["*::perform_search"]
+}
+
