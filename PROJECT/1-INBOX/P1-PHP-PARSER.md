@@ -13,6 +13,7 @@
 - [Phase 3 – Hardening & Developer Experience](#phase-3--hardening--developer-experience)
 - [Risk / Quagmire Avoidance](#risk--quagmire-avoidance)
 - [LLM Notes](#llm-notes)
+ - [Appendix – PHPStan WordPress Setup Handoff](#appendix--phpstan-wordpress-setup-handoff)
 
 ## Background
 WPCC today is a shell-based scanner that leans on grep-style rules, cached file lists, and small Python helpers to produce deterministic JSON logs and HTML reports.
@@ -21,8 +22,8 @@ This plan explores how to layer PHP-Parser and dedicated static analysis tools (
 
 ## High-Level Phased Checklist
 > **Note for LLMs:** Whenever you progress an item below, update its checkbox state in-place so humans can see progress without scrolling.
-- [ ] Phase 0 – Clarify goals, choose pilot use cases, decide tooling mix
-- [ ] Phase 1 – Run PHPStan/Psalm on a target plugin repo with simple IRL checks
+- [x] Phase 0 – Clarify goals, choose pilot use cases, decide tooling mix
+- [x] Phase 1 – Run PHPStan/Psalm on a target plugin repo with simple IRL checks ✅ **(2026-02-03)**
 - [ ] Phase 2 – Implement first PHP-Parser-based AST rule inside WPCC
 - [ ] Phase 3 – Stabilize, document, and integrate into CI / WPCC flows
 
@@ -84,19 +85,65 @@ Rationale:
 - [ ] Roughly sketch a JSON config schema for AST rules (e.g., for `ajax-response-shape`: function selectors, expected keys, severity/impact) before implementation.
 - [ ] Time-box Phase 0 spikes (e.g., 4–6 engineering hours) and add a “stop and reassess” checkpoint; if PHPStan WP stubs/bootstrap friction is too high, pivot or descope rather than pushing through.
 
+
 ## Phase 1 – Local PHPStan Integration
-**Intent:** Keep this out of WPCC’s distribution; treat it as a per-repo dev tool.
+**Intent:** Keep this out of WPCC's distribution; treat it as a per-repo dev tool.
+
+**Status:** ✅ **COMPLETE** — PHPStan validated as viable for plugin development.
 
 **Tasks**
-- [ ] Add PHPStan as a dev dependency to the target plugin repo.
-- [ ] Create a minimal `phpstan.neon` with:
-  - [ ] WordPress extension / stubs if needed.
-  - [ ] Baseline file to mute existing noise.
-- [ ] Encode 1–2 simple IRL checks:
-  - [ ] `get_option()` wrapper returning a documented array shape.
-  - [ ] One nullability wrapper (e.g., `find_customer_by_email(): ?WP_User`).
-- [ ] Run PHPStan in CI and locally; confirm it stays fast and stable.
- - [ ] Record a canonical IRL failure fixture for later regression tests: the Woo Fast Search "wholesale filter contract mismatch" bug at commit `9dec5a4cd713b6528673cc8a0561e6c4db925667` (https://github.com/kissplugins/KISS-woo-fast-search/commit/9dec5a4cd713b6528673cc8a0561e6c4db925667).
+- [x] Add PHPStan as a dev dependency to the target plugin repo.
+- [x] Create a minimal `phpstan.neon` with:
+  - [x] WordPress extension / stubs configuration sketched (see Appendix and fixture at `temp/KISS-woo-fast-search/phpstan.neon`).
+  - [ ] Baseline file to mute existing noise. *(Deferred — not needed for decision)*
+- [x] Encode 1–2 simple IRL checks:
+  - [x] `get_option()` wrapper returning a documented array shape (`get_plugin_settings()`).
+  - [x] One nullability wrapper (`find_customer_by_email(): ?WP_User`).
+- [ ] Run PHPStan in CI and locally; confirm it stays fast and stable. *(Deferred to production adoption)*
+- [x] Record a canonical IRL failure fixture for later regression tests: the Woo Fast Search "wholesale filter contract mismatch" bug at commit `9dec5a4cd713b6528673cc8a0561e6c4db925667`, checked out locally at `temp/KISS-woo-fast-search` (source: https://github.com/kissplugins/KISS-woo-fast-search/commit/9dec5a4cd713b6528673cc8a0561e6c4db925667).
+
+### Phase 1 Findings (2026-02-03)
+
+**Run #1 — Clean signal with stubs installed**
+
+| Metric | Before Stubs | After Stubs |
+|--------|--------------|-------------|
+| Errors | ~444 | **1** |
+| Type | All "symbol not found" noise | Actionable code quality issue |
+
+- Installed PHPStan + WP/Woo/wp-cli stubs via Composer in `temp/KISS-woo-fast-search`.
+- Re-ran PHPStan at level 3 with `--memory-limit=1G`.
+- Result: **1 error** — `Variable $post in empty() always exists and is not falsy` in `class-kiss-woo-coupon-lookup.php:116`.
+- WordPress/WooCommerce symbol noise is **eliminated**.
+
+**Run #2 — Typed helper calibration**
+
+Created `includes/class-kiss-woo-typed-helpers.php` with:
+- `get_plugin_settings()` returning `array{debug_mode: bool, cache_ttl: int, max_results: int}`
+- `find_customer_by_email()` returning `?WP_User`
+- Intentional violations to test PHPStan detection
+
+| Violation | Description | PHPStan Level | Caught? |
+|-----------|-------------|---------------|---------|
+| #2 | Accessing `$user->display_name` on `WP_User\|null` without null check | 8 | ✅ Yes |
+| #3 | Accessing `$settings['api_key']` which doesn't exist in shape | 3 | ✅ Yes |
+| #1 | Passing flat array to filter expecting structured hash | — | ⚠️ Requires typed interface |
+
+**Key insight:** PHPStan catches array shape and nullability violations **if the types are documented**. The original wholesale filter bug would be caught if `KISS_Woo_Order_Filter::apply()` had a PHPDoc shape like `@param array{customers: array, guest_orders: array, orders: array} $results`.
+
+### Phase 1 Decision
+
+**✅ PHPStan is viable and valuable for plugin development.**
+
+- Signal/noise ratio is excellent once stubs are installed.
+- Array shape enforcement works at level 3.
+- Nullability enforcement works at level 8.
+- Setup is documented in Appendix and reproducible.
+
+**Recommendation:** Adopt PHPStan as a dev tool for KISS plugins. Add typed helpers incrementally. Consider adding PHPDoc shapes to interfaces like `KISS_Woo_Order_Filter` to catch contract mismatches.
+
+**Next:** Proceed to Phase 2 (PHP-Parser AST experiments for WPCC) or adopt PHPStan in production plugin repos.
+
 
 ## Phase 2 – PHP-Parser AST Experiments for WPCC  
 **Intent:** Add one small AST-based rule to WPCC to prove value over grep, without changing WPCC’s installation story, and **leverage our existing loader + harness** so this remains a low-risk, low-effort experiment.
@@ -140,7 +187,7 @@ Rationale:
   - [ ] JSON output format consistent with existing `findings` entries (id/severity/impact/file/line/message/code/context).
   - [ ] Wiring into the scan pipeline behind a feature flag.
 - [ ] Measure performance impact and confirm it’s acceptable on medium-sized plugins.
- - [ ] Create small synthetic fixtures for this rule (e.g., one "good" and one "bad" Ajax endpoint file plus expected `findings` JSON) so we can exercise AST feedback without depending on live IRL plugins.
+ 	- [ ] Create small synthetic fixtures for this rule (e.g., one "good" and one "bad" Ajax endpoint file plus expected `findings` JSON) so we can exercise AST feedback without depending on live IRL plugins, and keep the Woo Fast Search fixture at `temp/KISS-woo-fast-search` as the primary real-world reference.
 
 ## Phase 3 – Hardening & Developer Experience
 **Tasks**
@@ -160,3 +207,84 @@ Rationale:
 - When you complete or materially progress any task in this file, update the checklist(s) above rather than creating new documents.
 - Do not expand this document into a full design spec; keep it as a high-level plan plus checklists and link out to more detailed docs in other files if needed.
 
+## Appendix – PHPStan WordPress Setup Handoff
+
+### Prerequisites
+PHPStan and Composer are installed system-wide (for example via Homebrew):
+
+```bash
+phpstan --version  # e.g. PHPStan 2.1.38
+composer --version # e.g. Composer 2.9.5
+```
+
+### Quick Setup for Any WordPress Plugin
+
+1. **Install PHPStan and stubs in the plugin directory**
+
+   ```bash
+   cd /path/to/your-plugin
+
+   composer require --dev \
+     phpstan/phpstan \
+     phpstan/extension-installer \
+     szepeviktor/phpstan-wordpress \
+     php-stubs/wordpress-stubs \
+     php-stubs/woocommerce-stubs \
+     php-stubs/wp-cli-stubs \
+     --no-interaction
+   ```
+
+2. **Create `phpstan.neon` in the plugin root**
+
+   ```neon
+   parameters:
+       level: 3
+       paths:
+           - includes
+           - admin
+           # Add your plugin's PHP directories
+       tmpDir: build/phpstan
+       bootstrapFiles:
+           - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+           - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+           - vendor/php-stubs/wp-cli-stubs/wp-cli-stubs.php
+       ignoreErrors:
+           # Ignore plugin-specific constants (adjust pattern to match your plugin)
+           - '#Constant YOUR_PLUGIN_\w+ not found#'
+   ```
+
+3. **Run analysis**
+
+   ```bash
+   phpstan analyse --configuration=phpstan.neon --memory-limit=1G
+   ```
+
+### Key Notes
+
+| Item | Details |
+|------|---------|
+| **Extension installer** | `phpstan/extension-installer` will automatically load `szepeviktor/phpstan-wordpress` – no manual `includes:` is needed. |
+| **Memory limit** | Use `--memory-limit=1G` for larger plugins (512M can be too low). |
+| **Plugin constants** | Add an `ignoreErrors` regex for your plugin's constants (defined in the main plugin file). |
+| **WP-CLI stubs** | Prefer `wp-cli-stubs.php` over `wp-cli-commands-stubs.php` to avoid extra Composer dependencies. |
+| **Levels** | Start at level 3; increase towards 5+ as you fix issues. |
+
+### Available Stubs
+
+| Package | What it provides |
+|---------|------------------|
+| `php-stubs/wordpress-stubs` | Core WordPress functions, classes, and hooks. |
+| `php-stubs/woocommerce-stubs` | `WC_Order`, `WC_Coupon`, `wc_get_order()`, and other WooCommerce symbols. |
+| `php-stubs/wp-cli-stubs` | `WP_CLI` class and related methods. |
+
+### Example Output
+
+```text
+ ------ ----------------------------------------------------------- 
+  Line   includes/class-example.php                                
+ ------ ----------------------------------------------------------- 
+  :116   Variable $post in empty() always exists and is not falsy. 
+ ------ ----------------------------------------------------------- 
+
+ [ERROR] Found 1 error
+```
