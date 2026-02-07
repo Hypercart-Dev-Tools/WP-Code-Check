@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.2.4"
+SCRIPT_VERSION="2.2.5"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -147,6 +147,7 @@ EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
 DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
+SKIP_MAGIC_STRINGS=false    # Magic String Detector runs by default (use --skip-magic-strings to disable)
 
 # ============================================================
 # AI TRIAGE CONFIGURATION (Phase 1: Claude Code Integration)
@@ -467,6 +468,8 @@ OPTIONS:
   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
   --ignore-baseline        Ignore baseline file even if present
   --enable-clone-detection Enable function clone detection (disabled by default for performance)
+  --skip-magic-strings     Skip Magic String Detector (last resort for timeout issues)
+  --disable-magic-strings  Alias for --skip-magic-strings
 
 AI TRIAGE OPTIONS:
 
@@ -829,6 +832,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_CLONE_DETECTION=true
       shift
       ;;
+    --skip-magic-strings|--disable-magic-strings)
+      SKIP_MAGIC_STRINGS=true
+      shift
+      ;;
     --no-context)
       CONTEXT_LINES=0
       shift
@@ -888,13 +895,67 @@ debug_echo "Arguments parsed. PATHS=$PATHS"
 debug_echo "OUTPUT_FORMAT=$OUTPUT_FORMAT"
 debug_echo "ENABLE_LOGGING=$ENABLE_LOGGING"
 
+# ============================================================
+# LOAD .wpcignore FILE (if present)
+# ============================================================
+# Load exclusions from .wpcignore file (like .gitignore)
+# Looks for .wpcignore in:
+# 1. Scan path directory (if scanning a directory)
+# 2. Current working directory
+# 3. Repository root
+load_wpcignore() {
+  local wpcignore_file=""
+
+  # Check scan path first (if it's a directory)
+  if [ -d "$PATHS" ] && [ -f "$PATHS/.wpcignore" ]; then
+    wpcignore_file="$PATHS/.wpcignore"
+  # Check current directory
+  elif [ -f ".wpcignore" ]; then
+    wpcignore_file=".wpcignore"
+  # Check repository root
+  elif [ -f "$REPO_ROOT/.wpcignore" ]; then
+    wpcignore_file="$REPO_ROOT/.wpcignore"
+  fi
+
+  if [ -n "$wpcignore_file" ]; then
+    debug_echo "Loading exclusions from: $wpcignore_file"
+
+    # Read .wpcignore line by line, skip comments and empty lines
+    while IFS= read -r line || [ -n "$line" ]; do
+      # Skip comments and empty lines
+      if [ -z "$line" ] || echo "$line" | grep -q '^[[:space:]]*#'; then
+        continue
+      fi
+
+      # Trim whitespace
+      line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+      # Add to appropriate exclusion list
+      if echo "$line" | grep -q '\*'; then
+        # File pattern (contains wildcard)
+        EXCLUDE_FILES="$EXCLUDE_FILES $line"
+      else
+        # Directory pattern (no wildcard)
+        # Remove trailing slash if present
+        line=$(echo "$line" | sed 's|/$||')
+        EXCLUDE_DIRS="$EXCLUDE_DIRS $line"
+      fi
+    done < "$wpcignore_file"
+
+    debug_echo "Loaded exclusions from .wpcignore"
+  fi
+}
+
+# Load .wpcignore if present
+load_wpcignore
+
 # If scanning a tests directory, remove 'tests' from exclusions
 # Use portable method (no \b word boundary which is GNU-specific)
 if echo "$PATHS" | grep -q "tests"; then
   EXCLUDE_DIRS="vendor node_modules .git .next dist build"
 fi
 
-# Build exclude arguments
+# Build exclude arguments for grep
 EXCLUDE_ARGS=""
 for dir in $EXCLUDE_DIRS; do
   EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude-dir=$dir"
@@ -902,6 +963,22 @@ done
 for file in $EXCLUDE_FILES; do
   EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude=$file"
 done
+
+# Build grep -v exclusions for find commands (used in clone detection and file caching)
+# This converts EXCLUDE_DIRS into a series of grep -v '/dirname/' commands
+build_grep_exclusions() {
+  local grep_cmd=""
+  for dir in $EXCLUDE_DIRS; do
+    if [ -n "$grep_cmd" ]; then
+      grep_cmd="$grep_cmd | grep -v '/$dir/'"
+    else
+      grep_cmd="grep -v '/$dir/'"
+    fi
+  done
+  echo "$grep_cmd"
+}
+
+GREP_EXCLUSIONS=$(build_grep_exclusions)
 
 # ============================================================================
 # Helper Functions (must be defined before logging setup)
@@ -2579,6 +2656,8 @@ process_aggregated_pattern() {
   # Extract captured groups and aggregate
   if [ -n "$matches" ]; then
     local iteration=0
+    local last_progress_time=$(date +%s 2>/dev/null || echo "0")
+
     while IFS= read -r match; do
       [ -z "$match" ] && continue
 
@@ -2587,6 +2666,17 @@ process_aggregated_pattern() {
       if [ "$MAX_LOOP_ITERATIONS" -gt 0 ] && [ "$iteration" -gt "$MAX_LOOP_ITERATIONS" ]; then
         text_echo "  ${RED}⚠ Max iterations ($MAX_LOOP_ITERATIONS) reached - truncating results${NC}"
         break
+      fi
+
+      # PROGRESS: Show progress every 10 seconds during string extraction
+      local current_time=$(date +%s 2>/dev/null || echo "0")
+      if [ "$current_time" != "0" ] && [ "$last_progress_time" != "0" ]; then
+        local time_diff=$((current_time - last_progress_time))
+        if [ "$time_diff" -ge 10 ]; then
+          section_progress
+          text_echo "  ${BLUE}  Processing match $iteration of $match_count...${NC}"
+          last_progress_time=$current_time
+        fi
       fi
 
       local file=$(echo "$match" | cut -d: -f1)
@@ -2618,8 +2708,11 @@ process_aggregated_pattern() {
     # Aggregate by captured string
     if [ -f "$temp_matches" ] && [ -s "$temp_matches" ]; then
       local unique_strings=$(cut -d'|' -f1 "$temp_matches" | sort -u)
+      local total_unique_strings=$(echo "$unique_strings" | wc -l | tr -d ' ')
 
       local string_iteration=0
+      local last_string_progress_time=$(date +%s 2>/dev/null || echo "0")
+
       while IFS= read -r string; do
         [ -z "$string" ] && continue
 
@@ -2628,6 +2721,17 @@ process_aggregated_pattern() {
         if [ "$MAX_LOOP_ITERATIONS" -gt 0 ] && [ "$string_iteration" -gt "$MAX_LOOP_ITERATIONS" ]; then
           text_echo "  ${RED}⚠ Max string aggregation iterations ($MAX_LOOP_ITERATIONS) reached - truncating results${NC}"
           break
+        fi
+
+        # PROGRESS: Show progress every 10 seconds during string aggregation
+        local current_time=$(date +%s 2>/dev/null || echo "0")
+        if [ "$current_time" != "0" ] && [ "$last_string_progress_time" != "0" ]; then
+          local time_diff=$((current_time - last_string_progress_time))
+          if [ "$time_diff" -ge 10 ]; then
+            section_progress
+            text_echo "  ${BLUE}  Analyzing string $string_iteration of $total_unique_strings...${NC}"
+            last_string_progress_time=$current_time
+          fi
         fi
 
         # Unescape the string for comparison
@@ -2719,7 +2823,13 @@ process_clone_detection() {
     # Directory provided - find all PHP files
     # PERFORMANCE: Wrap find in timeout to prevent hangs
     local find_exit_code=0
-    php_files=$(run_with_timeout "$MAX_SCAN_TIME" find "$PATHS" -name "*.php" -type f 2>/dev/null | grep -v '/vendor/' | grep -v '/node_modules/') || find_exit_code=$?
+
+    # Apply exclusions from EXCLUDE_DIRS (includes .wpcignore entries)
+    if [ -n "$GREP_EXCLUSIONS" ]; then
+      php_files=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "find '$PATHS' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS") || find_exit_code=$?
+    else
+      php_files=$(run_with_timeout "$MAX_SCAN_TIME" find "$PATHS" -name "*.php" -type f 2>/dev/null) || find_exit_code=$?
+    fi
 
     # Check for timeout (exit code 124)
     if [ "$find_exit_code" -eq 124 ]; then
@@ -3234,10 +3344,12 @@ else
   # Create temp file for caching
   PHP_FILE_LIST_CACHE=$(mktemp)
 
-  # Find all PHP files (excluding vendor/node_modules)
-  find "$PATHS" -name "*.php" -type f 2>/dev/null | \
-    grep -v '/vendor/' | \
-    grep -v '/node_modules/' > "$PHP_FILE_LIST_CACHE"
+  # Find all PHP files (apply exclusions from EXCLUDE_DIRS including .wpcignore)
+  if [ -n "$GREP_EXCLUSIONS" ]; then
+    sh -c "find '$PATHS' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" > "$PHP_FILE_LIST_CACHE"
+  else
+    find "$PATHS" -name "*.php" -type f 2>/dev/null > "$PHP_FILE_LIST_CACHE"
+  fi
 
   PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
 
@@ -6091,10 +6203,18 @@ fi
 # Magic String Detector ("DRY") - Aggregated Patterns
 # ============================================================================
 
-text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-text_echo "${BLUE}  MAGIC STRING DETECTOR (\"DRY\")${NC}"
-text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-text_echo ""
+# Check if Magic String Detector should be skipped
+if [ "$SKIP_MAGIC_STRINGS" = "true" ]; then
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo "${BLUE}  MAGIC STRING DETECTOR (\"DRY\")${NC}"
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo "${YELLOW}⚠ Skipped (--skip-magic-strings flag enabled)${NC}"
+  text_echo ""
+else
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo "${BLUE}  MAGIC STRING DETECTOR (\"DRY\")${NC}"
+  text_echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  text_echo ""
 
 # Find all aggregated patterns
 AGGREGATED_PATTERNS=""
@@ -6150,6 +6270,8 @@ fi
 
 section_end
 profile_end "MAGIC_STRING_DETECTOR"
+fi  # End of SKIP_MAGIC_STRINGS check
+
 profile_start "FUNCTION_CLONE_DETECTOR"
 section_start "Function Clone Detector"
 

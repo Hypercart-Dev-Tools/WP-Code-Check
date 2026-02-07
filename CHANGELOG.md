@@ -5,6 +5,113 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+---
+
+## [2.2.5] - 2026-02-07
+
+### Added
+
+#### .wpcignore Support - Exclude Directories from Scans
+
+- **Added .wpcignore file support** (similar to .gitignore) to exclude directories and files from scans
+  - Automatically loads exclusions from `.wpcignore` in scan path, current directory, or repository root
+  - Supports directory patterns (e.g., `tools/`, `.git/`, `node_modules/`)
+  - Supports file patterns with wildcards (e.g., `*.min.js`, `*.log`)
+  - Comments (lines starting with `#`) and empty lines are ignored
+  - **Impact:** Prevents scanning embedded dependencies, version control files, and build artifacts
+  - **Use case:** Prevents recursive scanning when AI-DDTK scans itself (WPCC embedded at `tools/wp-code-check/`)
+
+- **Created .wpcignore template** at `dist/templates/.wpcignore.template`
+  - Sensible defaults: `tools/`, `.git/`, `node_modules/`, `vendor/`, `dist/logs/`, `dist/reports/`
+  - Minified files: `*.min.js`, `*.min.css`, `*bundle*.js`
+  - Organized by category with comments explaining each exclusion
+  - Ready to copy to project root and customize
+
+- **Created .wpcignore for AI-DDTK** at `/Users/noelsaw/Documents/GH Repos/AI-DDTK/.wpcignore`
+  - Excludes `tools/` directory to prevent WPCC from scanning its own embedded copy
+  - Prevents timeout/stalling issues when scanning AI-DDTK repository
+
+#### Progress Indicators for Magic String Detector
+
+- **Added progress indicators to Magic String Detector aggregation loops**
+  - Shows "Processing match X of Y..." every 10 seconds during string extraction (lines 2582-2619)
+  - Shows "Analyzing string X of Y..." every 10 seconds during string aggregation (lines 2631-2687)
+  - Follows same pattern as clone detection progress indicators (added in v1.0.85)
+  - **Impact:** Users can see progress during long scans, reducing perceived wait time
+  - **Fixes:** Stalling/timeout issues reported when scanning large codebases (10K+ files)
+
+#### --skip-magic-strings Flag - Last Resort for Timeout Issues
+
+- **Added `--skip-magic-strings` command-line flag** to completely skip Magic String Detector phase
+  - **Alias:** `--disable-magic-strings` (both flags work identically)
+  - **Use case:** Last resort option when scans timeout during Magic String Detector aggregation
+  - **Behavior:** Shows warning message "⚠ Skipped (--skip-magic-strings flag enabled)" and bypasses entire phase
+  - **Pattern:** Follows same approach as existing `--skip-clone-detection` flag
+  - **Impact:** Allows scans to complete even when Magic String Detector would timeout
+  - **Trade-off:** Skips detection of duplicate option names, transient keys, and capability strings
+  - **Examples:**
+    - `wpcc --paths . --skip-magic-strings --format json`
+    - `wpcc --paths . --disable-magic-strings --format json` (alias)
+
+### Changed
+
+- **Improved exclusion handling in clone detection and file caching**
+  - Clone detection now uses dynamic `GREP_EXCLUSIONS` from `EXCLUDE_DIRS` (includes .wpcignore entries)
+  - File caching now applies .wpcignore exclusions instead of hardcoded `vendor/` and `node_modules/`
+  - Added `build_grep_exclusions()` helper function to convert `EXCLUDE_DIRS` to grep -v commands
+  - **Impact:** Consistent exclusion behavior across all scan phases
+
+### Technical Details
+
+- **Files Modified:**
+  - `dist/bin/check-performance.sh`:
+    - Added `SKIP_MAGIC_STRINGS=false` variable (line 150)
+    - Added `--skip-magic-strings` and `--disable-magic-strings` to help text (lines 471-472)
+    - Added argument parsing for both flags (line 834: `--skip-magic-strings|--disable-magic-strings`)
+    - Added skip logic for Magic String Detector (lines 6201-6218, closing fi at line 6272)
+    - Added `load_wpcignore()` function (lines 900-941)
+    - Added `build_grep_exclusions()` helper (lines 960-970)
+    - Updated `process_aggregated_pattern()` with progress indicators (lines 2579-2687)
+    - Updated `process_clone_detection()` to use dynamic exclusions (lines 2815-2834)
+    - Updated file caching to use dynamic exclusions (lines 3337-3347)
+  - `dist/templates/.wpcignore.template` - Created
+  - `/Users/noelsaw/Documents/GH Repos/AI-DDTK/.wpcignore` - Created
+
+- **Version:** Bumped to 2.2.5
+
+### Documentation
+
+- **TODO:** Update README.md with .wpcignore documentation
+- **TODO:** Update SHELL-QUICKSTART.md with .wpcignore usage
+- **TODO:** Update dist/TEMPLATES/_AI_INSTRUCTIONS.md with .wpcignore troubleshooting
+
+---
+
+### Changed
+
+#### Documentation: AI-DDTK Integration
+
+- **Added AI-DDTK as installation option** in README.md with comprehensive value proposition
+  - New "Option 2: Via AI-DDTK" section in Quick Start → Installation
+  - Detailed comparison table showing all tools included with AI-DDTK
+  - Key benefits: centralized toolkit, AI-optimized workflows, global access, automatic updates
+  - Clear guidance on when to choose AI-DDTK vs standalone installation
+- **Added "Related Projects" section** explaining AI-DDTK's git subtree relationship with WPCC
+  - Documents how AI-DDTK embeds WPCC at `tools/wp-code-check/`
+  - Explains update mechanism (`./install.sh update-wpcc`)
+  - Clarifies that both options provide identical WPCC features
+- **Created strategic analysis document** at `PROJECT/1-INBOX/STRATEGIC-ANALYSIS-WPCC-VS-AI-DDTK.md`
+  - Analyzed whether Claude Code Integration features should be ported to AI-DDTK
+  - Conclusion: Keep all features in WPCC (MCP, AI Triage, GitHub Issues)
+  - Rationale: AI-DDTK embeds WPCC via git subtree; porting would create circular dependency
+  - Documents actual AI-DDTK architecture (v1.0.5) vs initial assumptions
+
+**Context:** AI-DDTK (AI Driven Development ToolKit) is a centralized toolkit that includes WP Code Check plus additional WordPress development tools (local-wp, WP AJAX Test, Playwright, PHPStan recipes, AI agent guidelines). It provides a global `wpcc` command and is optimized for AI-driven workflows with Claude Code, Cursor, Augment, etc.
+
+---
+
 ## [2.2.4] - 2026-02-07
 
 ### Fixed
