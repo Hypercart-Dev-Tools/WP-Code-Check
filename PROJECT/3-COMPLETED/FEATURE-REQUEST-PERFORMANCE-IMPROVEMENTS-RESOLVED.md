@@ -54,13 +54,18 @@ wpcc --paths . --format json
 wpcc --disable-magic-strings --disable-clone-detection --format json
 ```
 
-**Implemented:**
+**Implemented:** Both naming conventions supported!
 ```bash
+# Original implementation (--skip-* pattern)
 wpcc --skip-magic-strings --skip-clone-detection --format json
+
+# Alias (--disable-* pattern - matches feature request)
+wpcc --disable-magic-strings --skip-clone-detection --format json
 ```
 
 **Available flags:**
 - ✅ `--skip-magic-strings` (NEW in v2.2.5) - Skip Magic String Detector
+- ✅ `--disable-magic-strings` (NEW in v2.2.5) - Alias for --skip-magic-strings
 - ✅ `--skip-clone-detection` (existing) - Skip Function Clone Detector
 
 ---

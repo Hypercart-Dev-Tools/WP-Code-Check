@@ -469,6 +469,7 @@ OPTIONS:
   --ignore-baseline        Ignore baseline file even if present
   --enable-clone-detection Enable function clone detection (disabled by default for performance)
   --skip-magic-strings     Skip Magic String Detector (last resort for timeout issues)
+  --disable-magic-strings  Alias for --skip-magic-strings
 
 AI TRIAGE OPTIONS:
 
@@ -831,7 +832,7 @@ while [[ $# -gt 0 ]]; do
       SKIP_CLONE_DETECTION=true
       shift
       ;;
-    --skip-magic-strings)
+    --skip-magic-strings|--disable-magic-strings)
       SKIP_MAGIC_STRINGS=true
       shift
       ;;

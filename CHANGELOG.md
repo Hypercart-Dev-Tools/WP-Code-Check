@@ -45,12 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### --skip-magic-strings Flag - Last Resort for Timeout Issues
 
 - **Added `--skip-magic-strings` command-line flag** to completely skip Magic String Detector phase
+  - **Alias:** `--disable-magic-strings` (both flags work identically)
   - **Use case:** Last resort option when scans timeout during Magic String Detector aggregation
   - **Behavior:** Shows warning message "⚠ Skipped (--skip-magic-strings flag enabled)" and bypasses entire phase
   - **Pattern:** Follows same approach as existing `--skip-clone-detection` flag
   - **Impact:** Allows scans to complete even when Magic String Detector would timeout
   - **Trade-off:** Skips detection of duplicate option names, transient keys, and capability strings
-  - **Example:** `wpcc --paths . --skip-magic-strings --format json`
+  - **Examples:**
+    - `wpcc --paths . --skip-magic-strings --format json`
+    - `wpcc --paths . --disable-magic-strings --format json` (alias)
 
 ### Changed
 
@@ -65,8 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Files Modified:**
   - `dist/bin/check-performance.sh`:
     - Added `SKIP_MAGIC_STRINGS=false` variable (line 150)
-    - Added `--skip-magic-strings` to help text (line 471)
-    - Added `--skip-magic-strings` argument parsing (lines 834-837)
+    - Added `--skip-magic-strings` and `--disable-magic-strings` to help text (lines 471-472)
+    - Added argument parsing for both flags (line 834: `--skip-magic-strings|--disable-magic-strings`)
     - Added skip logic for Magic String Detector (lines 6201-6218, closing fi at line 6272)
     - Added `load_wpcignore()` function (lines 900-941)
     - Added `build_grep_exclusions()` helper (lines 960-970)
