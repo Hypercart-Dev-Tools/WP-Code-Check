@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated": "2026-01-27T22:31:23Z",
+  "generated": "2026-02-07T05:07:35Z",
   "summary": {
     "total_patterns": 55,
     "enabled": 55,
@@ -804,8 +804,8 @@
 	"category": "reliability",
 	"severity": "HIGH",
 	"title": "Coupon logic in WooCommerce thank-you/order-received context",
-	"description": "Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts. This is a reliability anti-pattern because the order is already complete and coupon operations should not be performed post-checkout.",
-	"detection_type": "direct",
+	"description": "Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts. Uses context-aware validation to distinguish between problematic thank-you hooks and safe checkout hooks. Ignores commented-out code and functions hooked to safe contexts like woocommerce_checkout_order_processed.",
+	"detection_type": "validated",
 	"pattern_type": "php",
 	"mitigation_detection": false,
 	"heuristic": false,

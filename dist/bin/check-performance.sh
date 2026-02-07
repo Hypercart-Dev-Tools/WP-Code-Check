@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.2.2
+# Version: 2.2.3
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -3342,6 +3342,11 @@ cached_grep() {
     fi
   done
 
+  # DEBUG: Uncomment to troubleshoot cached_grep issues (v2.2.3)
+  # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Using xargs mode with $PHP_FILE_COUNT files" >&2
+  # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Pattern: $pattern" >&2
+  # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Args: ${grep_args[*]}" >&2
+
   # If we have a cached PHP file list, use it; otherwise fall back to
   # recursive grep on the original paths. This lets JS/Node-only repos
   # (no PHP files) still be scanned safely without depending on the
@@ -3351,7 +3356,10 @@ cached_grep() {
   elif [ "$PHP_FILE_COUNT" -gt 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
-    cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+    # FIX v2.2.3: Use null-delimited input (tr '\n' '\0') with xargs -0
+    # to handle file paths with spaces (e.g., "/Users/name/Local Sites/...")
+    # Without this, xargs splits on whitespace and grep fails to find files
+    tr '\n' '\0' < "$PHP_FILE_LIST" | xargs -0 grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
   else
     # No PHP cache (e.g., JS-only project). Fall back to recursive grep.
     grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
@@ -3611,6 +3619,13 @@ UNSANITIZED_VISIBLE=""
 # PERFORMANCE: Use cached file list instead of grep -r
 # NOTE: Restrict to PHP files explicitly; in JS-only repos the fallback path in
 # cached_grep will otherwise recurse into documentation and non-PHP assets.
+
+# DEBUG: Uncomment to troubleshoot unsanitized superglobal detection (v2.2.3)
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] Starting unsanitized superglobal detection..." >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] PATHS variable: $PATHS" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] PHP_FILE_COUNT: $PHP_FILE_COUNT" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] PHP_FILE_LIST: $PHP_FILE_LIST" >&2
+
 UNSANITIZED_MATCHES=$(cached_grep --include=*.php -E '\$_(GET|POST|REQUEST)\[' | \
   grep -v 'sanitize_' | \
   grep -v 'esc_' | \
@@ -3621,6 +3636,10 @@ UNSANITIZED_MATCHES=$(cached_grep --include=*.php -E '\$_(GET|POST|REQUEST)\[' |
   grep -v 'wp_unslash' | \
   grep -v '\$allowed_keys' | \
   grep -v '//.*\$_' || true)
+
+# DEBUG: Uncomment to see initial grep results (v2.2.3)
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] AFTER initial grep + sanitization filters:" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] Total matches: $(echo "$UNSANITIZED_MATCHES" | grep -c . || echo 0)" >&2
 
 # Now filter out lines where isset/empty is used ONLY to check existence (not followed by usage)
 # Pattern: isset($_GET['x']) ) { ... } with no further $_GET['x'] on the same line
@@ -3646,6 +3665,10 @@ UNSANITIZED_MATCHES=$(echo "$UNSANITIZED_MATCHES" | while IFS= read -r line; do
   # Otherwise, output the line (it's a potential violation)
   echo "$line"
 done || true)
+
+# DEBUG: Uncomment to see results after isset/empty filter (v2.2.3)
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] AFTER isset/empty filter:" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] Line count: $(echo "$UNSANITIZED_MATCHES" | grep -c . || echo 0)" >&2
 
 if [ -n "$UNSANITIZED_MATCHES" ]; then
   while IFS= read -r match; do
