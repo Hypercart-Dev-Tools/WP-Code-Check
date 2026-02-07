@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.2.5] - 2026-02-07
+
+### Added
+
+#### .wpcignore Support - Exclude Directories from Scans
+
+- **Added .wpcignore file support** (similar to .gitignore) to exclude directories and files from scans
+  - Automatically loads exclusions from `.wpcignore` in scan path, current directory, or repository root
+  - Supports directory patterns (e.g., `tools/`, `.git/`, `node_modules/`)
+  - Supports file patterns with wildcards (e.g., `*.min.js`, `*.log`)
+  - Comments (lines starting with `#`) and empty lines are ignored
+  - **Impact:** Prevents scanning embedded dependencies, version control files, and build artifacts
+  - **Use case:** Prevents recursive scanning when AI-DDTK scans itself (WPCC embedded at `tools/wp-code-check/`)
+
+- **Created .wpcignore template** at `dist/templates/.wpcignore.template`
+  - Sensible defaults: `tools/`, `.git/`, `node_modules/`, `vendor/`, `dist/logs/`, `dist/reports/`
+  - Minified files: `*.min.js`, `*.min.css`, `*bundle*.js`
+  - Organized by category with comments explaining each exclusion
+  - Ready to copy to project root and customize
+
+- **Created .wpcignore for AI-DDTK** at `/Users/noelsaw/Documents/GH Repos/AI-DDTK/.wpcignore`
+  - Excludes `tools/` directory to prevent WPCC from scanning its own embedded copy
+  - Prevents timeout/stalling issues when scanning AI-DDTK repository
+
+#### Progress Indicators for Magic String Detector
+
+- **Added progress indicators to Magic String Detector aggregation loops**
+  - Shows "Processing match X of Y..." every 10 seconds during string extraction (lines 2582-2619)
+  - Shows "Analyzing string X of Y..." every 10 seconds during string aggregation (lines 2631-2687)
+  - Follows same pattern as clone detection progress indicators (added in v1.0.85)
+  - **Impact:** Users can see progress during long scans, reducing perceived wait time
+  - **Fixes:** Stalling/timeout issues reported when scanning large codebases (10K+ files)
+
+#### --skip-magic-strings Flag - Last Resort for Timeout Issues
+
+- **Added `--skip-magic-strings` command-line flag** to completely skip Magic String Detector phase
+  - **Use case:** Last resort option when scans timeout during Magic String Detector aggregation
+  - **Behavior:** Shows warning message "⚠ Skipped (--skip-magic-strings flag enabled)" and bypasses entire phase
+  - **Pattern:** Follows same approach as existing `--skip-clone-detection` flag
+  - **Impact:** Allows scans to complete even when Magic String Detector would timeout
+  - **Trade-off:** Skips detection of duplicate option names, transient keys, and capability strings
+  - **Example:** `wpcc --paths . --skip-magic-strings --format json`
+
+### Changed
+
+- **Improved exclusion handling in clone detection and file caching**
+  - Clone detection now uses dynamic `GREP_EXCLUSIONS` from `EXCLUDE_DIRS` (includes .wpcignore entries)
+  - File caching now applies .wpcignore exclusions instead of hardcoded `vendor/` and `node_modules/`
+  - Added `build_grep_exclusions()` helper function to convert `EXCLUDE_DIRS` to grep -v commands
+  - **Impact:** Consistent exclusion behavior across all scan phases
+
+### Technical Details
+
+- **Files Modified:**
+  - `dist/bin/check-performance.sh`:
+    - Added `SKIP_MAGIC_STRINGS=false` variable (line 150)
+    - Added `--skip-magic-strings` to help text (line 471)
+    - Added `--skip-magic-strings` argument parsing (lines 834-837)
+    - Added skip logic for Magic String Detector (lines 6201-6218, closing fi at line 6272)
+    - Added `load_wpcignore()` function (lines 900-941)
+    - Added `build_grep_exclusions()` helper (lines 960-970)
+    - Updated `process_aggregated_pattern()` with progress indicators (lines 2579-2687)
+    - Updated `process_clone_detection()` to use dynamic exclusions (lines 2815-2834)
+    - Updated file caching to use dynamic exclusions (lines 3337-3347)
+  - `dist/templates/.wpcignore.template` - Created
+  - `/Users/noelsaw/Documents/GH Repos/AI-DDTK/.wpcignore` - Created
+
+- **Version:** Bumped to 2.2.5
+
+### Documentation
+
+- **TODO:** Update README.md with .wpcignore documentation
+- **TODO:** Update SHELL-QUICKSTART.md with .wpcignore usage
+- **TODO:** Update dist/TEMPLATES/_AI_INSTRUCTIONS.md with .wpcignore troubleshooting
+
+---
+
 ### Changed
 
 #### Documentation: AI-DDTK Integration
