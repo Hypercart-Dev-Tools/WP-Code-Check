@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.2.3
+# Version: 2.2.4
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.2.1"
+SCRIPT_VERSION="2.2.4"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -3347,13 +3347,14 @@ cached_grep() {
   # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Pattern: $pattern" >&2
   # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Args: ${grep_args[*]}" >&2
 
+  # If PATHS points to a single file, scan that file directly.
+  if [ -f "$PATHS" ]; then
+    grep -Hn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
   # If we have a cached PHP file list, use it; otherwise fall back to
   # recursive grep on the original paths. This lets JS/Node-only repos
   # (no PHP files) still be scanned safely without depending on the
   # PHP_FILE_LIST cache.
-  if [ "$PHP_FILE_COUNT" -eq 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
-    grep -Hn "${grep_args[@]}" "$pattern" "$PHP_FILE_LIST" 2>/dev/null || true
-  elif [ "$PHP_FILE_COUNT" -gt 1 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+  elif [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
     # FIX v2.2.3: Use null-delimited input (tr '\n' '\0') with xargs -0
@@ -5339,6 +5340,13 @@ if [ "$COUPON_THANKYOU_SEVERITY" = "MEDIUM" ] || [ "$COUPON_THANKYOU_SEVERITY" =
 
 text_echo "${BLUE}▸ WooCommerce coupon logic in thank-you context ${COUPON_THANKYOU_COLOR}[$COUPON_THANKYOU_SEVERITY]${NC}"
 
+COUPON_THANKYOU_VALIDATOR="$REPO_ROOT/bin/validators/wc-coupon-thankyou-context-validator.sh"
+COUPON_THANKYOU_VALIDATOR_AVAILABLE=false
+COUPON_THANKYOU_VALIDATOR_SUPPRESSED=0
+if [ -x "$COUPON_THANKYOU_VALIDATOR" ]; then
+  COUPON_THANKYOU_VALIDATOR_AVAILABLE=true
+fi
+
 # Step 1: Find files with thank-you/order-received context markers
 THANKYOU_CONTEXT_FILES=$(grep -rlE \
   '(add_action|do_action|apply_filters|add_filter)\([[:space:]]*['\''"]([a-z_]*woocommerce_thankyou[a-z_]*)['\''"]|is_order_received_page\(|is_wc_endpoint_url\([[:space:]]*['\''"]order-received['\''"]|woocommerce/checkout/(thankyou|order-received)\.php' \
@@ -5369,6 +5377,19 @@ if [ -n "$THANKYOU_CONTEXT_FILES" ]; then
           continue
         fi
 
+        # Apply context-aware validator when available.
+        # Exit 0 = confirmed issue, 1 = false positive, 2 = needs review.
+        if [ "$COUPON_THANKYOU_VALIDATOR_AVAILABLE" = true ]; then
+          validator_exit=0
+          "$COUPON_THANKYOU_VALIDATOR" "$file" "$line_num" >/dev/null 2>&1 || validator_exit=$?
+          if [ "$validator_exit" -eq 1 ]; then
+            ((COUPON_THANKYOU_VALIDATOR_SUPPRESSED++)) || true
+            continue
+          elif [ "$validator_exit" -eq 2 ]; then
+            code="[NEEDS REVIEW] $code"
+          fi
+        fi
+
         if ! should_suppress_finding "wc-coupon-in-thankyou" "$file"; then
           COUPON_THANKYOU_ISSUES="${COUPON_THANKYOU_ISSUES}${file}:${line_num}:${code}"$'\n'
           add_json_finding "wc-coupon-in-thankyou" "error" "$COUPON_THANKYOU_SEVERITY" "$file" "$line_num" "Coupon logic in thank-you/order-received context (should be in cart/checkout hooks)" "$code"
@@ -5389,10 +5410,16 @@ if [ "$COUPON_THANKYOU_FINDING_COUNT" -gt 0 ]; then
   fi
   if [ "$OUTPUT_FORMAT" = "text" ]; then
     echo "$COUPON_THANKYOU_ISSUES" | head -5
+    if [ "$COUPON_THANKYOU_VALIDATOR_SUPPRESSED" -gt 0 ]; then
+      text_echo "  ${BLUE}  (${COUPON_THANKYOU_VALIDATOR_SUPPRESSED} suppressed by validator)${NC}"
+    fi
   fi
   add_json_check "WooCommerce coupon logic in thank-you context" "$COUPON_THANKYOU_SEVERITY" "failed" "$COUPON_THANKYOU_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ "$COUPON_THANKYOU_VALIDATOR_SUPPRESSED" -gt 0 ]; then
+    text_echo "  ${BLUE}  (${COUPON_THANKYOU_VALIDATOR_SUPPRESSED} suppressed by validator)${NC}"
+  fi
   add_json_check "WooCommerce coupon logic in thank-you context" "$COUPON_THANKYOU_SEVERITY" "passed" 0
 fi
 text_echo ""

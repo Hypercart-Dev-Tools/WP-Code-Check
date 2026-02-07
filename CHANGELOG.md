@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-02-07
+
+### Fixed
+
+#### wc-coupon-in-thankyou Validator Not Applied in Main Scanner Flow
+
+- **Issue:** The context-aware validator existed and passed unit tests, but the primary `check-performance.sh` coupon check path still used legacy matching without validator filtering.
+- **Impact:** False positives persisted for commented-out hooks and non-thank-you contexts when scanning real projects.
+- **Fix:** Wired `dist/bin/validators/wc-coupon-thankyou-context-validator.sh` into the main WooCommerce coupon thank-you check loop in `dist/bin/check-performance.sh`.
+  - Exit `1` findings are now suppressed as false positives.
+  - Exit `2` findings are marked with `[NEEDS REVIEW]`.
+
+#### cached_grep Single-File Directory Regression (Paths with Spaces)
+
+- **Issue:** `cached_grep` handled paths with spaces for multi-file directories, but failed for directories containing exactly one PHP file by grepping the cache list file instead of the actual PHP file.
+- **Impact:** Missed findings in common local paths with spaces (for one-file plugin/theme repro cases).
+- **Fix:** Updated `cached_grep` in `dist/bin/check-performance.sh` to:
+  - Scan direct file targets via `PATHS` when `--paths` is a file.
+  - Use null-delimited cached list processing (`tr ... | xargs -0`) for any cached directory scan with one or more PHP files.
+
+### Added
+
+- **Regression checks:** Added scanner-level regression test script:
+  - `dist/bin/test-fix-audit-regressions.sh`
+  - Covers:
+    - checkout hook false positive suppression
+    - commented hook false positive suppression
+    - thank-you true positive retention
+    - one-file and multi-file path-with-spaces unsanitized superglobal detection
+
 ## [2.2.3] - 2026-02-07
 
 ### Fixed
