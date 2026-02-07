@@ -86,6 +86,12 @@ See [AI Instructions](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for the complete end-t
 
 ### Installation
 
+Choose the installation method that best fits your workflow:
+
+#### **Option 1: Standalone Installation** (Direct Access)
+
+Best for: Users who only need WP Code Check
+
 ```bash
 # Clone the repository
 git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
@@ -100,6 +106,93 @@ wpcc /path/to/your/plugin
 # Or use the full path
 ./dist/bin/check-performance.sh --paths /path/to/your/plugin
 ```
+
+---
+
+#### **Option 2: Via AI-DDTK** (Recommended for AI-Driven Workflows) 🤖
+
+Best for: Teams using AI coding assistants, developers managing multiple WordPress projects, or anyone who wants a centralized toolkit
+
+**What is AI-DDTK?**
+[AI-DDTK](https://github.com/Hypercart-Dev-Tools/AI-DDTK) (AI Driven Development ToolKit) is a centralized toolkit that includes WP Code Check plus additional WordPress development tools, all accessible from a single installation.
+
+**Installation:**
+
+```bash
+# Clone AI-DDTK to your bin directory
+git clone https://github.com/Hypercart-Dev-Tools/AI-DDTK.git ~/bin/ai-ddtk
+cd ~/bin/ai-ddtk
+
+# Run installer (adds tools to PATH)
+./install.sh
+
+# Activate in current shell
+source ~/.zshrc  # or ~/.bashrc
+
+# Verify - wpcc is now available globally
+wpcc --help
+wpcc --features  # See all available features
+```
+
+**What You Get with AI-DDTK:**
+
+| Tool | Description | Value |
+|------|-------------|-------|
+| **WP Code Check** | Full scanner with MCP, AI Triage, GitHub Issues | All WPCC features automatically |
+| **Global `wpcc` command** | Call from any directory | No need to remember paths |
+| **AI Agent Guidelines** | AGENTS.md v2.4.0 with Phase 1-4 workflows | Structured AI-assisted scanning |
+| **local-wp wrapper** | WP-CLI for Local by Flywheel sites | Simplified database queries |
+| **WP AJAX Test** | AJAX endpoint testing without browser | Fast endpoint validation |
+| **Playwright integration** | Browser automation for E2E tests | Visual regression testing |
+| **Fix-Iterate Loop** | Autonomous test-verify-fix pattern | AI-driven debugging workflow |
+| **PHPStan recipes** | WordPress/WooCommerce setup guides | Static analysis integration |
+| **One-command updates** | `./install.sh update-wpcc` | Always get latest WPCC |
+
+**Key Benefits:**
+
+✅ **Centralized Toolkit** - One installation, multiple tools
+✅ **AI-Optimized** - Built for Claude Code, Cursor, Augment, GitHub Copilot
+✅ **Global Access** - `wpcc` command works from any project directory
+✅ **Automatic Updates** - Pull latest WPCC with one command
+✅ **Workflow Automation** - Pre-built patterns for common tasks
+✅ **Zero Conflicts** - Tools are isolated, won't interfere with project dependencies
+
+**How It Works:**
+
+AI-DDTK embeds WP Code Check via git subtree, so you get the complete, official WPCC with all features (MCP server, AI triage, GitHub issue creation) automatically. The `wpcc` wrapper provides convenient global access while keeping WPCC self-contained.
+
+**Example Workflow:**
+
+```bash
+# Scan any plugin from any directory
+cd ~/projects/client-site
+wpcc ./wp-content/plugins/custom-plugin
+
+# Use AI agent for end-to-end workflow
+# Ask your AI: "Run a full scan with triage on this plugin"
+# AI will execute Phase 1-4 automatically using AGENTS.md guidelines
+
+# Update to latest WPCC
+cd ~/bin/ai-ddtk
+./install.sh update-wpcc
+```
+
+**When to Choose AI-DDTK:**
+
+- ✅ You use AI coding assistants (Claude Code, Cursor, Augment, etc.)
+- ✅ You manage multiple WordPress projects
+- ✅ You want a centralized development toolkit
+- ✅ You need WP-CLI, AJAX testing, or browser automation
+- ✅ You prefer global commands over remembering paths
+
+**When to Choose Standalone:**
+
+- ✅ You only need WP Code Check
+- ✅ You prefer minimal installations
+- ✅ You're integrating WPCC into CI/CD pipelines
+- ✅ You want direct control over the WPCC repository
+
+**Learn More:** [AI-DDTK Repository](https://github.com/Hypercart-Dev-Tools/AI-DDTK)
 
 ### Example Output
 
@@ -591,6 +684,49 @@ For organizations that need **priority support, advanced features, or SLA guaran
 See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) for details and pricing.
 
 **Contact:** noel@hypercart.io
+
+---
+
+## Related Projects
+
+### AI-DDTK (AI Driven Development ToolKit)
+
+**Repository:** [github.com/Hypercart-Dev-Tools/AI-DDTK](https://github.com/Hypercart-Dev-Tools/AI-DDTK)
+
+AI-DDTK is a centralized toolkit that embeds WP Code Check (via git subtree) along with other WordPress development tools. It's designed for AI-driven workflows and provides:
+
+- **Global `wpcc` command** - Access WP Code Check from any directory
+- **AI Agent Guidelines** - Structured workflows for Claude Code, Cursor, Augment, etc.
+- **Additional Tools** - local-wp (WP-CLI wrapper), WP AJAX Test, Playwright integration
+- **One-Command Updates** - `./install.sh update-wpcc` pulls latest WPCC
+- **Workflow Patterns** - Fix-Iterate Loop, PHPStan recipes, and more
+
+**How It Works:**
+
+AI-DDTK uses git subtree to embed the complete WP Code Check repository at `tools/wp-code-check/`. This means:
+
+- ✅ You get the official, unmodified WPCC with all features (MCP, AI Triage, GitHub Issues)
+- ✅ Updates are pulled directly from the WPCC repository
+- ✅ WPCC remains self-contained and can be used standalone
+- ✅ The `bin/wpcc` wrapper provides convenient global access
+
+**When to Use AI-DDTK:**
+
+Choose AI-DDTK if you:
+- Use AI coding assistants for WordPress development
+- Manage multiple WordPress projects
+- Want a centralized toolkit with multiple tools
+- Prefer global commands over remembering paths
+
+**When to Use Standalone WPCC:**
+
+Choose standalone WPCC if you:
+- Only need the code scanner
+- Prefer minimal installations
+- Are integrating into CI/CD pipelines
+- Want direct control over the repository
+
+Both options give you the same WP Code Check features - the difference is in how you access them.
 
 ---
 

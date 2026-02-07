@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+#### Documentation: AI-DDTK Integration
+
+- **Added AI-DDTK as installation option** in README.md with comprehensive value proposition
+  - New "Option 2: Via AI-DDTK" section in Quick Start → Installation
+  - Detailed comparison table showing all tools included with AI-DDTK
+  - Key benefits: centralized toolkit, AI-optimized workflows, global access, automatic updates
+  - Clear guidance on when to choose AI-DDTK vs standalone installation
+- **Added "Related Projects" section** explaining AI-DDTK's git subtree relationship with WPCC
+  - Documents how AI-DDTK embeds WPCC at `tools/wp-code-check/`
+  - Explains update mechanism (`./install.sh update-wpcc`)
+  - Clarifies that both options provide identical WPCC features
+- **Created strategic analysis document** at `PROJECT/1-INBOX/STRATEGIC-ANALYSIS-WPCC-VS-AI-DDTK.md`
+  - Analyzed whether Claude Code Integration features should be ported to AI-DDTK
+  - Conclusion: Keep all features in WPCC (MCP, AI Triage, GitHub Issues)
+  - Rationale: AI-DDTK embeds WPCC via git subtree; porting would create circular dependency
+  - Documents actual AI-DDTK architecture (v1.0.5) vs initial assumptions
+
+**Context:** AI-DDTK (AI Driven Development ToolKit) is a centralized toolkit that includes WP Code Check plus additional WordPress development tools (local-wp, WP AJAX Test, Playwright, PHPStan recipes, AI agent guidelines). It provides a global `wpcc` command and is optimized for AI-driven workflows with Claude Code, Cursor, Augment, etc.
+
+---
+
 ## [2.2.4] - 2026-02-07
 
 ### Fixed

@@ -1,7 +1,8 @@
 # Strategic Analysis: Should Claude Code Integration Move to AI-DDTK?
 
-**Created:** 2026-02-07  
-**Status:** Strategic Planning  
+**Created:** 2026-02-07
+**Updated:** 2026-02-07 (after scanning actual AI-DDTK repo)
+**Status:** Strategic Planning
 **Question:** Should MCP/AI Triage/GitHub Issue features be ported to AI-DDTK?
 
 ---
@@ -11,10 +12,11 @@
 **Recommendation:** ❌ **Do NOT port to AI-DDTK** — Keep features in WP Code Check
 
 **Rationale:**
-1. Features are **WordPress-specific** and tightly coupled to WPCC's scan output
-2. AI-DDTK appears to be a **recipe/template collection**, not an active codebase
-3. Moving features would **fragment the user experience** and create maintenance overhead
-4. Current integration is **production-ready and well-documented**
+1. **AI-DDTK already embeds WPCC** via git subtree (`tools/wp-code-check/`)
+2. Features are **WordPress-specific** and tightly coupled to WPCC's scan output
+3. AI-DDTK is a **centralized toolkit** that provides a wrapper (`bin/wpcc`) to call embedded WPCC
+4. Moving features would create **circular dependency** (WPCC needs features, AI-DDTK embeds WPCC)
+5. Current architecture is **correct** — WPCC is self-contained, AI-DDTK distributes it
 
 ---
 
@@ -32,33 +34,81 @@
 
 ---
 
-## 🔍 What is AI-DDTK?
+## 🔍 What is AI-DDTK? (ACTUAL STATE)
 
-Based on `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, AI-DDTK is envisioned as:
+**Version:** 1.0.5
+**Nature:** Centralized toolkit for AI-driven WordPress development
+**Architecture:** VS Code AI Agents (Claude Code, Augment, Codex) with MCP server integration
+
+### Actual Repository Structure
 
 ```
-~/bin/ai-ddtk/
-├── recipes/              # Step-by-step setup guides
-│   └── phpstan-wordpress-setup.md
-├── templates/            # Config file templates
+AI-DDTK/
+├── install.sh           # Install & maintenance script
+├── bin/                 # Executable wrappers (added to PATH)
+│   ├── wpcc            # WP Code Check wrapper (8752 bytes)
+│   └── wp-ajax-test    # AJAX endpoint tester
+├── tools/              # Embedded dependencies (git subtree)
+│   ├── wp-code-check/  # WPCC source (full copy)
+│   └── wp-ajax-test/   # AJAX test tool source
+├── recipes/            # Workflow guides
+│   ├── phpstan-wordpress-setup.md
+│   ├── fix-iterate-loop.md
+│   └── performance-audit.md
+├── templates/          # Configuration templates
 │   └── phpstan.neon.template
-└── scripts/              # Optional scaffolding scripts (future)
-    └── scaffold-phpstan.sh
+├── local-wp            # Local WP-CLI wrapper
+├── fix-iterate-loop.md # Autonomous test-verify-fix pattern
+├── AGENTS.md           # AI agent guidelines (v2.4.0)
+└── SYSTEM-INSTRUCTIONS.md
 ```
 
-**Nature:** A **recipe/template collection** for WordPress development workflows, NOT a runtime tool.
+### Key Discovery: Git Subtree Integration
 
-**Examples of what belongs in AI-DDTK:**
-- ✅ PHPStan setup recipes
-- ✅ WordPress coding standards configs
-- ✅ Docker Compose templates for local dev
-- ✅ CI/CD pipeline templates
-- ✅ Git hooks for pre-commit checks
+**AI-DDTK embeds WP Code Check** via git subtree at `tools/wp-code-check/`:
 
-**Examples of what does NOT belong:**
-- ❌ Runtime analysis tools (like WPCC)
-- ❌ Active scanning/monitoring services
-- ❌ Tool-specific integrations (like MCP for WPCC)
+```bash
+# Update embedded WPCC
+./install.sh update-wpcc
+
+# This runs:
+git subtree pull --prefix=tools/wp-code-check \
+  https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git main --squash
+```
+
+### The `bin/wpcc` Wrapper
+
+**Purpose:** Thin wrapper that calls embedded WPCC from any project directory
+
+**How it works:**
+1. Resolves path to `tools/wp-code-check/dist/bin/check-performance.sh`
+2. Passes all arguments through to WPCC
+3. Provides feature discovery (`wpcc --features`)
+4. Shows template count and location
+
+**User experience:**
+```bash
+# User installs AI-DDTK once
+git clone https://github.com/Hypercart-Dev-Tools/AI-DDTK.git ~/bin/ai-ddtk
+./install.sh  # Adds ~/bin/ai-ddtk/bin to PATH
+
+# Now wpcc is available globally
+wpcc --paths /path/to/plugin
+```
+
+### What AI-DDTK Provides
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| **WP Code Check** | Embedded tool (git subtree) | WordPress code analysis |
+| **WP AJAX Test** | Embedded tool (git subtree) | AJAX endpoint testing |
+| **local-wp** | Wrapper script | WP-CLI for Local by Flywheel |
+| **Playwright** | Symlink to global install | Browser automation |
+| **Fix-Iterate Loop** | Workflow pattern (CC BY 4.0) | Autonomous test-verify-fix |
+| **PHPStan recipes** | Documentation | Setup guides |
+| **AGENTS.md** | AI guidelines (v2.4.0) | AI agent instructions |
+
+**Nature:** AI-DDTK is a **runtime toolkit**, not just recipes. It's a centralized installation that provides multiple tools via PATH.
 
 ---
 
@@ -74,13 +124,18 @@ Based on `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, AI-DDTK is envisioned as:
 ```
 
 **Problems:**
-1. ❌ **Still requires WPCC** - MCP server reads `dist/logs/*.json` from WPCC
-2. ❌ **Fragmented installation** - Users must install both WPCC and AI-DDTK
-3. ❌ **Duplicate documentation** - Setup instructions split across two repos
-4. ❌ **Version sync issues** - MCP server must stay compatible with WPCC JSON schema
-5. ❌ **No benefit** - Doesn't make MCP server more reusable
+1. ❌ **Circular dependency** - MCP server reads WPCC logs, but AI-DDTK embeds WPCC via git subtree
+2. ❌ **Update complexity** - When WPCC updates, must sync MCP server separately
+3. ❌ **Version sync issues** - MCP server must stay compatible with WPCC JSON schema
+4. ❌ **Breaks git subtree model** - AI-DDTK pulls WPCC as-is; extracting MCP breaks that
+5. ❌ **No benefit** - Users install AI-DDTK to get WPCC; MCP is part of WPCC
 
-**Verdict:** ❌ **Bad idea** - Creates complexity without value
+**Current architecture is correct:**
+- User installs AI-DDTK → gets embedded WPCC → gets MCP server automatically
+- MCP server lives in `tools/wp-code-check/dist/bin/mcp-server.js`
+- `wpcc` wrapper exposes all WPCC features including MCP
+
+**Verdict:** ❌ **Bad idea** - Current git subtree model is superior
 
 ---
 
@@ -135,41 +190,123 @@ Based on `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, AI-DDTK is envisioned as:
 
 ## 🎯 Recommended Strategy
 
-### Keep Everything in WPCC (Current State)
+### Keep Everything in WPCC (Current State is Correct)
 
 **Rationale:**
-1. ✅ **Features are production-ready** - Working well, well-documented
-2. ✅ **Tight coupling is appropriate** - Features exist to enhance WPCC
-3. ✅ **Single installation** - Users get everything in one repo
-4. ✅ **Unified documentation** - All features documented in one README
-5. ✅ **Easier maintenance** - One repo to update when patterns change
+1. ✅ **Git subtree model works perfectly** - AI-DDTK pulls WPCC as a complete, self-contained tool
+2. ✅ **Features are production-ready** - Working well, well-documented
+3. ✅ **Tight coupling is appropriate** - MCP/AI Triage/GitHub Issues exist to enhance WPCC
+4. ✅ **Single source of truth** - WPCC repo is authoritative; AI-DDTK mirrors it
+5. ✅ **Easier maintenance** - Update WPCC once; AI-DDTK users run `./install.sh update-wpcc`
 
-**What belongs in AI-DDTK instead:**
-- ✅ **WPCC setup recipe** - How to install and configure WPCC
-- ✅ **WPCC + CI/CD templates** - GitHub Actions, GitLab CI examples
-- ✅ **WPCC + MCP setup guide** - Step-by-step Claude Desktop configuration
-- ✅ **WPCC best practices** - When to run scans, how to interpret results
+### Current Architecture (Correct Design)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ WP Code Check Repository (Source of Truth)                 │
+│ https://github.com/Hypercart-Dev-Tools/WP-Code-Check       │
+│                                                             │
+│ ├── dist/bin/check-performance.sh  (Main scanner)          │
+│ ├── dist/bin/mcp-server.js         (MCP integration)       │
+│ ├── dist/bin/lib/claude-triage.sh  (AI triage)             │
+│ ├── dist/bin/create-github-issue.sh (Issue creation)       │
+│ └── README.md                       (Complete docs)        │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ git subtree pull
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ AI-DDTK Repository (Distribution Layer)                    │
+│ https://github.com/Hypercart-Dev-Tools/AI-DDTK             │
+│                                                             │
+│ ├── tools/wp-code-check/  ◄── Full copy via git subtree    │
+│ ├── bin/wpcc              ◄── Thin wrapper to call WPCC    │
+│ ├── AGENTS.md             ◄── AI agent workflow guide      │
+│ └── install.sh            ◄── Adds bin/ to PATH            │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ User installs AI-DDTK
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ User's System                                               │
+│                                                             │
+│ ~/bin/ai-ddtk/bin/wpcc  ◄── In PATH                        │
+│                                                             │
+│ $ wpcc --paths /path/to/plugin                             │
+│   └─► Calls tools/wp-code-check/dist/bin/check-performance.sh
+│   └─► Gets MCP, AI Triage, GitHub Issues automatically     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why this is correct:**
+- ✅ **WPCC is self-contained** - All features live in WPCC repo
+- ✅ **AI-DDTK is a distribution layer** - Provides convenient global access
+- ✅ **No duplication** - WPCC code exists in one place (git subtree mirrors it)
+- ✅ **Easy updates** - `./install.sh update-wpcc` pulls latest WPCC
+- ✅ **Users get everything** - Install AI-DDTK → get WPCC + all features
+
+### What AI-DDTK Already Provides (Correctly)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **WPCC wrapper** | `bin/wpcc` | Global access to embedded WPCC |
+| **AI workflow guide** | `AGENTS.md` v2.4.0 | Phase 1-4 workflow, triage patterns |
+| **Feature discovery** | `wpcc --features` | Shows MCP, AI Triage, GitHub Issues |
+| **Update mechanism** | `./install.sh update-wpcc` | Pull latest WPCC via git subtree |
+
+**AI-DDTK does NOT need:**
+- ❌ Separate MCP server (already in embedded WPCC)
+- ❌ Separate AI triage (already in embedded WPCC)
+- ❌ Separate GitHub issue creator (already in embedded WPCC)
+- ❌ WPCC setup recipes (WPCC README is comprehensive)
 
 ---
 
 ## 📋 Action Items
 
-### Immediate (No Code Changes)
+### Immediate: Update WPCC Documentation About AI-DDTK
 
-1. ✅ **Keep all features in WPCC** - No porting needed
-2. ✅ **Document current state** - This analysis document
-3. ⚠️ **Create AI-DDTK recipes** (if AI-DDTK exists):
-   - `recipes/wpcc-setup.md` - Installation guide
-   - `recipes/wpcc-mcp-claude-desktop.md` - MCP setup
-   - `recipes/wpcc-ci-cd-github-actions.md` - CI/CD integration
+**Goal:** Make WPCC users aware that AI-DDTK provides a convenient global installation option.
+
+**Tasks:**
+1. ✅ **Document current state** - This analysis document (done)
+2. ⚠️ **Add AI-DDTK installation option to WPCC README.md**:
+   ```markdown
+   ## Installation
+
+   ### Option 1: Standalone (Current)
+   Clone WP Code Check directly...
+
+   ### Option 2: Via AI-DDTK (Recommended for AI-driven workflows)
+   AI-DDTK provides a centralized toolkit that includes WP Code Check:
+
+   ```bash
+   git clone https://github.com/Hypercart-Dev-Tools/AI-DDTK.git ~/bin/ai-ddtk
+   cd ~/bin/ai-ddtk
+   ./install.sh
+   source ~/.zshrc
+   wpcc --help  # Now available globally
+   ```
+
+   Benefits:
+   - Global `wpcc` command (no need to remember paths)
+   - Includes local-wp wrapper, WP AJAX Test, Playwright
+   - AI agent guidelines (AGENTS.md v2.4.0)
+   - Automatic updates via `./install.sh update-wpcc`
+   ```
+
+3. ⚠️ **Create cross-reference in WPCC docs**:
+   - Add "Related Projects" section to README.md
+   - Link to AI-DDTK repository
+   - Explain git subtree relationship
 
 ### Future (If Building Multiple Tools)
 
 **Trigger:** When you have 3+ tools that need similar AI integration
 
 **Then consider:**
-1. Extract generic "findings-to-issue" formatter
-2. Create shared AI triage framework
+1. Extract generic "findings-to-issue" formatter (works with WPCC, PHPStan, ESLint)
+2. Create shared AI triage framework (if patterns emerge across tools)
 3. Build unified MCP server for multiple tools
 
 **Until then:** Keep features in WPCC where they belong.
@@ -181,13 +318,18 @@ Based on `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, AI-DDTK is envisioned as:
 **Answer:** ❌ **Do NOT port features to AI-DDTK**
 
 **Reasoning:**
-- Features are **WordPress-specific** and **WPCC-dependent**
-- AI-DDTK is a **recipe collection**, not a runtime tool
-- Current integration is **production-ready** and **well-documented**
-- Porting would create **fragmentation** without **value**
+1. **AI-DDTK already embeds WPCC** via git subtree - it's a distribution layer, not a separate codebase
+2. Features are **WordPress-specific** and **WPCC-dependent** - no standalone value
+3. **Git subtree model is correct** - WPCC is source of truth, AI-DDTK mirrors it
+4. Current architecture is **production-ready** and **well-designed**
+5. Porting would create **circular dependency** and **maintenance nightmare**
 
 **What to do instead:**
-- ✅ Keep features in WPCC
-- ✅ Create WPCC setup recipes for AI-DDTK (if it exists)
-- ✅ Revisit if you build 3+ tools needing similar AI integration
+- ✅ Keep all features in WPCC (MCP, AI Triage, GitHub Issues)
+- ✅ Update WPCC README to mention AI-DDTK as an installation option
+- ✅ Document the git subtree relationship for transparency
+- ✅ Users who want global `wpcc` command install AI-DDTK
+- ✅ Users who want standalone WPCC clone WPCC directly
+
+**The current architecture is excellent** - don't change it. 🎯
 
