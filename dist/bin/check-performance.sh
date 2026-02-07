@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.2.0
+# Version: 2.2.2
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
