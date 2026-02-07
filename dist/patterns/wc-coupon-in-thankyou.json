@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "added_in_scanner_version": "1.1.0",
   "enabled": true,
-  "detection_type": "direct",
+  "detection_type": "validated",
   "category": "reliability",
   "severity": "HIGH",
+  "validator": "dist/bin/validators/wc-coupon-thankyou-context-validator.sh",
   "title": "Coupon logic in WooCommerce thank-you/order-received context",
-  "description": "Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts. This is a reliability anti-pattern because the order is already complete and coupon operations should not be performed post-checkout.",
-  "rationale": "Running coupon logic (apply_coupon, remove_coupon, has_coupon checks) in the thank-you/order-received context is problematic because: (1) The order is already completed and paid, (2) Modifying coupons at this stage can cause data inconsistencies, (3) It may indicate logic that should have run during checkout, (4) Can cause unexpected side effects on completed orders. Coupon operations belong in cart/checkout contexts, not post-purchase.",
+  "description": "Detects coupon-related operations (apply_coupon, remove_coupon, WC_Coupon instantiation) in WooCommerce thank-you or order-received contexts. Uses context-aware validation to distinguish between problematic thank-you hooks and safe checkout hooks. Ignores commented-out code and functions hooked to safe contexts like woocommerce_checkout_order_processed.",
+  "rationale": "Running coupon logic (apply_coupon, remove_coupon, has_coupon checks) in the thank-you/order-received context is problematic because: (1) The order is already completed and paid, (2) Modifying coupons at this stage can cause data inconsistencies, (3) It may indicate logic that should have run during checkout, (4) Can cause unexpected side effects on completed orders. Coupon operations belong in cart/checkout contexts, not post-purchase. This pattern now validates the actual hook context to reduce false positives.",
   "detection": {
     "type": "multi_step_grep",
     "description": "Two-step detection: (1) Find files with thank-you/order-received context markers, (2) Search those files for coupon operations",
@@ -123,8 +124,10 @@
     "https://woocommerce.github.io/code-reference/hooks/hooks.html",
     "https://developer.woocommerce.com/docs/cart-and-checkout-blocks/checkout-flow-and-events/"
   ],
-  "notes": "This is a heuristic pattern with potential false positives. Displaying coupon information (read-only) on the thank-you page is acceptable. The concern is MODIFYING coupon state (apply/remove) or performing coupon validation logic post-purchase. Manual review recommended for flagged instances.",
+  "notes": "This pattern uses context-aware validation (v2.0.0) to significantly reduce false positives. The validator checks: (1) Whether the hook registration is commented out (dead code), (2) The actual hook name the function is registered to, (3) Whether the hook is in the safe list (checkout/cart hooks) or problematic list (thank-you/order-received hooks). Displaying coupon information (read-only) on the thank-you page is acceptable. The concern is MODIFYING coupon state (apply/remove) or performing coupon validation logic post-purchase.",
   "false_positive_scenarios": [
+    "Coupon operations in woocommerce_checkout_order_processed or other checkout hooks (now filtered by validator)",
+    "Commented-out debugging functions (now filtered by validator)",
     "Displaying used coupons for order confirmation (read-only)",
     "Showing 'next order' coupon code as a marketing message (not applying it)",
     "Logging/analytics that reference coupon data without modification"

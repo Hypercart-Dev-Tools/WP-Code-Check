@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # WP Code Check by Hypercart - Performance Analysis Script
-# Version: 2.0.15
+# Version: 2.2.4
 #
 # Fast, zero-dependency WordPress performance analyzer
 # Catches critical issues before they crash your site
@@ -66,6 +66,12 @@ source "$LIB_DIR/common-helpers.sh"
 # shellcheck source=dist/bin/lib/false-positive-filters.sh
 source "$LIB_DIR/false-positive-filters.sh"
 
+# shellcheck source=dist/bin/lib/ai-triage-backends.sh
+source "$LIB_DIR/ai-triage-backends.sh"
+
+# shellcheck source=dist/bin/lib/claude-triage.sh
+source "$LIB_DIR/claude-triage.sh"
+
 # shellcheck source=dist/lib/pattern-loader.sh
 source "$REPO_ROOT/lib/pattern-loader.sh"
 
@@ -75,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.0.14"
+SCRIPT_VERSION="2.2.4"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -141,6 +147,15 @@ EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
 DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
+
+# ============================================================
+# AI TRIAGE CONFIGURATION (Phase 1: Claude Code Integration)
+# ============================================================
+AI_TRIAGE=false              # Enable AI triage analysis
+AI_BACKEND="auto"            # Backend: auto|claude|fallback
+AI_TIMEOUT=300               # Timeout in seconds (default: 5 minutes)
+AI_MAX_FINDINGS=200          # Max findings to triage (default: 200)
+AI_VERBOSE=false             # Show AI triage progress
 
 # ============================================================
 # PHASE 1 STABILITY SAFEGUARDS (v1.0.82)
@@ -452,6 +467,15 @@ OPTIONS:
   --baseline <path>        Use custom baseline file path (default: .hcc-baseline)
   --ignore-baseline        Ignore baseline file even if present
   --enable-clone-detection Enable function clone detection (disabled by default for performance)
+
+AI TRIAGE OPTIONS:
+
+  --ai-triage              Enable AI-powered finding analysis (auto-detects backend)
+  --ai-backend <name>      Specify backend: claude|fallback (default: auto)
+  --ai-timeout <seconds>   AI analysis timeout in seconds (default: 300)
+  --ai-max-findings <n>    Max findings to analyze (default: 200)
+  --ai-verbose             Show AI triage progress and details
+
   --help                   Show this help message
 
 WHAT IT DETECTS:
@@ -488,6 +512,20 @@ EXAMPLES:
 
   # Use template for frequently-scanned projects
   wp-check --project woocommerce-subscriptions
+
+  # AI TRIAGE EXAMPLES:
+
+  # Auto-detect and run AI triage (uses Claude if available, falls back to built-in)
+  wp-check ~/my-plugin --ai-triage
+
+  # Explicit Claude backend with custom timeout
+  wp-check ~/my-plugin --ai-triage --ai-backend claude --ai-timeout 600
+
+  # With verbose output to see AI triage progress
+  wp-check ~/my-plugin --ai-triage --ai-verbose
+
+  # Limit AI analysis to top 50 findings
+  wp-check ~/my-plugin --ai-triage --ai-max-findings 50
 
   # CI/CD pipeline integration
   wp-check . --format json --strict --no-log || exit 1
@@ -807,6 +845,26 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --ai-triage)
+      AI_TRIAGE=true
+      shift
+      ;;
+    --ai-backend)
+      AI_BACKEND="$2"
+      shift 2
+      ;;
+    --ai-timeout)
+      AI_TIMEOUT="$2"
+      shift 2
+      ;;
+    --ai-max-findings)
+      AI_MAX_FINDINGS="$2"
+      shift 2
+      ;;
+    --ai-verbose)
+      AI_VERBOSE=true
+      shift
+      ;;
     --help)
       show_help
       exit 0
@@ -966,8 +1024,82 @@ detect_project_info() {
       project_type="fixture"
       project_name=$(basename "$scan_path")
     else
-      # Generic project
+      # Generic project - detect from package.json or file types
       project_name=$(basename "$scan_path")
+
+      # Check for package.json (Node.js/JS projects)
+      local pkg_json=""
+      if [ -f "$scan_path/package.json" ]; then
+        pkg_json="$scan_path/package.json"
+      elif [ -f "$(dirname "$scan_path")/package.json" ]; then
+        pkg_json="$(dirname "$scan_path")/package.json"
+      fi
+
+      if [ -n "$pkg_json" ]; then
+        # Build comma-separated type list from detected frameworks
+        local detected_types=""
+
+        # Base: it's a Node.js project
+        detected_types="nodejs"
+
+        # Detect TypeScript
+        if grep -qE '"typescript"|"ts-node"' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, typescript"
+        fi
+
+        # Detect React
+        if grep -qE '"react"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, react"
+        fi
+
+        # Detect Next.js (after React, as Next includes React)
+        if grep -qE '"next"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, nextjs"
+        fi
+
+        # Detect Vue.js
+        if grep -qE '"vue"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, vue"
+        fi
+
+        # Detect Nuxt (Vue's Next.js equivalent)
+        if grep -qE '"nuxt"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, nuxt"
+        fi
+
+        # Detect Express.js
+        if grep -qE '"express"[[:space:]]*:' "$pkg_json" 2>/dev/null; then
+          detected_types="$detected_types, express"
+        fi
+
+        project_type="$detected_types"
+
+        # Extract name/version from package.json if not already set
+        if [ "$project_name" = "Unknown" ] || [ -z "$project_name" ]; then
+          project_name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_version" ]; then
+          project_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_description" ]; then
+          project_description=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+        if [ -z "$project_author" ]; then
+          project_author=$(grep -o '"author"[[:space:]]*:[[:space:]]*"[^"]*"' "$pkg_json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        fi
+      elif [ -d "$scan_path" ]; then
+        # No package.json - detect by file presence
+        local has_js=$(find "$scan_path" -maxdepth 2 \( -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" \) -type f 2>/dev/null | head -1)
+        local has_php=$(find "$scan_path" -maxdepth 2 -name "*.php" -type f 2>/dev/null | head -1)
+
+        if [ -n "$has_js" ] && [ -n "$has_php" ]; then
+          project_type="php, javascript"
+        elif [ -n "$has_js" ]; then
+          project_type="javascript"
+        elif [ -n "$has_php" ]; then
+          project_type="php"
+        fi
+      fi
     fi
   fi
 
@@ -1136,6 +1268,8 @@ if [ "$ENABLE_LOGGING" = true ]; then
           theme) type_display_log="WordPress Theme" ;;
           fixture) type_display_log="Fixture Test" ;;
           unknown) type_display_log="Unknown" ;;
+          # New types pass through as-is (already descriptive, e.g., "nodejs, react, nextjs")
+          nodejs*|javascript*|php*|react*|vue*|typescript*) type_display_log="$PROJECT_TYPE_LOG" ;;
         esac
         echo "Type:             $type_display_log"
         if [ -n "$PROJECT_AUTHOR_LOG" ]; then
@@ -1575,6 +1709,8 @@ generate_html_report() {
       theme) type_display="WordPress Theme" ;;
       fixture) type_display="Fixture Test" ;;
       unknown) type_display="Unknown" ;;
+      # New types pass through as-is (already descriptive, e.g., "nodejs, react, nextjs")
+      nodejs*|javascript*|php*|react*|vue*|typescript*) type_display="$project_type" ;;
     esac
 
     project_info_html="<div style='font-size: 1.1em; font-weight: 600; margin-bottom: 5px;'>PROJECT INFORMATION</div>"
@@ -2965,11 +3101,18 @@ run_check() {
     text_echo "  PATHS: $PATHS"
   fi
 
-  # PERFORMANCE: Use cached file list instead of grep -r
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
-    result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+  # PERFORMANCE: Use cached file list instead of grep -r when available.
+  # When there are no PHP files (e.g., JS/Node-only projects), fall back
+  # to recursive grep over the original paths so JS/headless patterns
+  # still run.
+  if [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+    if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+      result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
+    else
+      result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+    fi
   else
-    result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
+    result=$(grep -rHn $EXCLUDE_ARGS $include_args $patterns "$PATHS" 2>/dev/null) || true
   fi
 
   if [ -n "$result" ]; then
@@ -3099,16 +3242,17 @@ else
   PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
 
   if [ "$PHP_FILE_COUNT" -eq 0 ]; then
+    # Relaxed PHP gate: it's valid to have JS/Node-only projects.
+    # We log for debugging but do not exit, so JS/Node/Headless checks can still run.
     debug_echo "No PHP files found in: $PATHS"
     rm -f "$PHP_FILE_LIST_CACHE"
-    echo "Error: No PHP files found in: $PATHS"
-    exit 1
+    PHP_FILE_LIST=""
+  else
+    debug_echo "Cached $PHP_FILE_COUNT PHP files"
+
+    # Export for use in grep commands
+    PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
   fi
-
-  debug_echo "Cached $PHP_FILE_COUNT PHP files"
-
-  # Export for use in grep commands
-  PHP_FILE_LIST="$PHP_FILE_LIST_CACHE"
 fi
 
 # Cleanup function to remove cache on exit
@@ -3198,13 +3342,28 @@ cached_grep() {
     fi
   done
 
-  # If single file mode, just use regular grep
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
-    grep -Hn "${grep_args[@]}" "$pattern" "$PHP_FILE_LIST" 2>/dev/null || true
-  else
+  # DEBUG: Uncomment to troubleshoot cached_grep issues (v2.2.3)
+  # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Using xargs mode with $PHP_FILE_COUNT files" >&2
+  # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Pattern: $pattern" >&2
+  # [ "${DEBUG_CACHED_GREP:-}" = "1" ] && echo "[DEBUG cached_grep] Args: ${grep_args[*]}" >&2
+
+  # If PATHS points to a single file, scan that file directly.
+  if [ -f "$PATHS" ]; then
+    grep -Hn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+  # If we have a cached PHP file list, use it; otherwise fall back to
+  # recursive grep on the original paths. This lets JS/Node-only repos
+  # (no PHP files) still be scanned safely without depending on the
+  # PHP_FILE_LIST cache.
+  elif [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
-    cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+    # FIX v2.2.3: Use null-delimited input (tr '\n' '\0') with xargs -0
+    # to handle file paths with spaces (e.g., "/Users/name/Local Sites/...")
+    # Without this, xargs splits on whitespace and grep fails to find files
+    tr '\n' '\0' < "$PHP_FILE_LIST" | xargs -0 grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+  else
+    # No PHP cache (e.g., JS-only project). Fall back to recursive grep.
+    grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
   fi
 }
 
@@ -3291,7 +3450,9 @@ SUPERGLOBAL_VISIBLE=""
 
 # Find all superglobal manipulation patterns
 # PERFORMANCE: Use cached file list instead of grep -r
-SUPERGLOBAL_MATCHES=$(cached_grep -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
+# NOTE: Explicitly restrict to PHP files so that documentation (e.g. .md) and
+# non-PHP assets are not scanned when running in JS-only or mixed repos.
+SUPERGLOBAL_MATCHES=$(cached_grep --include=*.php -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
   grep -v '//.*\$_' || true)
 
 if [ -n "$SUPERGLOBAL_MATCHES" ]; then
@@ -3457,7 +3618,16 @@ UNSANITIZED_VISIBLE=""
 # Note: We do NOT exclude isset/empty here because they don't sanitize - they only check existence
 # We'll filter those out in a more sophisticated way below
 # PERFORMANCE: Use cached file list instead of grep -r
-UNSANITIZED_MATCHES=$(cached_grep -E '\$_(GET|POST|REQUEST)\[' | \
+# NOTE: Restrict to PHP files explicitly; in JS-only repos the fallback path in
+# cached_grep will otherwise recurse into documentation and non-PHP assets.
+
+# DEBUG: Uncomment to troubleshoot unsanitized superglobal detection (v2.2.3)
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] Starting unsanitized superglobal detection..." >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] PATHS variable: $PATHS" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] PHP_FILE_COUNT: $PHP_FILE_COUNT" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] PHP_FILE_LIST: $PHP_FILE_LIST" >&2
+
+UNSANITIZED_MATCHES=$(cached_grep --include=*.php -E '\$_(GET|POST|REQUEST)\[' | \
   grep -v 'sanitize_' | \
   grep -v 'esc_' | \
   grep -v 'absint' | \
@@ -3467,6 +3637,10 @@ UNSANITIZED_MATCHES=$(cached_grep -E '\$_(GET|POST|REQUEST)\[' | \
   grep -v 'wp_unslash' | \
   grep -v '\$allowed_keys' | \
   grep -v '//.*\$_' || true)
+
+# DEBUG: Uncomment to see initial grep results (v2.2.3)
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] AFTER initial grep + sanitization filters:" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] Total matches: $(echo "$UNSANITIZED_MATCHES" | grep -c . || echo 0)" >&2
 
 # Now filter out lines where isset/empty is used ONLY to check existence (not followed by usage)
 # Pattern: isset($_GET['x']) ) { ... } with no further $_GET['x'] on the same line
@@ -3492,6 +3666,10 @@ UNSANITIZED_MATCHES=$(echo "$UNSANITIZED_MATCHES" | while IFS= read -r line; do
   # Otherwise, output the line (it's a potential violation)
   echo "$line"
 done || true)
+
+# DEBUG: Uncomment to see results after isset/empty filter (v2.2.3)
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] AFTER isset/empty filter:" >&2
+# [ "${DEBUG_UNSANITIZED:-}" = "1" ] && echo "[DEBUG] Line count: $(echo "$UNSANITIZED_MATCHES" | grep -c . || echo 0)" >&2
 
 if [ -n "$UNSANITIZED_MATCHES" ]; then
   while IFS= read -r match; do
@@ -5162,6 +5340,13 @@ if [ "$COUPON_THANKYOU_SEVERITY" = "MEDIUM" ] || [ "$COUPON_THANKYOU_SEVERITY" =
 
 text_echo "${BLUE}▸ WooCommerce coupon logic in thank-you context ${COUPON_THANKYOU_COLOR}[$COUPON_THANKYOU_SEVERITY]${NC}"
 
+COUPON_THANKYOU_VALIDATOR="$REPO_ROOT/bin/validators/wc-coupon-thankyou-context-validator.sh"
+COUPON_THANKYOU_VALIDATOR_AVAILABLE=false
+COUPON_THANKYOU_VALIDATOR_SUPPRESSED=0
+if [ -x "$COUPON_THANKYOU_VALIDATOR" ]; then
+  COUPON_THANKYOU_VALIDATOR_AVAILABLE=true
+fi
+
 # Step 1: Find files with thank-you/order-received context markers
 THANKYOU_CONTEXT_FILES=$(grep -rlE \
   '(add_action|do_action|apply_filters|add_filter)\([[:space:]]*['\''"]([a-z_]*woocommerce_thankyou[a-z_]*)['\''"]|is_order_received_page\(|is_wc_endpoint_url\([[:space:]]*['\''"]order-received['\''"]|woocommerce/checkout/(thankyou|order-received)\.php' \
@@ -5192,6 +5377,19 @@ if [ -n "$THANKYOU_CONTEXT_FILES" ]; then
           continue
         fi
 
+        # Apply context-aware validator when available.
+        # Exit 0 = confirmed issue, 1 = false positive, 2 = needs review.
+        if [ "$COUPON_THANKYOU_VALIDATOR_AVAILABLE" = true ]; then
+          validator_exit=0
+          "$COUPON_THANKYOU_VALIDATOR" "$file" "$line_num" >/dev/null 2>&1 || validator_exit=$?
+          if [ "$validator_exit" -eq 1 ]; then
+            ((COUPON_THANKYOU_VALIDATOR_SUPPRESSED++)) || true
+            continue
+          elif [ "$validator_exit" -eq 2 ]; then
+            code="[NEEDS REVIEW] $code"
+          fi
+        fi
+
         if ! should_suppress_finding "wc-coupon-in-thankyou" "$file"; then
           COUPON_THANKYOU_ISSUES="${COUPON_THANKYOU_ISSUES}${file}:${line_num}:${code}"$'\n'
           add_json_finding "wc-coupon-in-thankyou" "error" "$COUPON_THANKYOU_SEVERITY" "$file" "$line_num" "Coupon logic in thank-you/order-received context (should be in cart/checkout hooks)" "$code"
@@ -5212,10 +5410,16 @@ if [ "$COUPON_THANKYOU_FINDING_COUNT" -gt 0 ]; then
   fi
   if [ "$OUTPUT_FORMAT" = "text" ]; then
     echo "$COUPON_THANKYOU_ISSUES" | head -5
+    if [ "$COUPON_THANKYOU_VALIDATOR_SUPPRESSED" -gt 0 ]; then
+      text_echo "  ${BLUE}  (${COUPON_THANKYOU_VALIDATOR_SUPPRESSED} suppressed by validator)${NC}"
+    fi
   fi
   add_json_check "WooCommerce coupon logic in thank-you context" "$COUPON_THANKYOU_SEVERITY" "failed" "$COUPON_THANKYOU_FINDING_COUNT"
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
+  if [ "$OUTPUT_FORMAT" = "text" ] && [ "$COUPON_THANKYOU_VALIDATOR_SUPPRESSED" -gt 0 ]; then
+    text_echo "  ${BLUE}  (${COUPON_THANKYOU_VALIDATOR_SUPPRESSED} suppressed by validator)${NC}"
+  fi
   add_json_check "WooCommerce coupon logic in thank-you context" "$COUPON_THANKYOU_SEVERITY" "passed" 0
 fi
 text_echo ""
@@ -6063,9 +6267,23 @@ debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
     REPORTS_DIR="$PLUGIN_DIR/reports"
     mkdir -p "$REPORTS_DIR"
 
-    # Generate timestamped HTML report filename
+    # Generate timestamped HTML report filename with plugin slug
     REPORT_TIMESTAMP=$(timestamp_filename)
-    HTML_REPORT="$REPORTS_DIR/$REPORT_TIMESTAMP.html"
+
+    # Extract plugin/theme name from JSON and create 4-char slug
+    PLUGIN_SLUG=""
+    if [ -f "$LOG_FILE" ]; then
+      PLUGIN_NAME=$(jq -r '.project.name // empty' "$LOG_FILE" 2>/dev/null)
+      if [ -n "$PLUGIN_NAME" ]; then
+        # Convert to lowercase, take first 4 chars of first word
+        PLUGIN_SLUG=$(echo "$PLUGIN_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g' | cut -c1-4)
+        if [ -n "$PLUGIN_SLUG" ]; then
+          PLUGIN_SLUG="-${PLUGIN_SLUG}"
+        fi
+      fi
+    fi
+
+    HTML_REPORT="$REPORTS_DIR/${REPORT_TIMESTAMP}${PLUGIN_SLUG}.html"
 
 	    # Generate the HTML report using standalone Python converter
 	    # This is more reliable than the inline bash function
@@ -6102,6 +6320,37 @@ debug_echo "Generating output (format=$OUTPUT_FORMAT)..."
 	        debug_echo "HTML report generation skipped (python3 not found, no TTY available)"
 	      fi
 	    fi
+  fi
+
+  # ============================================================
+  # AI TRIAGE INTEGRATION (Phase 1: Claude Code)
+  # ============================================================
+  # Run AI triage if enabled and JSON log exists
+  if [ "$AI_TRIAGE" = "true" ] && [ -f "$LOG_FILE" ]; then
+    if [ -w /dev/tty ] 2>/dev/null; then
+      echo "" > /dev/tty
+      echo "🤖 Running AI triage analysis..." > /dev/tty
+    fi
+
+    # Run AI triage (auto-detects backend or uses specified)
+    if run_ai_triage "$LOG_FILE" "$AI_BACKEND" "$AI_TIMEOUT" "$AI_MAX_FINDINGS"; then
+      if [ -w /dev/tty ] 2>/dev/null; then
+        echo "📝 Regenerating HTML report with AI triage..." > /dev/tty
+      fi
+
+      # Regenerate HTML with AI triage data
+      if command -v python3 &> /dev/null; then
+        if [ -w /dev/tty ] 2>/dev/null; then
+          "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/tty 2>&1
+        else
+          "$SCRIPT_DIR/json-to-html.py" "$LOG_FILE" "$HTML_REPORT" > /dev/null 2>&1
+        fi
+      fi
+    else
+      if [ -w /dev/tty ] 2>/dev/null; then
+        echo "⚠️  AI triage failed or unavailable (continuing without AI analysis)" > /dev/tty
+      fi
+    fi
   fi
 else
   # Summary (text mode)

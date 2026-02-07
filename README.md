@@ -38,14 +38,14 @@ cd WP-Code-Check
 ./install.sh
 
 # Then just:
-wp-check ~/my-plugin
+wpcc ~/my-plugin
 ```
 
 **Features for shell users:**
 - ✅ Automated installation with `install.sh`
 - ✅ Tab completion for all options
-- ✅ `wp-check init` - Interactive setup wizard
-- ✅ `wp-check update` - Easy updates
+- ✅ `wpcc` primary alias (with `wp-check` for backward compatibility)
+- ✅ AI-powered triage with `--ai-triage` flag
 - ✅ Enhanced `--help` with examples
 
 **Time to first scan: 30 seconds** (vs. 5 minutes manual setup)
@@ -91,7 +91,13 @@ See [AI Instructions](dist/TEMPLATES/_AI_INSTRUCTIONS.md) for the complete end-t
 git clone https://github.com/Hypercart-Dev-Tools/WP-Code-Check.git
 cd WP-Code-Check
 
-# Run against your WordPress plugin/theme
+# Run installer (sets up wpcc and wp-check aliases)
+./install.sh
+
+# Then use the wpcc command
+wpcc /path/to/your/plugin
+
+# Or use the full path
 ./dist/bin/check-performance.sh --paths /path/to/your/plugin
 ```
 
@@ -228,6 +234,102 @@ Validate findings and identify false positives with AI assistance:
 4. Optionally create GitHub issue with confirmed findings
 
 See [AI Instructions - Phase 2](dist/TEMPLATES/_AI_INSTRUCTIONS.md#phase-2-ai-assisted-triage) for detailed triage workflow and common false positive patterns.
+
+### 🚀 **AI Triage CLI - Automated Analysis**
+
+Run AI-powered triage directly from the command line with Claude Code integration:
+
+```bash
+# Basic usage - auto-detect and run AI triage
+wpcc ~/my-plugin --ai-triage
+
+# Explicit Claude backend with custom timeout
+wpcc ~/my-plugin --ai-triage --ai-backend claude --ai-timeout 600
+
+# With verbose output to see progress
+wpcc ~/my-plugin --ai-triage --ai-verbose
+
+# Limit AI analysis to top 50 findings
+wpcc ~/my-plugin --ai-triage --ai-max-findings 50
+
+# Combine with other options
+wpcc ~/my-plugin --format json --ai-triage --ai-verbose
+```
+
+**New CLI Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--ai-triage` | Enable AI-powered finding analysis | Disabled |
+| `--ai-backend <name>` | Backend: `claude` or `fallback` | `auto` (detect) |
+| `--ai-timeout <seconds>` | AI analysis timeout | `300` |
+| `--ai-max-findings <n>` | Max findings to analyze | `200` |
+| `--ai-verbose` | Show AI triage progress | Disabled |
+
+**How It Works:**
+
+1. **Deterministic Scan** - WP Code Check runs the standard pattern-based analysis
+2. **AI Triage** - If `--ai-triage` enabled:
+   - Detects available backends (Claude Code CLI, fallback)
+   - Sends findings to Claude for classification
+   - Falls back to built-in `ai-triage.py` if Claude unavailable
+3. **JSON Update** - AI results injected into JSON log with `ai_triage` section
+4. **HTML Regeneration** - Report automatically regenerated with AI analysis
+
+**Features:**
+
+- ✅ **Claude Code Integration** - Uses Claude Code CLI for advanced analysis (if available)
+- ✅ **Graceful Fallback** - Automatically falls back to built-in Python triage if Claude unavailable
+- ✅ **Timeout Handling** - Prevents hanging on slow AI analysis (configurable)
+- ✅ **JSON Persistence** - AI results saved in JSON log for reproducibility
+- ✅ **Automatic HTML Update** - Reports include AI classification and confidence scores
+- ✅ **Extensible Architecture** - Ready for OpenAI, Ollama, and custom backends
+
+**Example Output:**
+
+```json
+{
+  "ai_triage": {
+    "triaged_findings": [
+      {
+        "finding_key": {"id": "unbounded-query", "file": "query.php", "line": 45},
+        "classification": "Confirmed",
+        "confidence": "high",
+        "rationale": "posts_per_page => -1 will fetch all posts without limit"
+      }
+    ],
+    "summary": {
+      "confirmed_issues": 8,
+      "false_positives": 2,
+      "needs_review": 1,
+      "confidence_level": "high"
+    },
+    "recommendations": [
+      "Priority 1: Fix unbounded queries (8 issues)",
+      "Priority 2: Review capability checks (1 issue)"
+    ]
+  }
+}
+```
+
+**Requirements:**
+
+- **For Claude backend:** Claude Code CLI v1.0.88+ installed (`claude --version`)
+- **For fallback:** Built-in `ai-triage.py` (always available)
+
+**Troubleshooting:**
+
+```bash
+# Check if Claude CLI is available
+command -v claude && echo "Claude CLI found" || echo "Claude CLI not found"
+
+# Check Claude version
+claude --version
+
+# If Claude unavailable, fallback will be used automatically
+# To force fallback explicitly:
+wpcc ~/my-plugin --ai-triage --ai-backend fallback
+```
 
 ### 🎫 **GitHub Issue Creation**
 

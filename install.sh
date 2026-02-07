@@ -87,31 +87,35 @@ fi
 echo -e "${GREEN}✓ Scripts are now executable${NC}"
 echo ""
 
-# Offer to add alias
+# Offer to add aliases
 echo -e "${BLUE}[2/5]${NC} Shell alias configuration"
 echo ""
 
 ALIAS_ADDED=false
 if [ "$INTERACTIVE" = true ]; then
   # Interactive mode - ask user
-  echo "Would you like to add a 'wp-check' alias to your shell?"
-  echo "This will add the following line to $SHELL_RC:"
+  echo "Would you like to add shell aliases for WP Code Check?"
+  echo "This will add the following lines to $SHELL_RC:"
   echo ""
+  echo -e "${YELLOW}  alias wpcc='$INSTALL_DIR/dist/bin/check-performance.sh --paths'${NC}"
   echo -e "${YELLOW}  alias wp-check='$INSTALL_DIR/dist/bin/check-performance.sh --paths'${NC}"
   echo ""
-  read -p "Add alias? (y/n) " -n 1 -r
+  echo "(wpcc = primary branding, wp-check = legacy compatibility)"
+  echo ""
+  read -p "Add aliases? (y/n) " -n 1 -r
   echo ""
 
   if [[ $REPLY =~ ^[Yy]$ ]]; then
-    # Check if alias already exists
-    if grep -q "alias wp-check=" "$SHELL_RC" 2>/dev/null; then
-      echo -e "${YELLOW}⚠ Alias 'wp-check' already exists in $SHELL_RC${NC}"
+    # Check if aliases already exist
+    if grep -q "alias wpcc=" "$SHELL_RC" 2>/dev/null; then
+      echo -e "${YELLOW}⚠ Alias 'wpcc' already exists in $SHELL_RC${NC}"
       echo "Skipping alias creation."
     else
       echo "" >> "$SHELL_RC"
-      echo "# WP Code Check alias (added by install.sh on $(date +%Y-%m-%d))" >> "$SHELL_RC"
+      echo "# WP Code Check aliases (added by install.sh on $(date +%Y-%m-%d))" >> "$SHELL_RC"
+      echo "alias wpcc='$INSTALL_DIR/dist/bin/check-performance.sh --paths'" >> "$SHELL_RC"
       echo "alias wp-check='$INSTALL_DIR/dist/bin/check-performance.sh --paths'" >> "$SHELL_RC"
-      echo -e "${GREEN}✓ Alias added to $SHELL_RC${NC}"
+      echo -e "${GREEN}✓ Aliases added to $SHELL_RC${NC}"
       ALIAS_ADDED=true
     fi
   else
@@ -121,15 +125,16 @@ if [ "$INTERACTIVE" = true ]; then
     echo -e "${YELLOW}  $INSTALL_DIR/dist/bin/check-performance.sh --paths <directory>${NC}"
   fi
 else
-  # Non-interactive mode - auto-add alias
-  echo "Non-interactive mode detected. Auto-configuring alias..."
-  if grep -q "alias wp-check=" "$SHELL_RC" 2>/dev/null; then
-    echo -e "${YELLOW}⚠ Alias 'wp-check' already exists in $SHELL_RC${NC}"
+  # Non-interactive mode - auto-add aliases
+  echo "Non-interactive mode detected. Auto-configuring aliases..."
+  if grep -q "alias wpcc=" "$SHELL_RC" 2>/dev/null; then
+    echo -e "${YELLOW}⚠ Alias 'wpcc' already exists in $SHELL_RC${NC}"
   else
     echo "" >> "$SHELL_RC"
-    echo "# WP Code Check alias (added by install.sh on $(date +%Y-%m-%d))" >> "$SHELL_RC"
+    echo "# WP Code Check aliases (added by install.sh on $(date +%Y-%m-%d))" >> "$SHELL_RC"
+    echo "alias wpcc='$INSTALL_DIR/dist/bin/check-performance.sh --paths'" >> "$SHELL_RC"
     echo "alias wp-check='$INSTALL_DIR/dist/bin/check-performance.sh --paths'" >> "$SHELL_RC"
-    echo -e "${GREEN}✓ Alias added to $SHELL_RC${NC}"
+    echo -e "${GREEN}✓ Aliases added to $SHELL_RC${NC}"
     ALIAS_ADDED=true
   fi
 fi
@@ -142,8 +147,8 @@ echo ""
 
 if [ "$INTERACTIVE" = true ]; then
   # Interactive mode - ask user
-  echo "Would you like to enable tab completion for wp-check?"
-  echo "This allows you to press TAB to complete options like --format, --paths, etc."
+  echo "Would you like to enable tab completion for wpcc/wp-check?"
+  echo "This allows you to press TAB to complete options like --format, --paths, --ai-triage, etc."
   echo ""
   read -p "Enable tab completion? (y/n) " -n 1 -r
   echo ""
