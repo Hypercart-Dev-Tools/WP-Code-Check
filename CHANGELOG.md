@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-02-07
+
+### Fixed
+
+#### Detection Gap: File Paths with Spaces in cached_grep
+
+- **Issue:** All security patterns using `cached_grep` (including `unsanitized-superglobal-read`) failed to detect violations in files with spaces in their paths (e.g., `/Users/name/Local Sites/project/file.php`)
+- **Root Cause:** The `cached_grep` function used `xargs` without null-delimited input, causing it to split file paths on whitespace. When scanning `/Users/name/Local Sites/...`, xargs would split this into `/Users/name/Local` and `Sites/...`, causing grep to fail silently with "No such file or directory"
+- **Impact:** Complete detection failure for any WordPress installation in directories with spaces (common with Local by Flywheel, MAMP, and other local dev tools)
+- **Fix:** Modified `cached_grep` to use `tr '\n' '\0' | xargs -0` for null-delimited input, ensuring file paths with spaces are handled correctly
+- **Files Changed:**
+  - `dist/bin/check-performance.sh` (line 3354): Changed `cat "$PHP_FILE_LIST" | xargs grep` to `tr '\n' '\0' < "$PHP_FILE_LIST" | xargs -0 grep`
+- **Affected Patterns:** All patterns using `cached_grep` (44+ patterns including unsanitized superglobal reads, SQL injection detection, admin capability checks, etc.)
+- **Lessons Learned:**
+  - Always test with file paths containing spaces, especially for tools targeting local WordPress development
+  - `xargs` default behavior (splitting on whitespace) is unsafe for file paths; always use `-0` with null-delimited input
+  - Silent failures in grep pipelines can mask critical bugs; consider adding validation checks for empty results in critical detection paths
+
 ## [2.2.2] - 2026-02-07
 
 ### Added
