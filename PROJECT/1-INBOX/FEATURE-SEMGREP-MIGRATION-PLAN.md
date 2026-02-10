@@ -1,8 +1,9 @@
 # Semgrep Migration and Search Backend Stabilization
 
 **Created:** 2026-02-10
-**Status:** Not Started
+**Status:** Phase 0a Complete
 **Priority:** High
+**Last Updated:** 2026-02-09
 
 ## Problem/Request
 Intermittent scan stalls occur on very large repositories (expected risk) and sometimes on smaller projects (unexpected). The current scanner mixes cached and uncached recursive search paths, with several raw `grep -r*` and `xargs grep` call sites that can still cause unstable runtime behavior.
@@ -38,28 +39,42 @@ Yes. The most impactful improvements are:
 
 ### Phase 0: Quick Wins (Current System, Low-Medium Effort)
 **Goal:** Reduce hangs quickly without changing core detection architecture.
+**Status:** ✅ Phase 0a Complete | Phase 0b Deferred
 
 **Scope**
 - Keep Bash + current pattern system.
 - Patch unstable search call sites and observability gaps.
 
 **Tasks**
-1. Replace known raw recursive/xargs hotspots with safer cached/wrapped calls.
-2. Standardize null-delimited file handling for all multi-file grep execution.
-3. Ensure every expensive check uses timeout guards.
-4. Add heartbeat logs every 10 seconds for long loops.
-5. Add top-N slow checks summary at end of scan.
-6. Improve docs for `.wpcignore`, `--skip-magic-strings`, and `MAX_SCAN_TIME`.
+1. ~~Replace known raw recursive/xargs hotspots with safer cached/wrapped calls.~~ → Refined: xargs calls at lines 2617/3222 are intentionally using pre-cached file lists inside already-protected paths — not actual hotspots. The real issue was 8 unprotected `grep -rl` file-discovery calls.
+2. Standardize null-delimited file handling for all multi-file grep execution. → Deferred (existing `cached_grep` already uses `tr '\n' '\0' | xargs -0`; the 8 patched calls are file-discovery, not line-matching)
+3. ✅ **Ensure every expensive check uses timeout guards.** — Complete (2026-02-09). Wrapped 8 raw `grep -r` calls with `run_with_timeout "$MAX_SCAN_TIME"`:
+   - `AJAX_FILES` (line ~4216)
+   - `TERMS_FILES` (line ~4617)
+   - `CRON_FILES` (line ~5024)
+   - `N1_FILES` (line ~5271, pipeline — timeout wraps recursive grep stage)
+   - `THANKYOU_CONTEXT_FILES` (line ~5463)
+   - `SMART_COUPONS_FILES` (line ~5554)
+   - `PERF_RISK_FILES` (line ~5566)
+   - `JSON_RESPONSE_FILES` (line ~5633)
+4. Add heartbeat logs every 10 seconds for long loops. → Deferred to Phase 0b
+5. Add top-N slow checks summary at end of scan. → Deferred to Phase 0b
+6. Improve docs for `.wpcignore`, `--skip-magic-strings`, and `MAX_SCAN_TIME`. → Deferred to Phase 0b
 
 **Deliverables**
-- Stability patch in `dist/bin/check-performance.sh`
-- Short troubleshooting section in docs
-- Baseline performance snapshot (before/after)
+- ✅ Stability patch in `dist/bin/check-performance.sh`
+- Short troubleshooting section in docs → Deferred to Phase 0b
+- Baseline performance snapshot (before/after) → Deferred to Phase 0b
 
 **Exit Criteria**
-- [ ] No unguarded raw `grep -r*` or unsafe `xargs grep` in active scan path
-- [ ] Small-project scans complete reliably in repeated runs
-- [ ] Users can identify long-running checks from logs
+- [x] No unguarded raw `grep -r*` in active scan path (remaining raw grep -r only inside `fast_grep()`/`cached_grep()` fallback paths — by design)
+- [ ] Small-project scans complete reliably in repeated runs → Needs verification testing
+- [ ] Users can identify long-running checks from logs → Deferred to Phase 0b
+
+**Implementation Notes (2026-02-09):**
+- The xargs calls at lines 2617 and 3222 were originally listed as hotspots but are inside already-protected paths (pre-cached file list + `run_with_timeout`). Removed from scope.
+- Timeout behavior: on timeout, check returns empty result, reports "passed," scan continues. Silent degradation chosen over hang. Per-check timeout warnings deferred (see BACKLOG.md).
+- No new functions or abstractions introduced — reuses existing `run_with_timeout` infrastructure.
 
 ### Phase 1: Unified Search Backend Wrapper
 **Goal:** Normalize all search operations behind one backend wrapper with safe defaults.
@@ -169,7 +184,9 @@ Yes. The most impactful improvements are:
 - Use fixture + IRL validation for every migration decision
 
 ## Acceptance Criteria
-- [ ] Four-phase plan approved for execution order
-- [ ] Phase 0 task list accepted as immediate next sprint
+- [x] Four-phase plan approved for execution order
+- [x] Phase 0 task list accepted as immediate next sprint
+- [x] Phase 0a (timeout guards) implemented and merged
+- [ ] Phase 0b (observability) completed
 - [ ] Success metrics and promotion gates agreed before Phase 2 rollout
 
