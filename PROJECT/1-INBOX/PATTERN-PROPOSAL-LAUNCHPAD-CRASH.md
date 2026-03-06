@@ -101,16 +101,16 @@ Instead, split the incident into **generalized reliability rules** that improve 
 ## Rollout Checklist
 
 ### Phase 1: `nonstandard-wordpress-translation-alias`
-- [ ] Confirm the Launchpad incident will be decomposed into generalized rules, not a single crash detector
-- [ ] Approve `nonstandard-wordpress-translation-alias` as the first implementation target
-- [ ] Create pattern JSON (`dist/patterns/nonstandard-wordpress-translation-alias.json`)
-- [ ] Create test fixtures with bad/good examples
-  - [ ] `_()` call inside an `acf_add_local_field()` label array (the exact IRL crash shape)
-  - [ ] Generic standalone `_('some string')` call as a baseline case
-  - [ ] Valid `__()` / `esc_html__()` / `esc_attr__()` calls that should not flag
-- [ ] Add remediation guidance explaining preferred WordPress i18n helpers
+- [x] Confirm the Launchpad incident will be decomposed into generalized rules, not a single crash detector
+- [x] Approve `nonstandard-wordpress-translation-alias` as the first implementation target
+- [x] Create pattern JSON (`dist/patterns/nonstandard-wordpress-translation-alias.json`)
+- [x] Create test fixtures with bad/good examples
+  - [x] `_()` call inside an `acf_add_local_field()` label array (the exact IRL crash shape)
+  - [x] Generic standalone `_('some string')` call as a baseline case
+  - [x] Valid `__()` / `esc_html__()` / `esc_attr__()` calls that should not flag
+- [x] Add remediation guidance explaining preferred WordPress i18n helpers
 - [ ] Register pattern and verify tests pass
-- [ ] Update CHANGELOG
+- [x] Update CHANGELOG
 
 ### Phase 2: `bootstrap-query-or-hydration-at-file-scope`
 - [ ] Decide whether this belongs under `reliability` or `performance`

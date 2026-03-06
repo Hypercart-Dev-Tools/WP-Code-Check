@@ -149,3 +149,19 @@ function get_custom_data_good() {
     );
 }
 
+// ============================================================
+// GOOD: WordPress-native translation helpers (should NOT warn)
+// ============================================================
+
+function safe_translation_function_ok() {
+    return __( 'Launchpad Title', 'launchpad' );
+}
+
+function safe_html_translation_ok() {
+    return esc_html__( 'Visible label', 'launchpad' );
+}
+
+function safe_attr_translation_ok() {
+    return esc_attr__( 'Panel title', 'launchpad' );
+}
+

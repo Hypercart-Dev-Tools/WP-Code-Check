@@ -123,9 +123,9 @@ parse_json_output() {
 # Updated 2026-01-10: Increased from 6 to 9 errors due to additional wpdb->prepare() checks
 # Updated 2026-01-15: Increased from 9 to 10 errors due to simple pattern runner (unbounded-posts-per-page, nopaging-true, order-by-rand, unbounded-numberposts)
 ANTIPATTERNS_EXPECTED_ERRORS=10
-# Updated 2026-01-10: Warnings now 3 (was 4)
-ANTIPATTERNS_EXPECTED_WARNINGS_MIN=3
-ANTIPATTERNS_EXPECTED_WARNINGS_MAX=3
+# Updated 2026-03-06: Warnings now 4 (was 3) due to nonstandard-wordpress-translation-alias simple pattern
+ANTIPATTERNS_EXPECTED_WARNINGS_MIN=4
+ANTIPATTERNS_EXPECTED_WARNINGS_MAX=4
 
 # clean-code.php - Should pass with minimal warnings
 # Updated 2026-01-10: Now detects 1 error (wpdb->prepare() check)

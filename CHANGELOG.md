@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Phase 1 `nonstandard-wordpress-translation-alias` reliability rule
+  - Detects non-standard `_()` translation alias usage in PHP files
+  - Recommends WordPress-native helpers like `__()`, `esc_html__()`, and `esc_attr__()` based on output context
+  - Adds fixture coverage for both the ACF-style Launchpad-shaped case and a standalone baseline `_()` call
+  - Adds safe fixture coverage proving standard WordPress i18n helpers do not trigger the rule
+
 ### Documentation
 
 - Added `PROJECT/1-INBOX/PATTERN-PROPOSAL-LAUNCHPAD-CRASH.md`

@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.2.6"
+SCRIPT_VERSION="2.2.7"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -2571,6 +2571,41 @@ process_aggregated_pattern() {
   local min_files=$(grep '"min_distinct_files"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
   local min_matches=$(grep '"min_total_matches"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
   local capture_group=$(grep '"capture_group"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local exclude_file_globs=""
+  local exclude_line_patterns=""
+  local current_exclusion_block=""
+
+  while IFS= read -r json_line; do
+    case "$json_line" in
+      *'"exclude_files"'*)
+        current_exclusion_block="exclude_files"
+        continue
+        ;;
+      *'"exclude_patterns"'*)
+        current_exclusion_block="exclude_patterns"
+        continue
+        ;;
+    esac
+
+    if [ -n "$current_exclusion_block" ]; then
+      if echo "$json_line" | grep -q ']'; then
+        current_exclusion_block=""
+        continue
+      fi
+
+      local exclusion_value
+      exclusion_value=$(echo "$json_line" | sed -n 's/^[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p')
+      if [ -n "$exclusion_value" ]; then
+        if [ "$current_exclusion_block" = "exclude_files" ]; then
+          exclude_file_globs="${exclude_file_globs}${exclusion_value}
+"
+        else
+          exclude_line_patterns="${exclude_line_patterns}${exclusion_value}
+"
+        fi
+      fi
+    fi
+  done < "$pattern_file"
 
   # Defaults
   [ -z "$min_files" ] && min_files=3
@@ -2614,11 +2649,11 @@ process_aggregated_pattern() {
     local escaped_pattern
     if command -v printf >/dev/null 2>&1 && printf %q "test" >/dev/null 2>&1; then
       escaped_pattern=$(printf %q "$pattern_search")
-      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E $escaped_pattern 2>/dev/null") || grep_exit_code=$?
+      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "tr '\n' '\0' < '$PHP_FILE_LIST' | xargs -0 grep -Hn $include_args -E $escaped_pattern 2>/dev/null") || grep_exit_code=$?
     else
       # Bash 3 fallback: escape single quotes manually
       escaped_pattern=$(echo "$pattern_search" | sed "s/'/'\\\\''/g")
-      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E '$escaped_pattern' 2>/dev/null") || grep_exit_code=$?
+      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "tr '\n' '\0' < '$PHP_FILE_LIST' | xargs -0 grep -Hn $include_args -E '$escaped_pattern' 2>/dev/null") || grep_exit_code=$?
     fi
   fi
 

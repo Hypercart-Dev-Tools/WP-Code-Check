@@ -402,3 +402,28 @@ function merge_results_good() {
     return array_merge( ...$chunks );  // ✓ Single merge operation
 }
 
+// ============================================================
+// WARNING: Non-standard translation alias `_()` (should WARN)
+// ============================================================
+
+/**
+ * Antipattern 21: `_()` inside ACF field registration
+ * Risk: Non-standard WordPress i18n alias in bootstrap-style configuration
+ */
+function launchpad_acf_label_alias_bad() {
+    acf_add_local_field( array(
+        'key'   => 'field_launchpad_title',
+        'label' => _( 'Launchpad Title', 'launchpad' ),
+        'name'  => 'launchpad_title',
+        'type'  => 'text',
+    ) );
+}
+
+/**
+ * Antipattern 22: Standalone `_()` baseline case
+ * Risk: Ambiguous/non-standard translation helper in WordPress PHP
+ */
+function generic_translation_alias_bad() {
+    return _( 'Settings saved', 'launchpad' );
+}
+
