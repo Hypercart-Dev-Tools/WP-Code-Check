@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Added `PROJECT/1-INBOX/PATTERN-PROPOSAL-LAUNCHPAD-CRASH.md`
+  - Captures the plan for converting the Launchpad crash lessons into generalized WPCC anti-pattern proposals
+  - Recommends against a single environment-specific "crash detector"
+  - Prioritizes `_()` alias detection first, bootstrap/file-scope side-effect detection second, and attribute-context helper misuse as experimental follow-up
+
 ### Fixed
 
 #### Phase 0: Timeout Guards for Unprotected Recursive Grep Calls
