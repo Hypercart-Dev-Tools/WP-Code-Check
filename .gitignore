@@ -6,9 +6,7 @@
 # ============================================
 
 # Log files from scans (may contain file paths and code snippets)
-dist/logs/*.log
-dist/logs/*.json
-!dist/logs/.gitkeep
+dist/logs/
 
 # HTML reports from scans (may contain proprietary code)
 dist/reports/*.html
