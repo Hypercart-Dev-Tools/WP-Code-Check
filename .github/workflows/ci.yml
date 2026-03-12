@@ -12,8 +12,8 @@
 #
 # TRIGGERS:
 #   - Pull requests to main/development branches
+#   - Push to development branch (for CI monitoring/iteration)
 #   - Manual runs via workflow_dispatch
-#   - Does NOT run on push to reduce CI noise
 #
 # DO NOT create additional workflow files for:
 #   - Slack notifications (already integrated here)
@@ -27,12 +27,15 @@
 #   - Removed: performance-audit-slack.yml
 #   - Removed: performance-audit-slack-on-failure.yml
 #   - Kept: ci.yml (this file) with all functionality merged
-#   - Triggers: Only on PRs (not on push) to reduce CI noise
+#   - Triggers: PRs + push to development (for CI iteration)
 #
 # ============================================================================
 name: CI
 
 on:
+  push:
+    branches:
+      - development
   pull_request:
     branches:
       - main
