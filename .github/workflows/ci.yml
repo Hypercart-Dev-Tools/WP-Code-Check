@@ -12,7 +12,7 @@
 #
 # TRIGGERS:
 #   - Pull requests to main/development branches
-#   - Push to development branch (for CI monitoring/iteration)
+#   - Push to main or development branches
 #   - Manual runs via workflow_dispatch
 #
 # DO NOT create additional workflow files for:
@@ -35,6 +35,7 @@ name: CI
 on:
   push:
     branches:
+      - main
       - development
   pull_request:
     branches:
