@@ -47,14 +47,14 @@ concurrency:
 jobs:
   performance-checks:
     name: Performance Checks
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install jq (for JSON processing and Slack)
-        run: sudo apt-get update && sudo apt-get install -y jq
+        run: command -v jq >/dev/null 2>&1 || brew install jq
 
       - name: Make scripts executable
         run: |
