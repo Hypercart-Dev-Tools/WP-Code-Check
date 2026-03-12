@@ -51,6 +51,7 @@ jobs:
   performance-checks:
     name: Performance Checks
     runs-on: macos-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -71,10 +72,14 @@ jobs:
           echo "Running performance audit on toolkit repository..."
 
           # Run in JSON mode for Slack integration
+          # --skip-magic-strings: prevents CI hang (Magic String Detector times out on large repos)
+          # --paths "dist/bin dist/lib": skip test fixtures which contain intentional antipatterns
           ./dist/bin/check-performance.sh \
-            --paths "." \
+            --paths "dist/bin dist/lib" \
             --format json \
             --strict \
+            --skip-magic-strings \
+            --no-log \
             > audit-results.json && EXIT_CODE=0 || EXIT_CODE=$?
 
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
