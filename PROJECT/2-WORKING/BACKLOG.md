@@ -1,5 +1,20 @@
 # Backlog - Issues to Investigate
 
+## 2026-02-09
+
+### Deferred from Phase 0 (Semgrep Migration Plan)
+
+Phase 0a (timeout guards) is complete. The following items were scoped out and deferred:
+
+- [ ] **Phase 0b: Observability** — Add heartbeat logs every 10s for long-running check loops; add top-N slow checks summary at end of scan. Not required for stability, but improves debugging when scans are slow.
+- [ ] **Phase 1: Unified Search Backend Wrapper** — Create a single file-discovery wrapper (like `cached_grep` but for `grep -rl` operations). Currently the 8 protected calls still use raw `grep -r` with timeout — they work but don't benefit from the cached PHP file list. A `cached_file_search` function could route file-discovery through the pre-built cache for 10-50x speedup on those checks. Only pursue if post-Phase-0 profiling shows these checks are still slow in practice.
+- [ ] **Timeout wrapping inside `fast_grep()` / `cached_grep()` fallback paths** — Lines 3225, 3423, 3478 use raw `grep -r` as fallback when no PHP file cache exists (e.g., JS-only projects). These are low-risk (only triggered without cache) but could be wrapped for completeness.
+- [ ] **Per-check timeout warnings** — Currently, if a check times out, the result is silently empty (check passes). Adding a user-visible `⚠ Check timed out` message (like the aggregated pattern handler at line ~2627) would improve transparency. Deferred to avoid duplicating timeout detection logic at 8 sites; a helper function would be cleaner.
+
+See: `PROJECT/1-INBOX/FEATURE-SEMGREP-MIGRATION-PLAN.md` for Phase 2 (Semgrep pilot) and Phase 3 (production promotion).
+
+---
+
 ## 2026-01-27
 
 - [x]  Add System CLI support

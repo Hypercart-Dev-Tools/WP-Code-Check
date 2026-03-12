@@ -146,6 +146,7 @@ wpcc --features  # See all available features
 | **Playwright integration** | Browser automation for E2E tests | Visual regression testing |
 | **Fix-Iterate Loop** | Autonomous test-verify-fix pattern | AI-driven debugging workflow |
 | **PHPStan recipes** | WordPress/WooCommerce setup guides | Static analysis integration |
+| **Tmux shell wrapper** | `aiddtk-tmux` for resilient agent sessions | Prevents shell timeouts on long scans |
 | **One-command updates** | `./install.sh update-wpcc` | Always get latest WPCC |
 
 **Key Benefits:**
@@ -700,6 +701,7 @@ AI-DDTK is a centralized toolkit that embeds WP Code Check (via git subtree) alo
 - **Additional Tools** - local-wp (WP-CLI wrapper), WP AJAX Test, Playwright integration
 - **One-Command Updates** - `./install.sh update-wpcc` pulls latest WPCC
 - **Workflow Patterns** - Fix-Iterate Loop, PHPStan recipes, and more
+- **Tmux Shell Wrapper** - Optional `aiddtk-tmux` command for resilient terminal sessions during long-running scans or multi-step AI triage workflows, preventing shell timeouts and lost output
 
 **How It Works:**
 

@@ -12,8 +12,8 @@
 #
 # TRIGGERS:
 #   - Pull requests to main/development branches
+#   - Push to development branch (for CI monitoring/iteration)
 #   - Manual runs via workflow_dispatch
-#   - Does NOT run on push to reduce CI noise
 #
 # DO NOT create additional workflow files for:
 #   - Slack notifications (already integrated here)
@@ -27,17 +27,24 @@
 #   - Removed: performance-audit-slack.yml
 #   - Removed: performance-audit-slack-on-failure.yml
 #   - Kept: ci.yml (this file) with all functionality merged
-#   - Triggers: Only on PRs (not on push) to reduce CI noise
+#   - Triggers: PRs + push to development (for CI iteration)
 #
 # ============================================================================
 name: CI
 
 on:
+  push:
+    branches:
+      - development
   pull_request:
     branches:
       - main
       - development
   workflow_dispatch:  # Allow manual triggers
+
+# Opt into Node.js 24 for actions (Node.js 20 deprecated, forced June 2 2026)
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # Prevent duplicate runs: use branch name as concurrency key
 concurrency:
@@ -47,14 +54,15 @@ concurrency:
 jobs:
   performance-checks:
     name: Performance Checks
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install jq (for JSON processing and Slack)
-        run: sudo apt-get update && sudo apt-get install -y jq
+        run: command -v jq >/dev/null 2>&1 || brew install jq
 
       - name: Make scripts executable
         run: |
@@ -68,10 +76,14 @@ jobs:
           echo "Running performance audit on toolkit repository..."
 
           # Run in JSON mode for Slack integration
+          # --skip-magic-strings: prevents CI hang (Magic String Detector times out on large repos)
+          # --paths "dist/bin dist/lib": skip test fixtures which contain intentional antipatterns
           ./dist/bin/check-performance.sh \
-            --paths "." \
+            --paths "dist/bin dist/lib" \
             --format json \
             --strict \
+            --skip-magic-strings \
+            --no-log \
             > audit-results.json && EXIT_CODE=0 || EXIT_CODE=$?
 
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT

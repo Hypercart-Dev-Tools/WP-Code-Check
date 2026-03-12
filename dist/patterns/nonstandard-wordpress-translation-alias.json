@@ -1,0 +1,49 @@
+{
+  "id": "nonstandard-wordpress-translation-alias",
+  "version": "1.0.0",
+  "enabled": true,
+  "category": "reliability",
+  "severity": "MEDIUM",
+  "title": "Non-standard WordPress translation alias `_()`",
+  "description": "Detects `_()` calls in WordPress PHP code. WordPress standard translation helpers are `__()`, `esc_html__()`, `esc_attr__()`, and related native APIs. Using `_()` introduces ambiguity, reduces readability, and can cause compatibility or bootstrap fragility in real-world theme/plugin environments.",
+  "rationale": "WordPress code should use the platform's native i18n helpers. `_()` is not a standard WordPress translation API, is easy to misread, and can conflict with non-WordPress runtime assumptions or local helper aliases. This rule is intentionally framed as a maintainability and reliability safeguard, not a claim that `_()` always crashes code.",
+  "detection_type": "simple",
+  "detection": {
+    "type": "simple",
+    "file_patterns": ["*.php"],
+    "search_pattern": "(^|[^[:alnum:]_])_[[:space:]]*\\("
+  },
+  "test_fixture": {
+    "path": "dist/tests/fixtures/antipatterns.php",
+    "expected_violations": 2,
+    "expected_valid": 3,
+    "notes": "Fixture includes `_()` in an ACF field label and a standalone `_()` baseline. Clean-code fixture includes valid `__()`, `esc_html__()`, and `esc_attr__()` examples that should not match."
+  },
+  "remediation": {
+    "summary": "Replace `_()` with the appropriate WordPress-native translation helper for the rendering context.",
+    "examples": [
+      {
+        "bad": "$label = _( 'Launchpad title', 'my-textdomain' );",
+        "good": "$label = __( 'Launchpad title', 'my-textdomain' );",
+        "note": "Use `__()` for general translated strings returned for later output."
+      },
+      {
+        "bad": "echo _( 'Visible title', 'my-textdomain' );",
+        "good": "echo esc_html__( 'Visible title', 'my-textdomain' );",
+        "note": "Use `esc_html__()` when output is going into HTML text content."
+      },
+      {
+        "bad": "$attr = _( 'Panel title', 'my-textdomain' );",
+        "good": "$attr = esc_attr__( 'Panel title', 'my-textdomain' );",
+        "note": "Use `esc_attr__()` when the translated value is destined for an HTML attribute."
+      }
+    ]
+  },
+  "references": [
+    "https://developer.wordpress.org/apis/internationalization/internationalization-guidelines/",
+    "https://developer.wordpress.org/reference/functions/__/",
+    "https://developer.wordpress.org/reference/functions/esc_html__/",
+    "https://developer.wordpress.org/reference/functions/esc_attr__/"
+  ],
+  "notes": "Phase 1 rule extracted from the Launchpad crash analysis as a generalized WordPress reliability anti-pattern."
+}

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Phase 1 `nonstandard-wordpress-translation-alias` reliability rule
+  - Detects non-standard `_()` translation alias usage in PHP files
+  - Recommends WordPress-native helpers like `__()`, `esc_html__()`, and `esc_attr__()` based on output context
+  - Adds fixture coverage for both the ACF-style Launchpad-shaped case and a standalone baseline `_()` call
+  - Adds safe fixture coverage proving standard WordPress i18n helpers do not trigger the rule
+
+### Documentation
+
+- Added `PROJECT/1-INBOX/PATTERN-PROPOSAL-LAUNCHPAD-CRASH.md`
+  - Captures the plan for converting the Launchpad crash lessons into generalized WPCC anti-pattern proposals
+  - Recommends against a single environment-specific "crash detector"
+  - Prioritizes `_()` alias detection first, bootstrap/file-scope side-effect detection second, and attribute-context helper misuse as experimental follow-up
+
+### Fixed
+
+#### Phase 0: Timeout Guards for Unprotected Recursive Grep Calls
+
+- **Wrapped 8 raw `grep -r` file-discovery calls with `run_with_timeout "$MAX_SCAN_TIME"`**
+  - These one-off check sections lacked any timeout protection and could stall indefinitely
+  - Aggregated pattern detection (Magic String Detector) was already protected; these checks were not
+  - **Affected checks:**
+    - `AJAX_FILES` — wp_ajax handlers without nonce validation (line ~4216)
+    - `TERMS_FILES` — get_terms without number limit (line ~4617)
+    - `CRON_FILES` — Unvalidated cron intervals (line ~5024)
+    - `N1_FILES` — N+1 meta-in-loop patterns (line ~5271, pipeline: timeout wraps first recursive grep)
+    - `THANKYOU_CONTEXT_FILES` — WooCommerce coupon logic in thank-you context (line ~5463)
+    - `SMART_COUPONS_FILES` — WooCommerce Smart Coupons detection (line ~5554)
+    - `PERF_RISK_FILES` — WooCommerce Smart Coupons performance risk (line ~5566)
+    - `JSON_RESPONSE_FILES` — HTML-escaping in JSON response URL fields (line ~5633)
+  - **Behavior on timeout:** Check returns empty result, reports "passed," scan continues
+  - **Impact:** Eliminates "apparent hang" reports on small/medium repositories where a single check stalled
+  - **No new functions or abstractions** — reuses existing `run_with_timeout` infrastructure
+
+### Technical Details
+
+- **File Modified:** `dist/bin/check-performance.sh`
+- **Pattern:** Each change is `run_with_timeout "$MAX_SCAN_TIME"` prefixed before an existing `grep -rl` / `grep -rln` / `grep -rlE` command
+- **Remaining raw `grep -r`:** Only inside `fast_grep()` and `cached_grep()` fallback paths (by design — these are the wrapper-internal fallbacks for JS-only projects with no PHP file cache)
+- **Related:** See `PROJECT/1-INBOX/FEATURE-SEMGREP-MIGRATION-PLAN.md` for full Phase 0-3 roadmap
+
 ---
 
 ## [2.2.5] - 2026-02-07

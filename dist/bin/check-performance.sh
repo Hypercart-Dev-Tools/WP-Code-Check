@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.2.5"
+SCRIPT_VERSION="2.2.7"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -2571,6 +2571,41 @@ process_aggregated_pattern() {
   local min_files=$(grep '"min_distinct_files"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
   local min_matches=$(grep '"min_total_matches"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
   local capture_group=$(grep '"capture_group"' "$pattern_file" | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+  local exclude_file_globs=""
+  local exclude_line_patterns=""
+  local current_exclusion_block=""
+
+  while IFS= read -r json_line; do
+    case "$json_line" in
+      *'"exclude_files"'*)
+        current_exclusion_block="exclude_files"
+        continue
+        ;;
+      *'"exclude_patterns"'*)
+        current_exclusion_block="exclude_patterns"
+        continue
+        ;;
+    esac
+
+    if [ -n "$current_exclusion_block" ]; then
+      if echo "$json_line" | grep -q ']'; then
+        current_exclusion_block=""
+        continue
+      fi
+
+      local exclusion_value
+      exclusion_value=$(echo "$json_line" | sed -n 's/^[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p')
+      if [ -n "$exclusion_value" ]; then
+        if [ "$current_exclusion_block" = "exclude_files" ]; then
+          exclude_file_globs="${exclude_file_globs}${exclusion_value}
+"
+        else
+          exclude_line_patterns="${exclude_line_patterns}${exclusion_value}
+"
+        fi
+      fi
+    fi
+  done < "$pattern_file"
 
   # Defaults
   [ -z "$min_files" ] && min_files=3
@@ -2614,11 +2649,11 @@ process_aggregated_pattern() {
     local escaped_pattern
     if command -v printf >/dev/null 2>&1 && printf %q "test" >/dev/null 2>&1; then
       escaped_pattern=$(printf %q "$pattern_search")
-      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E $escaped_pattern 2>/dev/null") || grep_exit_code=$?
+      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "tr '\n' '\0' < '$PHP_FILE_LIST' | xargs -0 grep -Hn $include_args -E $escaped_pattern 2>/dev/null") || grep_exit_code=$?
     else
       # Bash 3 fallback: escape single quotes manually
       escaped_pattern=$(echo "$pattern_search" | sed "s/'/'\\\\''/g")
-      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "cat '$PHP_FILE_LIST' | xargs grep -Hn $include_args -E '$escaped_pattern' 2>/dev/null") || grep_exit_code=$?
+      matches=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "tr '\n' '\0' < '$PHP_FILE_LIST' | xargs -0 grep -Hn $include_args -E '$escaped_pattern' 2>/dev/null") || grep_exit_code=$?
     fi
   fi
 
@@ -4213,7 +4248,7 @@ text_echo "${BLUE}▸ wp_ajax handlers without nonce validation ${AJAX_NONCE_COL
 AJAX_NONCE_FAIL=false
 AJAX_NONCE_FINDING_COUNT=0
 # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-AJAX_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "wp_ajax" "$PATHS" 2>/dev/null || true)
+AJAX_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rln $EXCLUDE_ARGS --include="*.php" -e "wp_ajax" "$PATHS" 2>/dev/null || true)
 if [ -n "$AJAX_FILES" ]; then
   # SAFEGUARD: Use safe_file_iterator() instead of "for file in $AJAX_FILES"
   # File paths with spaces will break the loop without this helper (see common-helpers.sh)
@@ -4614,7 +4649,7 @@ TERMS_COLOR="${YELLOW}"
 if [ "$TERMS_SEVERITY" = "CRITICAL" ] || [ "$TERMS_SEVERITY" = "HIGH" ]; then TERMS_COLOR="${RED}"; fi
 text_echo "${BLUE}▸ get_terms without number limit ${TERMS_COLOR}[$TERMS_SEVERITY]${NC}"
 # SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-TERMS_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" -e "get_terms[[:space:]]*(" "$PATHS" 2>/dev/null || true)
+TERMS_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rln $EXCLUDE_ARGS --include="*.php" -e "get_terms[[:space:]]*(" "$PATHS" 2>/dev/null || true)
 TERMS_UNBOUNDED=false
 TERMS_FINDING_COUNT=0
 if [ -n "$TERMS_FILES" ]; then
@@ -5021,7 +5056,7 @@ CRON_INTERVAL_FAIL=false
 CRON_INTERVAL_FINDING_COUNT=0
 
 # Find files with cron_schedules filter or wp_schedule_event
-CRON_FILES=$(grep -rln $EXCLUDE_ARGS --include="*.php" \
+CRON_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rln $EXCLUDE_ARGS --include="*.php" \
   -e "cron_schedules" \
   -e "wp_schedule_event" \
   -e "wp_schedule_single_event" \
@@ -5268,7 +5303,7 @@ N1_COLOR="${YELLOW}"
 if [ "$N1_SEVERITY" = "CRITICAL" ]; then N1_COLOR="${RED}"; fi
 text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEVERITY]${NC}"
 		# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise (see SAFEGUARDS.md)
-		N1_FILES=$(grep -rl $EXCLUDE_ARGS --include="*.php" -e "get_post_meta\|get_term_meta\|get_user_meta" "$PATHS" 2>/dev/null | \
+		N1_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rl $EXCLUDE_ARGS --include="*.php" -e "get_post_meta\|get_term_meta\|get_user_meta" "$PATHS" 2>/dev/null | \
 		           xargs -I{} grep -l "foreach\|while[[:space:]]*(" {} 2>/dev/null | head -5 || true)
 		N1_FINDING_COUNT=0
 		N1_OPTIMIZED_COUNT=0
@@ -5460,7 +5495,7 @@ if [ -x "$COUPON_THANKYOU_VALIDATOR" ]; then
 fi
 
 # Step 1: Find files with thank-you/order-received context markers
-THANKYOU_CONTEXT_FILES=$(grep -rlE \
+THANKYOU_CONTEXT_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rlE \
   '(add_action|do_action|apply_filters|add_filter)\([[:space:]]*['\''"]([a-z_]*woocommerce_thankyou[a-z_]*)['\''"]|is_order_received_page\(|is_wc_endpoint_url\([[:space:]]*['\''"]order-received['\''"]|woocommerce/checkout/(thankyou|order-received)\.php' \
   $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
 
@@ -5551,7 +5586,7 @@ if [ "$SMART_COUPONS_PERF_SEVERITY" = "MEDIUM" ] || [ "$SMART_COUPONS_PERF_SEVER
 text_echo "${BLUE}▸ WooCommerce Smart Coupons performance issues ${SMART_COUPONS_PERF_COLOR}[$SMART_COUPONS_PERF_SEVERITY]${NC}"
 
 # Step 1: Detect Smart Coupons plugin
-SMART_COUPONS_FILES=$(grep -rlE \
+SMART_COUPONS_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rlE \
   'Plugin Name:[[:space:]]*WooCommerce Smart Coupons|class[[:space:]]+WC_Smart_Coupons|namespace[[:space:]]+WooCommerce\\SmartCoupons|WC_SC_|SMART_COUPONS_' \
   $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
 
@@ -5563,7 +5598,7 @@ if [ -n "$SMART_COUPONS_FILES" ]; then
   SMART_COUPONS_DETECTED=true
 
   # Step 2: Check for performance-impacting patterns
-  PERF_RISK_FILES=$(grep -rlE \
+  PERF_RISK_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rlE \
     'wc_get_coupon_id_by_code\(|add_action\([[:space:]]*['\''"]woocommerce_thankyou' \
     $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
 
@@ -5630,7 +5665,7 @@ JSON_HTML_ESCAPE_COLOR="${YELLOW}"
 text_echo "${BLUE}▸ HTML-escaping in JSON response URL fields (heuristic) ${JSON_HTML_ESCAPE_COLOR}[$JSON_HTML_ESCAPE_SEVERITY]${NC}"
 
 # Step 1: Find files with JSON response functions
-JSON_RESPONSE_FILES=$(grep -rlE \
+JSON_RESPONSE_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rlE \
   'wp_send_json|WP_REST_Response|wp_json_encode' \
   $EXCLUDE_ARGS --include='*.php' "$PATHS" 2>/dev/null || true)
 
