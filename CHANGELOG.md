@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Adds fixture coverage for both the ACF-style Launchpad-shaped case and a standalone baseline `_()` call
   - Adds safe fixture coverage proving standard WordPress i18n helpers do not trigger the rule
 
+- Added Path B observability for Magic String Detector aggregated patterns
+  - Tracks per-pattern phase timings for grep, extraction, and aggregation in `process_aggregated_pattern()`
+  - Tracks quality metrics for raw matches, extracted strings, unique strings, filtered strings, and emitted violations
+  - Logs lightweight state transitions (`GREP`, `EXTRACT`, `AGGREGATE`, `COMPLETE`) in debug output
+  - Shows per-pattern metrics in text output when `--verbose` or `PROFILE=1` is enabled
+  - Exposes cumulative `magic_string_metrics` in JSON output for downstream reporting
+  - Verified in text mode and JSON mode against `/Users/noelsaw/Documents/GH Repos/creditconnection2-self-service`
+
 ### Documentation
 
 - Added `PROJECT/1-INBOX/PATTERN-PROPOSAL-LAUNCHPAD-CRASH.md`
@@ -23,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prioritizes `_()` alias detection first, bootstrap/file-scope side-effect detection second, and attribute-context helper misuse as experimental follow-up
 
 ### Fixed
+
+- Fixed stale-registry pattern-loader fallback that could make the Magic String Detector appear stuck
+  - Root cause: stale registry state forced the fallback parser path, pattern extraction failed there, `pattern_search` could become empty, and the first simple Magic String rule then looked like a hang
+  - Switched the fallback Python heredocs in `dist/lib/pattern-loader.sh` to tab-stripping heredocs so indented closing markers terminate correctly when the registry is stale
+  - Added a guard in `dist/bin/check-performance.sh` to skip simple rules with empty search patterns and emit an explicit warning instead of broad-matching the entire scan set
+  - Verified against `/Users/noelsaw/Documents/GH Repos/creditconnection2-self-service` with `--verbose`, profiling, debug tracing, and AI triage flags enabled
+  - Result: the scan now completes through Magic String Detector and Function Clone Detector; the verification run finished in 35s with `MAGIC_STRING_DETECTOR` profiled at 21311ms
 
 #### Phase 0: Timeout Guards for Unprotected Recursive Grep Calls
 

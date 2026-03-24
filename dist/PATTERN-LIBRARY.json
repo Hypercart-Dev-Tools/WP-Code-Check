@@ -1,27 +1,27 @@
 {
   "version": "1.0.0",
-  "generated": "2026-02-07T05:07:35Z",
+  "generated": "2026-03-24T01:34:38Z",
   "summary": {
-    "total_patterns": 55,
-    "enabled": 55,
+    "total_patterns": 56,
+    "enabled": 56,
     "disabled": 0,
     "by_severity": {
       "CRITICAL": 20,
       "HIGH": 17,
-      "MEDIUM": 13,
+      "MEDIUM": 14,
       "LOW": 4
     },
     "by_category": {
-      "performance": 22,"Performance": 5,"duplication": 5,"reliability": 5,"security": 14
+      "performance": 22,"Performance": 5,"duplication": 5,"reliability": 6,"security": 14
     },
     "by_pattern_type": {
-      "php": 44,
+      "php": 45,
       "headless": 6,
       "nodejs": 4,
       "javascript": 1
     },
     "mitigation_detection_enabled": 7,
-    "heuristic_patterns": 17,
+    "heuristic_patterns": 18,
     "definitive_patterns": 38
   },
   "patterns": [
@@ -466,6 +466,22 @@
 	"file": "unhandled-promise.json",
   "search_pattern": "\\.then[[:space:]]*\\([^)]+\\)[[:space:]]*;[[:space:]]*$|Promise\\.all[[:space:]]*\\([^)]+\\)\\.then",
   "file_patterns": ["*.js", "*.jsx", "*.ts", "*.tsx"]
+},
+{
+	"id": "nonstandard-wordpress-translation-alias",
+	"version": "1.0.0",
+	"enabled": true,
+	"category": "reliability",
+	"severity": "MEDIUM",
+	"title": "Non-standard WordPress translation alias `_()`",
+	"description": "Detects `_()` calls in WordPress PHP code. WordPress standard translation helpers are `__()`, `esc_html__()`, `esc_attr__()`, and related native APIs. Using `_()` introduces ambiguity, reduces readability, and can cause compatibility or bootstrap fragility in real-world theme/plugin environments.",
+	"detection_type": "simple",
+	"pattern_type": "php",
+	"mitigation_detection": false,
+	"heuristic": true,
+	"file": "nonstandard-wordpress-translation-alias.json",
+  "search_pattern": "(^|[^[:alnum:]_])_[[:space:]]*\\(",
+  "file_patterns": ["*.php"]
 },
 {
 	"id": "nopaging-true",
