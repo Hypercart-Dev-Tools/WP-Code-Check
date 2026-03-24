@@ -5531,6 +5531,9 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 		      if [ -z "$N1_LINE" ]; then
 		        continue
 		      fi
+		      # Extract the actual source line for the finding code snippet
+		      N1_CODE=$(sed -n "${N1_LINE}p" "$f" 2>/dev/null | sed 's/^[[:space:]]*//')
+
 		      # Smart detection: Prioritized checks for false positives and severity adjustment
 
 		      # Priority 1: Check if this is a WordPress admin view where cache is pre-primed
@@ -5538,29 +5541,29 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 		        # WordPress primes meta cache on admin pages like user-edit.php
 		        # These are likely false positives - downgrade to INFO
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 in WP admin view - likely false positive (WordPress pre-primes meta cache on user-edit.php)" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 in WP admin view - likely false positive (WordPress pre-primes meta cache on user-edit.php)" "$N1_CODE"
 		        ((N1_OPTIMIZED_COUNT++)) || true
 		      # Priority 2: Check if loop iterates over fields for a single object (not multiple objects)
 		      elif is_single_object_field_loop "$f"; then
 		        # Iterating over fields for ONE object - WordPress caches all meta on first call
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 but loop iterates over fields for single object - WordPress caches all meta on first call" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 but loop iterates over fields for single object - WordPress caches all meta on first call" "$N1_CODE"
 		        ((N1_OPTIMIZED_COUNT++)) || true
 		      # Priority 3: Check if file uses explicit meta caching
 		      elif has_meta_cache_optimization "$f"; then
 		        # File uses update_meta_cache() - likely optimized, downgrade to INFO
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop), but update_meta_cache() is present - verify optimization" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop), but update_meta_cache() is present - verify optimization" "$N1_CODE"
 		        ((N1_OPTIMIZED_COUNT++)) || true
 		      # Priority 4: Check for pagination guards
 		      elif has_pagination_guard "$f"; then
 		        VISIBLE_N1_PAGINATED="${VISIBLE_N1_PAGINATED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "warning" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop). File appears paginated (per_page/LIMIT) - review impact" ""
+		        add_json_finding "n-plus-1-pattern" "warning" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop). File appears paginated (per_page/LIMIT) - review impact" "$N1_CODE"
 		        ((N1_PAGINATED_COUNT++)) || true
 		      else
 		        # No mitigations detected - standard warning (likely true N+1)
 		        VISIBLE_N1_FILES="${VISIBLE_N1_FILES}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "Potential N+1 query pattern: meta call inside loop (heuristic). Review pagination/caching" ""
+		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "Potential N+1 query pattern: meta call inside loop (heuristic). Review pagination/caching" "$N1_CODE"
 		        ((N1_FINDING_COUNT++)) || true
 		      fi
 		    fi
