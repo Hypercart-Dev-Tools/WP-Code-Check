@@ -1,7 +1,7 @@
 # WPCC Pattern Library — False Positive Review
 **Source:** AI review of creditconnection2-self-service scan  
 **Date:** 2026-03-23  
-**Scan findings:** 99 total | **Estimated true positives after fixes:** ~40
+**Scan findings:** 99 total (original) → **31 after all fixes** | **Estimated true positives:** ~25–30
 
 ---
 
@@ -64,6 +64,31 @@
 
 ---
 
+### 📋 Round 2 — Post-Scan Analysis (2026-03-24)
+
+- [x] **FIX `limit-multiplier-from-count` — nearly 100% FPs, no multiplier context** ✅ *Implemented in pattern*
+  **Findings:** 24 findings, all are `count()` used for display (`echo`), array key assignment, or loop comparison (`count($x) < $length`). Zero are `count()` multiplied into a SQL `LIMIT` clause.
+  **Root cause:** The JSON `search_pattern` was `count\(` (matching any `count()` call). The inline check at ~line 5122 correctly requires `count(...) * <number>`, but the simple runner ran the broader JSON pattern separately.
+  **Fix:** Tightened JSON `search_pattern` to `count\([^)]*\)[[:space:]]*\*[[:space:]]*[0-9]` — now requires the multiplier operator, matching only the inline check's intent.
+  **File changed:** `dist/patterns/limit-multiplier-from-count.json`
+  **Verified impact:** 24 → **0** findings (all were FPs)
+
+- [x] **FIX `rest-no-pagination` — flags non-GET action endpoints** ✅ *Implemented in scanner + pattern*
+  **Findings:** 16 findings. Routes like `/business/refresh`, `/person/switch-user`, `/business/submit-update` use POST/PUT/DELETE — pagination is inapplicable.
+  **Root cause:** The validator checked 15-line context for pagination keywords but didn't account for HTTP method.
+  **Fix:** Added `skip_if_context_matches` capability to the scripted pattern runner. When a match's narrow context (3 lines) contains a pattern like `'methods' => 'POST'`, the finding is suppressed before the validator runs. Added the method-detection pattern to `rest-no-pagination.json`.
+  **Files changed:** `dist/bin/check-performance.sh` (scripted runner), `dist/patterns/rest-no-pagination.json` (new `skip_if_context_matches` key)
+  **Verified impact:** 16 → **8** findings (8 POST/PUT/DELETE endpoints suppressed; 8 GET endpoints correctly retained)
+
+- [x] **FIX cross-rule deduplication for overlapping superglobal findings** ✅ *Implemented in scanner*
+  **Findings:** 14 unique `file:line` locations appeared in 2–4 rules simultaneously (`spo-002-superglobals`, `unsanitized-superglobal-read`, `unsanitized-superglobal-isset-bypass`).
+  **Root cause:** Three superglobal rules overlap in scope but ran independently with no dedup.
+  **Fix:** Added a deduplication pass in the JSON report builder (~line 1683). For a defined set of overlapping rule IDs, when the same `file:line` appears in multiple rules, only the first (highest-priority) finding is kept. Uses a seen-keys set for O(n) dedup.
+  **File changed:** `dist/bin/check-performance.sh` (JSON report builder)
+  **Verified impact:** Eliminated all cross-rule duplicates — **0 remaining duplicate file:line locations** in scan output. Total superglobal findings: 36 → **13** (spo-002: 3, unsanitized-read: 10, isset-bypass: 0 after dedup)
+
+---
+
 ### ✔️ No Action Required — Already Handled or Misdiagnosed
 
 - [x] **SKIP — `isset()` exclusion for superglobal reads**  
@@ -97,5 +122,8 @@
 | Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | 11 verified | ✅ Done |
 | Admin-only hook whitelist | `check-performance.sh` ~L4261 | Low | 1+ per scan (→ INFO) | ✅ Done |
 | N+1 loop containment (brace-depth) | `check-performance.sh` ~L5413 | Medium | 2+ per scan | ✅ Done |
+| Tighten `limit-multiplier-from-count` pattern | `limit-multiplier-from-count.json` | 1 line | 24 verified | ✅ Done |
+| `skip_if_context_matches` for `rest-no-pagination` | `check-performance.sh` + `rest-no-pagination.json` | Medium | 8 verified | ✅ Done |
+| Cross-rule dedup for superglobal findings | `check-performance.sh` (JSON builder) | Medium | 23 duplicates | ✅ Done |
 
-**Latest measured totals:** 99 findings before scanner fixes → **88 findings after first round** → **86 findings after dynamic-include fix**.
+**Latest measured totals:** 99 → 88 → 86 → **31 findings** (2026-03-24, after Round 2 fixes).

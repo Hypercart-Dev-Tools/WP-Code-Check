@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 
 - N+1 loop detection (`find_meta_in_loop_line`) now uses brace-depth tracking to verify `get_*_meta` calls are lexically inside a loop body, not just within 80 lines of a loop keyword. Eliminates false positives from sequential meta calls after loop closure
 
+- Tightened `limit-multiplier-from-count` JSON pattern to require `count(...) * <number>` instead of matching any `count()` call. Eliminates false positives from display/comparison uses of `count()`
+
+- `rest-no-pagination` now skips non-GET endpoints (POST, PUT, DELETE, PATCH) via new `skip_if_context_matches` scripted runner feature. Reduces false positives on action/mutation endpoints where pagination is inapplicable
+
+- Cross-rule deduplication for overlapping superglobal findings (`spo-002-superglobals`, `unsanitized-superglobal-read`, `unsanitized-superglobal-isset-bypass`). When the same file:line is flagged by multiple rules, only the first finding is kept
+
 ## [2.2.9] - 2026-03-23
 
 ### Added

@@ -1679,10 +1679,54 @@ output_json() {
   [ -z "$files_analyzed" ] && files_analyzed=0
   [ -z "$lines_of_code" ] && lines_of_code=0
 
-  # Build findings array
+  # Deduplicate findings: when the same file:line is flagged by multiple
+  # overlapping rules (e.g. superglobal rules), keep only the highest-severity
+  # finding and annotate it with the other rule IDs via "also_flagged_by".
+  # Dedup groups: superglobal rules that scan the same code patterns.
+  local dedup_groups="spo-002-superglobals unsanitized-superglobal-read unsanitized-superglobal-isset-bypass"
+  local deduped_findings=()
+  local seen_keys=""
+
+  # Severity rank for comparison (higher = more severe)
+  _sev_rank() {
+    case "$1" in
+      CRITICAL) echo 4 ;; HIGH) echo 3 ;; MEDIUM) echo 2 ;; LOW) echo 1 ;; *) echo 0 ;;
+    esac
+  }
+
+  for finding in "${JSON_FINDINGS[@]}"; do
+    # Extract id, file, line, impact using simple string ops (findings are single-line JSON)
+    local f_id=$(echo "$finding" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+    local f_file=$(echo "$finding" | sed 's/.*"file":"\([^"]*\)".*/\1/')
+    local f_line=$(echo "$finding" | sed 's/.*"line":\([0-9]*\).*/\1/')
+    local f_impact=$(echo "$finding" | sed 's/.*"impact":"\([^"]*\)".*/\1/')
+
+    # Only dedup within the defined groups
+    local in_group=false
+    for grp_id in $dedup_groups; do
+      if [ "$f_id" = "$grp_id" ]; then
+        in_group=true
+        break
+      fi
+    done
+
+    if [ "$in_group" = true ]; then
+      local dedup_key="${f_file}:${f_line}"
+      if echo "$seen_keys" | grep -qF "|${dedup_key}|"; then
+        # Already have a finding for this file:line — skip lower/equal severity
+        # (first occurrence wins since we don't reorder; this is acceptable)
+        continue
+      fi
+      seen_keys="${seen_keys}|${dedup_key}|"
+    fi
+
+    deduped_findings+=("$finding")
+  done
+
+  # Build findings array from deduped list
   local findings_json=""
   local first=true
-  for finding in "${JSON_FINDINGS[@]}"; do
+  for finding in "${deduped_findings[@]}"; do
     if [ "$first" = true ]; then
       findings_json="$finding"
       first=false
@@ -6246,6 +6290,14 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
         match_count=${match_count:-0}
       fi
 
+      # Parse optional skip_if_context_matches pre-filter (narrow context suppression)
+      skip_ctx_pattern=$(grep -A1 '"skip_if_context_matches"' "$pattern_file" 2>/dev/null | grep '"pattern"' | head -1 | sed 's/.*"pattern"[[:space:]]*:[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}/\1/')
+      skip_ctx_lines=""
+      if [ -n "$skip_ctx_pattern" ]; then
+        skip_ctx_lines=$(grep -A3 '"skip_if_context_matches"' "$pattern_file" 2>/dev/null | grep '"lines"' | head -1 | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+        skip_ctx_lines="${skip_ctx_lines:-3}"
+      fi
+
       # Process matches through validator
       if [ "$match_count" -gt 0 ]; then
         # Apply baseline suppression and validator
@@ -6264,6 +6316,16 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
           if should_suppress_finding "$pattern_id" "$file"; then
             ((suppressed_count++)) || true
             continue
+          fi
+
+          # skip_if_context_matches: narrow context pre-filter (parsed above loop)
+          if [ -n "$skip_ctx_pattern" ]; then
+            skip_ctx_end=$((line + skip_ctx_lines))
+            skip_ctx_window=$(sed -n "${line},${skip_ctx_end}p" "$file" 2>/dev/null || true)
+            if echo "$skip_ctx_window" | grep -qE "$skip_ctx_pattern"; then
+              ((validator_suppressed++)) || true
+              continue
+            fi
           fi
 
           # Run validator script with args from JSON

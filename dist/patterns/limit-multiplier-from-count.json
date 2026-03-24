@@ -11,7 +11,7 @@
   "detection": {
     "type": "grep",
     "file_patterns": ["*.php"],
-    "search_pattern": "count\\(",
+    "search_pattern": "count\\([^)]*\\)[[:space:]]*\\*[[:space:]]*[0-9]",
     "exclude_patterns": [
       "//.*count\\("
     ],
