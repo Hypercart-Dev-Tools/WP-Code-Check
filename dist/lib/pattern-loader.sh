@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Pattern Loader Library
-# Version: 1.1.0
+# Version: 1.1.1
 #
 # Loads pattern definitions from JSON files and makes them available to the scanner
 #
@@ -394,7 +394,7 @@ load_pattern() {
 	# per-file extraction.
 		if [ -z "$pattern_search" ] && [ "$pattern_detection_type" != "clone_detection" ]; then
 		  if command -v python3 &> /dev/null; then
-		    pattern_search=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		    pattern_search=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	import sys
 	try:
@@ -430,7 +430,7 @@ load_pattern() {
 	EOFPYTHON
 		)
 		  elif command -v python &> /dev/null; then
-		    pattern_search=$(PYTHONSTARTUP= python <<EOFPYTHON 2>/dev/null
+		    pattern_search=$(PYTHONSTARTUP= python <<-EOFPYTHON 2>/dev/null
 	import json
 	import sys
 	try:
@@ -476,7 +476,7 @@ load_pattern() {
 	# provided file_patterns, we respect that and skip the JSON lookup.
 		if [ -z "$pattern_file_patterns" ]; then
 		  if command -v python3 &> /dev/null; then
-		    pattern_file_patterns=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		    pattern_file_patterns=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -502,7 +502,7 @@ load_pattern() {
 		if [ "$pattern_detection_type" = "scripted" ]; then
 		  if [ -z "$pattern_validator_script" ]; then
 		    if command -v python3 &> /dev/null; then
-		      pattern_validator_script=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		      pattern_validator_script=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -513,7 +513,7 @@ load_pattern() {
 	    print('')
 	EOFPYTHON
 	)
-		      pattern_validator_args=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		      pattern_validator_args=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -540,7 +540,7 @@ load_pattern() {
 	# provided mitigation wiring, we prefer that and avoid reopening the JSON.
 		if [ -z "$pattern_mitigation_enabled" ] && [ -z "$pattern_mitigation_script" ] && [ -z "$pattern_severity_downgrade" ]; then
 		  if command -v python3 &> /dev/null; then
-		    pattern_mitigation_enabled=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		    pattern_mitigation_enabled=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -552,7 +552,7 @@ load_pattern() {
 	    print('false')
 	EOFPYTHON
 	)
-		    pattern_mitigation_script=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		    pattern_mitigation_script=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -564,7 +564,7 @@ load_pattern() {
 	    print('')
 	EOFPYTHON
 	)
-		    pattern_mitigation_args=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		    pattern_mitigation_args=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
@@ -576,7 +576,7 @@ load_pattern() {
 	    print('')
 	EOFPYTHON
 	)
-		    pattern_severity_downgrade=$(PYTHONSTARTUP= python3 -S <<EOFPYTHON 2>/dev/null
+		    pattern_severity_downgrade=$(PYTHONSTARTUP= python3 -S <<-EOFPYTHON 2>/dev/null
 	import json
 	try:
 	    with open('$pattern_file', 'r') as f:
