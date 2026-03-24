@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated": "2026-03-24T01:34:38Z",
+  "generated": "2026-03-24T02:51:36Z",
   "summary": {
     "total_patterns": 56,
     "enabled": 56,
@@ -576,7 +576,7 @@
 	"mitigation_detection": false,
 	"heuristic": false,
 	"file": "php-shell-exec-functions.json",
-  "search_pattern": "shell_exec[[:space:]]*\\(|exec[[:space:]]*\\(|system[[:space:]]*\\(|passthru[[:space:]]*\\(",
+  "search_pattern": "shell_exec[[:space:]]*\\(|\\bexec[[:space:]]*\\(|system[[:space:]]*\\(|passthru[[:space:]]*\\(",
   "file_patterns": ["*.php"]
 },
 {
