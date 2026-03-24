@@ -43,22 +43,24 @@
   **File to fix:** `dist/bin/check-performance.sh` ~line 5970 (simple pattern runner grep call)  
   **Verified impact:** `unsanitized-superglobal-read` dropped from **30 → 19** findings in the follow-up scan. The remaining 19 are mostly other classes of reads that still require separate tuning, especially the dedicated `unsanitized-superglobal-isset-bypass` rule.
 
+- [x] **FIX admin-only hook whitelist for capability check false positives** ✅ *Implemented in scanner*
+  **Finding:** `credit-registry-forms.php:48` — `add_action('admin_notices', ...)` flagged for missing capability check. `admin_notices` only fires for authenticated admin users.
+  **Reviewer recommendation:** Whitelist inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, etc.)
+  **Fix implemented:** Added admin-only hook whitelist in the `spo-004-missing-cap-check` section of `check-performance.sh` (~line 4261). When `add_action()` uses a whitelisted hook, the finding is still recorded but downgraded to INFO severity instead of HIGH. Whitelisted hooks: `admin_notices`, `admin_init`, `admin_menu`, `admin_head`, `admin_footer`, `admin_enqueue_scripts`, `admin_print_styles`, `admin_print_scripts`, `network_admin_menu`, `user_admin_menu`, `network_admin_notices`, `admin_bar_init`, `admin_action_*` (glob), `load-*` (glob).
+  **File changed:** `dist/bin/check-performance.sh` ~line 4261
+  **FPs eliminated:** 1+ per scan (downgraded to INFO)
+
 ---
 
-### 📋 Deferred — Investigate Further Before Implementing
+### ✅ Previously Deferred — Now Implemented
 
-- [ ] **DEFERRED: Add admin-only hook whitelist for capability check false positives**  
-  **Finding:** `credit-registry-forms.php:48` — `add_action('admin_notices', ...)` flagged for missing capability check. `admin_notices` only fires for authenticated admin users.  
-  **Reviewer recommendation:** Whitelist inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, etc.)  
-  **Our assessment:** Correct diagnosis. Not fixable with regex alone — requires a hook whitelist in the scanner logic. Downgrade severity to INFO as interim.  
-  **Effort:** Low–Medium | **FPs eliminated:** 1 per occurrence
-
-- [ ] **DEFERRED: Strengthen N+1 loop detection to verify lexical containment**  
-  **Finding 1:** `check-user-meta.php:23` — `get_user_meta()` called sequentially for a single user, not inside a user loop.  
-  **Finding 2:** `class-cr-business-rest-api.php:245` — single `get_user_meta()` re-read after processing.  
-  **Reviewer recommendation:** Confirm the meta call is lexically inside a loop body (`{...}`), not just nearby by line count.  
-  **Our assessment:** The scanner has `is_iterating_over_multiple_objects()` heuristics. These may be gaps in that logic. Review and tighten the "loop containment" check.  
-  **Effort:** Medium | **FPs eliminated:** 2
+- [x] **FIX N+1 loop detection now verifies lexical containment** ✅ *Implemented in scanner*
+  **Finding 1:** `check-user-meta.php:23` — `get_user_meta()` called sequentially for a single user, not inside a user loop.
+  **Finding 2:** `class-cr-business-rest-api.php:245` — single `get_user_meta()` re-read after processing.
+  **Root cause:** `find_meta_in_loop_line()` used a simple line-range check (loop line + 80 lines forward) without verifying the meta call was lexically inside the loop's braces. Sequential `get_*_meta()` calls after a loop's closing `}` were incorrectly flagged.
+  **Fix implemented:** Replaced the line-range `awk` in `find_meta_in_loop_line()` with brace-depth tracking. The new `awk` counts `{` and `}` from the loop line forward, only matching `get_(post|term|user)_meta` while depth > 0. Once the loop body closes (depth returns to 0), scanning stops — meta calls after the loop are no longer flagged.
+  **File changed:** `dist/bin/check-performance.sh` ~line 5413 (`find_meta_in_loop_line()`)
+  **FPs eliminated:** 2+ per scan
 
 ---
 
@@ -93,7 +95,7 @@
 | `exclude_if_file_contains` + `wp eval-file` | `check-performance.sh` + `php-dynamic-include.json` | Medium | 2 verified | ✅ Done |
 | Single-quote inline spo-002 grep | `check-performance.sh` ~L3723 | 1 line | 28 verified | ✅ Done |
 | Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | 11 verified | ✅ Done |
-| Admin-only hook whitelist | `check-performance.sh` | Medium | 1+ per scan | 📋 Deferred |
-| N+1 loop containment tightening | `check-performance.sh` | Medium | 2+ per scan | 📋 Deferred |
+| Admin-only hook whitelist | `check-performance.sh` ~L4261 | Low | 1+ per scan (→ INFO) | ✅ Done |
+| N+1 loop containment (brace-depth) | `check-performance.sh` ~L5413 | Medium | 2+ per scan | ✅ Done |
 
 **Latest measured totals:** 99 findings before scanner fixes → **88 findings after first round** → **86 findings after dynamic-include fix**.

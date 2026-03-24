@@ -4258,6 +4258,24 @@ if [ -n "$ADMIN_MATCHES" ]; then
       continue
     fi
 
+    # Admin-only hook whitelist: these hooks only fire for authenticated admin
+    # users, so a missing capability check is informational, not a real risk.
+    # Extract the hook name from add_action('hook_name', ...) patterns.
+    if echo "$code" | grep -qE "add_action[[:space:]]*\\("; then
+      hook_name=$(echo "$code" | sed -n "s/.*add_action[[:space:]]*([[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+      case "$hook_name" in
+        admin_notices|admin_init|admin_menu|admin_head|admin_footer| \
+        admin_enqueue_scripts|admin_print_styles|admin_print_scripts| \
+        network_admin_menu|user_admin_menu|network_admin_notices| \
+        admin_bar_init|admin_action_*|load-*)
+          # Downgrade to INFO — the hook itself implies admin context
+          ADMIN_SEEN_KEYS="${ADMIN_SEEN_KEYS}${key}"
+          group_and_add_finding "spo-004-missing-cap-check" "info" "INFO" "$file" "$lineno" "$code" "Admin-only hook '$hook_name' — implicit capability via hook context"
+          continue
+          ;;
+      esac
+    fi
+
     # Enhancement v1.0.93: Parse capability parameter from add_*_page() functions
     # add_submenu_page() 4th parameter is capability
     # add_menu_page() 4th parameter is capability
@@ -5409,7 +5427,31 @@ find_meta_in_loop_line() {
 			window_end="$scope_end"
 		fi
 
-		if awk -v s="$lineno" -v e="$window_end" 'NR>=s && NR<=e { if ($0 ~ /get_(post|term|user)_meta[[:space:]]*\(/) { print NR; exit } }' "$file"; then
+		# Verify lexical containment: only match get_*_meta while brace
+		# depth > 0 (i.e. actually inside the loop body, not after it).
+		local meta_line
+		meta_line=$(awk -v s="$lineno" -v e="$window_end" '
+		BEGIN { depth = 0; started = 0 }
+		NR >= s && NR <= e {
+			# Count braces on this line (simple char count — good enough for PHP)
+			n = length($0)
+			for (i = 1; i <= n; i++) {
+				c = substr($0, i, 1)
+				if (c == "{") { depth++; started = 1 }
+				if (c == "}") { depth-- }
+			}
+			# Only match meta calls while inside the loop body
+			if (started && depth > 0 && $0 ~ /get_(post|term|user)_meta[[:space:]]*\(/) {
+				print NR
+				exit
+			}
+			# If we opened and then fully closed the loop, stop looking
+			if (started && depth <= 0 && NR > s) exit
+		}
+		' "$file")
+
+		if [ -n "$meta_line" ]; then
+			echo "$meta_line"
 			return 0
 		fi
 	done <<< "$loop_matches"

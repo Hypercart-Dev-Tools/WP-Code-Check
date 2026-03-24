@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Admin-only hook whitelist for `spo-004-missing-cap-check`: `add_action()` calls using inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, `admin_head`, `admin_footer`, `admin_enqueue_scripts`, `admin_print_styles`, `admin_print_scripts`, `network_admin_menu`, `user_admin_menu`, `network_admin_notices`, `admin_bar_init`, `admin_action_*`, `load-*`) are now downgraded to INFO severity instead of HIGH, reducing false positives for capability check findings
+
+- N+1 loop detection (`find_meta_in_loop_line`) now uses brace-depth tracking to verify `get_*_meta` calls are lexically inside a loop body, not just within 80 lines of a loop keyword. Eliminates false positives from sequential meta calls after loop closure
+
 ## [2.2.9] - 2026-03-23
 
 ### Added
