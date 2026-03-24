@@ -24,22 +24,29 @@
 ---
 
 ### 🔍 Investigate Before Acting — Diagnosis Uncertain
+### 🔬 Investigated — Root Causes Confirmed, Fixes Required
 
-- [ ] **INVESTIGATE "Direct superglobal manipulation" (~17 findings on `CURLOPT_POST`)**  
-  **Reviewer claim:** `curl_setopt($curl, CURLOPT_POST, true)` is matched as superglobal manipulation.  
-  **Our assessment:** The `spo-002-superglobals` pattern requires `$_` prefix in all branches — `CURLOPT_POST` cannot match it.  
-  **Action:** Re-examine the actual line numbers in the scan log for these 17 findings. Determine which rule is actually firing and why. Do NOT apply the reviewer's suggested fix (`$_` anchoring) — it's already implemented.  
-  **File:** `dist/patterns/spo-002-superglobal-manipulation.json` (likely not the culprit)
+- [x] **INVESTIGATE "Direct superglobal manipulation" (~17 findings on `CURLOPT_POST`)** 🔬 *Root cause confirmed — see below*  
+  **Scan log findings:** 31 total spo-002 findings. 16 are `CURLOPT_POST`/`CURLOPT_POSTFIELDS`, 2 are JS `type: 'POST'` strings, 4 are `$_SERVER` reads (SERVER not in the pattern alternation), 1 is the only legitimate finding (line 1014).  
+  **Root cause confirmed:** The inline bash spo-002 grep (check-performance.sh ~line 3723) uses a **double-quoted string with `\\$_`**. In bash double-quotes, `\\` → `\` and then `$_` starts expansion of the bash `$_` special variable (last argument of the previous command). At runtime, `$_` contains the last argument from `text_echo "▸ Direct superglobal manipulation..."` — an ANSI-coloured string including `[HIGH]`. This corrupts the entire ERE pattern, causing it to match incorrectly in a non-deterministic way.  
+  **The JSON pattern itself (`\$_(GET|POST...)`) is correct** — tested via `load_pattern` + direct grep, it does NOT match CURLOPT_POST. The bug is entirely in the inline bash code, not the JSON pattern file.  
+  **Fix required:** Change the inline grep at line 3723 from double-quoted to single-quoted string (prevents `$_` expansion). This is a **scanner bug, not a pattern bug**. The JSON file does not need to change.  
+  **File to fix:** `dist/bin/check-performance.sh` ~line 3723  
+  **FPs confirmed:** ~30 (all but the line 1014 `$_POST` finding)
 
-- [ ] **INVESTIGATE "Sanitized reads flagged as unsanitized" for `sanitize_text_field($_GET[...])`**  
-  **Finding:** `class-cr-rest-api.php` and `class-cr-business-rest-api.php` — `sanitize_text_field($_GET['registry_id'])` being flagged.  
-  **Our assessment:** `sanitize_` is already in `exclude_patterns` for `unsanitized-superglobal-read`. This is likely a **multiline case** — `$_GET` on its own line while the sanitizer wraps on another.  
-  **Action:** Confirm by inspecting actual flagged lines. If multiline, document as a known structural limitation (grep is line-scoped; lookbehinds won't help here). If same-line, there's a bug in the exclude logic.  
-  **File:** `dist/patterns/unsanitized-superglobal-read.json`
+- [x] **INVESTIGATE "Sanitized reads flagged as unsanitized" for `sanitize_text_field($_GET[...])`** 🔬 *Root cause confirmed — see below*  
+  **Scan log findings:** 30 `unsanitized-superglobal-read` findings. Confirmed FPs include: `class-cr-rest-api.php:90`, `class-cr-rest-api.php:98`, `class-cr-rest-api.php:843`, `class-cr-business-rest-api.php:103`, `class-cr-business-rest-api.php:138`, `class-cr-business-rest-api.php:857` — all are same-line ternary patterns like `isset($_GET['x']) ? sanitize_text_field($_GET['x']) : ''`.  
+  **Root cause confirmed:** The simple pattern runner (`check-performance.sh` ~line 5970) runs `cached_grep -E "$pattern_search"` but **never applies `exclude_patterns` from the JSON definition**. The `exclude_patterns` array in `unsanitized-superglobal-read.json` (which includes `sanitize_`, `isset\(`, `esc_`, etc.) is loaded but silently ignored. The legacy inline checks manually pipe through `grep -v` to apply exclusions; the JSON-driven simple runner does not.  
+  **This is NOT a multiline issue** — the flagged lines all have the sanitizer wrapper on the same line. The exclusion simply isn't being applied at all by the simple runner.  
+  **Additional FPs from same root cause:** `clear-person-cache.php:34`, `setup-user-registry-id.php:23-24`, `set-account-type.php:26-27` — all properly guarded `$_POST` reads with nonce verification on the same line.  
+  **Fix required:** The simple pattern runner must apply `exclude_patterns` from the JSON by piping `cached_grep` output through `grep -v` for each exclude pattern. This would eliminate the ~20 same-line sanitizer false positives across all JSON-defined `grep`/`simple` type patterns.  
+  **File to fix:** `dist/bin/check-performance.sh` ~line 5970 (simple pattern runner grep call)  
+  **FPs confirmed:** ~20 of 30 findings
 
 ---
 
 ### 📋 Deferred — Valid Issues, Structural Effort Required
+### 📋 Deferred — Investigate Further Before Implementing
 
 - [ ] **DEFERRED: Add admin-only hook whitelist for capability check false positives**  
   **Finding:** `credit-registry-forms.php:48` — `add_action('admin_notices', ...)` flagged for missing capability check. `admin_notices` only fires for authenticated admin users.  
@@ -81,11 +88,13 @@
 
 ## Impact Summary
 
-| Fix | File to Edit | Effort | FPs Eliminated |
-|-----|-------------|--------|---------------|
-| `\b` word boundary on `exec-call` | `php-shell-exec-functions.json` | 1 line | 8 |
-| Add WP-CLI scripts to `exclude_files` | `php-dynamic-include.json` | 2 lines | 2 |
-| Investigate superglobal 17-finding cluster | Scan log + `spo-002` | Investigation | Up to ~17 |
-| Investigate multiline sanitizer FPs | Scan log + `unsanitized-superglobal-read` | Investigation | Up to ~20 |
-| Admin-only hook whitelist | `check-performance.sh` | Medium | 1+ per scan |
-| N+1 loop containment tightening | `check-performance.sh` | Medium | 2+ per scan |
+| Fix | File to Edit | Effort | FPs Eliminated | Status |
+|-----|-------------|--------|---------------|--------|
+| `\b` word boundary on `exec-call` | `php-shell-exec-functions.json` | 1 line | 8 | ✅ Done (740ba08) |
+| Add `wp-load` to `exclude_patterns` | `php-dynamic-include.json` | 1 line | 2 | ✅ Done (740ba08) |
+| Single-quote inline spo-002 grep | `check-performance.sh` ~L3723 | 1 line | ~30 | ⬜ Not started |
+| Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | ~20 | ⬜ Not started |
+| Admin-only hook whitelist | `check-performance.sh` | Medium | 1+ per scan | 📋 Deferred |
+| N+1 loop containment tightening | `check-performance.sh` | Medium | 2+ per scan | 📋 Deferred |
+
+**Before fixes:** 99 findings | **After easy pattern fixes (done):** ~89 | **After scanner bug fixes:** ~40
