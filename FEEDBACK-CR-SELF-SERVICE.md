@@ -9,13 +9,13 @@
 
 ### ✅ Fix Now — High Confidence, Low Effort
 
-- [ ] **FIX `php-shell-exec-functions.json` — `exec-call` pattern matches `curl_exec()`**  
+- [x] **FIX `php-shell-exec-functions.json` — `exec-call` pattern matches `curl_exec()`** ✅ *Fixed in commit 740ba08*  
   **Pattern:** `exec[[:space:]]*\(` has no word boundary → matches `curl_exec(`.  
   **Fix:** Change to `\bexec[[:space:]]*\(` in the `exec-call` sub-pattern.  
   **File:** `dist/patterns/php-shell-exec-functions.json`  
   **FPs eliminated:** 8 (all CRITICAL — all were `curl_exec($curl)` calls)
 
-- [ ] **FIX `php-dynamic-include.json` — WP-CLI bootstrap scripts flagged as LFI**  
+- [x] **FIX `php-dynamic-include.json` — WP-CLI bootstrap scripts flagged as LFI** ✅ *Fixed in commit 740ba08*  
   **Finding:** `check-user-meta.php:13` and `test-alternate-registry-id.php:24` — `$path` is iterated from a hardcoded static array, never user-controlled.  
   **Fix:** Add `*-user-meta.php`, `*-registry-id.php`, or more broadly `*/scripts/*` / `*/cli/*` to `exclude_files` in the pattern.  
   **File:** `dist/patterns/php-dynamic-include.json`  
