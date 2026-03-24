@@ -15,37 +15,36 @@
   **File:** `dist/patterns/php-shell-exec-functions.json`  
   **FPs eliminated:** 8 (all CRITICAL — all were `curl_exec($curl)` calls)
 
-- [x] **FIX `php-dynamic-include.json` — WP-CLI bootstrap scripts flagged as LFI** ✅ *Fixed in commit 740ba08*  
+- [ ] **FOLLOW-UP `php-dynamic-include.json` — WP-CLI bootstrap scripts still flagged as LFI** ⚠️ *Initial tweak in 740ba08 was insufficient*  
   **Finding:** `check-user-meta.php:13` and `test-alternate-registry-id.php:24` — `$path` is iterated from a hardcoded static array, never user-controlled.  
-  **Fix:** Add `*-user-meta.php`, `*-registry-id.php`, or more broadly `*/scripts/*` / `*/cli/*` to `exclude_files` in the pattern.  
+  **Attempted fix:** Added `wp-load` to `exclude_patterns`, but verification showed it does not suppress the actual matched line (`require_once $path;`).  
+  **Next fix:** Use `exclude_files` or a context-aware suppression that recognizes the surrounding `foreach ($wp_load_paths as $path) { if (file_exists($path)) { require_once $path; } }` bootstrap finder pattern.  
   **File:** `dist/patterns/php-dynamic-include.json`  
-  **FPs eliminated:** 2 (both CRITICAL)
+  **FPs remaining:** 2 (both CRITICAL)
 
 ---
 
-### 🔍 Investigate Before Acting — Diagnosis Uncertain
-### 🔬 Investigated — Root Causes Confirmed, Fixes Required
+### ✅ Implemented After Investigation
 
-- [x] **INVESTIGATE "Direct superglobal manipulation" (~17 findings on `CURLOPT_POST`)** 🔬 *Root cause confirmed — see below*  
+- [x] **FIX `spo-002-superglobals` inline grep corruption** ✅ *Implemented in scanner*  
   **Scan log findings:** 31 total spo-002 findings. 16 are `CURLOPT_POST`/`CURLOPT_POSTFIELDS`, 2 are JS `type: 'POST'` strings, 4 are `$_SERVER` reads (SERVER not in the pattern alternation), 1 is the only legitimate finding (line 1014).  
   **Root cause confirmed:** The inline bash spo-002 grep (check-performance.sh ~line 3723) uses a **double-quoted string with `\\$_`**. In bash double-quotes, `\\` → `\` and then `$_` starts expansion of the bash `$_` special variable (last argument of the previous command). At runtime, `$_` contains the last argument from `text_echo "▸ Direct superglobal manipulation..."` — an ANSI-coloured string including `[HIGH]`. This corrupts the entire ERE pattern, causing it to match incorrectly in a non-deterministic way.  
   **The JSON pattern itself (`\$_(GET|POST...)`) is correct** — tested via `load_pattern` + direct grep, it does NOT match CURLOPT_POST. The bug is entirely in the inline bash code, not the JSON pattern file.  
-  **Fix required:** Change the inline grep at line 3723 from double-quoted to single-quoted string (prevents `$_` expansion). This is a **scanner bug, not a pattern bug**. The JSON file does not need to change.  
+  **Fix implemented:** Changed the inline grep at line 3723 from double-quoted to single-quoted string, which prevents `$_` expansion. This is a **scanner bug, not a pattern bug**. The JSON file did not need to change.  
   **File to fix:** `dist/bin/check-performance.sh` ~line 3723  
-  **FPs confirmed:** ~30 (all but the line 1014 `$_POST` finding)
+  **Verified impact:** `spo-002-superglobals` dropped from **31 → 3** findings in the follow-up scan. Remaining 3 are legitimate review cases: `$_POST['force_refresh']`, `unset($_GET['activate'])`, and `$_GET['view_errors']` conditional logic.
 
-- [x] **INVESTIGATE "Sanitized reads flagged as unsanitized" for `sanitize_text_field($_GET[...])`** 🔬 *Root cause confirmed — see below*  
+- [x] **FIX simple runner ignoring `exclude_patterns` / `exclude_files`** ✅ *Implemented in scanner*  
   **Scan log findings:** 30 `unsanitized-superglobal-read` findings. Confirmed FPs include: `class-cr-rest-api.php:90`, `class-cr-rest-api.php:98`, `class-cr-rest-api.php:843`, `class-cr-business-rest-api.php:103`, `class-cr-business-rest-api.php:138`, `class-cr-business-rest-api.php:857` — all are same-line ternary patterns like `isset($_GET['x']) ? sanitize_text_field($_GET['x']) : ''`.  
   **Root cause confirmed:** The simple pattern runner (`check-performance.sh` ~line 5970) runs `cached_grep -E "$pattern_search"` but **never applies `exclude_patterns` from the JSON definition**. The `exclude_patterns` array in `unsanitized-superglobal-read.json` (which includes `sanitize_`, `isset\(`, `esc_`, etc.) is loaded but silently ignored. The legacy inline checks manually pipe through `grep -v` to apply exclusions; the JSON-driven simple runner does not.  
   **This is NOT a multiline issue** — the flagged lines all have the sanitizer wrapper on the same line. The exclusion simply isn't being applied at all by the simple runner.  
   **Additional FPs from same root cause:** `clear-person-cache.php:34`, `setup-user-registry-id.php:23-24`, `set-account-type.php:26-27` — all properly guarded `$_POST` reads with nonce verification on the same line.  
-  **Fix required:** The simple pattern runner must apply `exclude_patterns` from the JSON by piping `cached_grep` output through `grep -v` for each exclude pattern. This would eliminate the ~20 same-line sanitizer false positives across all JSON-defined `grep`/`simple` type patterns.  
+  **Fix implemented:** The simple pattern runner now parses both `exclude_patterns` and `exclude_files` from the JSON pattern file and filters matches before JSON findings are added. This improves behavior across all JSON-defined `grep`/`simple` patterns, not just `unsanitized-superglobal-read`.  
   **File to fix:** `dist/bin/check-performance.sh` ~line 5970 (simple pattern runner grep call)  
-  **FPs confirmed:** ~20 of 30 findings
+  **Verified impact:** `unsanitized-superglobal-read` dropped from **30 → 19** findings in the follow-up scan. The remaining 19 are mostly other classes of reads that still require separate tuning, especially the dedicated `unsanitized-superglobal-isset-bypass` rule.
 
 ---
 
-### 📋 Deferred — Valid Issues, Structural Effort Required
 ### 📋 Deferred — Investigate Further Before Implementing
 
 - [ ] **DEFERRED: Add admin-only hook whitelist for capability check false positives**  
@@ -91,10 +90,12 @@
 | Fix | File to Edit | Effort | FPs Eliminated | Status |
 |-----|-------------|--------|---------------|--------|
 | `\b` word boundary on `exec-call` | `php-shell-exec-functions.json` | 1 line | 8 | ✅ Done (740ba08) |
-| Add `wp-load` to `exclude_patterns` | `php-dynamic-include.json` | 1 line | 2 | ✅ Done (740ba08) |
-| Single-quote inline spo-002 grep | `check-performance.sh` ~L3723 | 1 line | ~30 | ⬜ Not started |
-| Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | ~20 | ⬜ Not started |
+| Add `wp-load` to `exclude_patterns` | `php-dynamic-include.json` | 1 line | 0 verified | ⚠️ Partial only; follow-up still needed |
+| Single-quote inline spo-002 grep | `check-performance.sh` ~L3723 | 1 line | 28 verified | ✅ Done |
+| Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | 11 verified | ✅ Done |
 | Admin-only hook whitelist | `check-performance.sh` | Medium | 1+ per scan | 📋 Deferred |
 | N+1 loop containment tightening | `check-performance.sh` | Medium | 2+ per scan | 📋 Deferred |
 
-**Before fixes:** 99 findings | **After easy pattern fixes (done):** ~89 | **After scanner bug fixes:** ~40
+**Latest measured totals:** 99 findings before scanner fixes → **88 findings after scanner fixes**.
+
+**Important follow-up:** `php-dynamic-include` is still reporting 2 findings after the latest verification. The previous `wp-load` exclusion was too weak because the actual matched line is `require_once $path;`, not the nearby `file_exists($path)` / `wp-load.php` discovery line. That rule needs a better context-aware suppression or file exclusion strategy.
