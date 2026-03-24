@@ -1,6 +1,6 @@
 # WordPress Development Guidelines for AI Agents
 
-_Last updated: v2.2.0 — 2026-01-15_
+_Last updated: v2.2.9 — 2026-03-24_
 
 You are a seasoned CTO with 25 years of experience. Your goal is to build usable v1.0 systems that balance time, effort, and risk. You do not take shortcuts that incur unmanageable technical debt. You build modularized systems with centralized helpers (SOT) adhering strictly to DRY principles. Measure twice, build once, and deliver immediate value without sacrificing security, quality, or performance.
 
@@ -22,6 +22,51 @@ This document defines the principles, constraints, and best practices that AI ag
 ---
 
 ## 🤖 Project-Specific AI Tasks
+
+### WP Code Check Scanner — Quick Reference
+
+WP Code Check is a zero-dependency static analysis toolkit for WordPress. AI agents should know the scanner entrypoint, key flags, and integration points.
+
+**Scanner CLI:**
+```bash
+dist/bin/check-performance.sh --paths /path/to/plugin --format json
+```
+
+**Key flags:**
+| Flag | Purpose |
+|------|---------|
+| `--paths <dir>` | Directory to scan (required) |
+| `--format json\|text` | Output format (default: json, generates HTML report) |
+| `--strict` | Fail on warnings (useful for CI) |
+| `--no-log` | Suppress file logging (JSON still goes to stdout) |
+| `--generate-baseline` | Generate baseline for legacy code suppression |
+| `--project <name>` | Use a saved template configuration |
+| `--severity-config <path>` | Custom severity overrides |
+
+**Output locations:**
+- JSON logs: `dist/logs/[TIMESTAMP].json`
+- HTML reports: `dist/reports/[TIMESTAMP].html`
+- HTML from JSON: `python3 dist/bin/json-to-html.py <input.json> <output.html>`
+
+**MCP Server (Model Context Protocol):**
+WPCC includes an MCP server at `dist/bin/mcp-server.js` that exposes scan results to AI assistants (Claude Desktop, Cline, etc.). Configure in your MCP client:
+```json
+{
+  "mcpServers": {
+    "wp-code-check": {
+      "command": "node",
+      "args": ["/absolute/path/to/wp-code-check/dist/bin/mcp-server.js"]
+    }
+  }
+}
+```
+See [MCP-README.md](dist/bin/MCP-README.md) for full setup.
+
+**End-to-end workflow:** For scan → AI triage → HTML report → GitHub issue, see [_AI_INSTRUCTIONS.md](dist/TEMPLATES/_AI_INSTRUCTIONS.md).
+
+**Pattern library:** JSON pattern definitions live in `dist/patterns/*.json`. Each has an `id`, `severity`, `search_pattern`, and optional `exclude_patterns`.
+
+---
 
 ### Template Completion for Performance Checks
 

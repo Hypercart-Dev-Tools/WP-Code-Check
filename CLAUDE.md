@@ -1,0 +1,1 @@
+Please review AGENTS.md for instructions that Claude Code should follow.
