@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+#
+# local-wp - WP-CLI wrapper for Local by Flywheel sites
+#
+# Runs WP-CLI commands against a Local by Flywheel installation without
+# needing to know the exact PHP binary path for that site.
+#
+# Usage:
+#   local-wp <site-name> <wp-cli-command> [args...]
+#   local-wp --help
+#
+# Examples:
+#   local-wp my-site db query "SELECT * FROM wp_posts LIMIT 10"
+#   local-wp my-site option get blogname
+#   local-wp my-site plugin list
+#
+# Environment:
+#   PHP_BIN   Override the PHP binary path (skip auto-detection)
+#   WP_CLI    Override the WP-CLI binary path (default: wp)
+#
+# © Copyright 2025 Hypercart (a DBA of Neochrome, Inc.)
+# License: Apache-2.0
+# Version: 1.0.0
+
+set -euo pipefail
+
+# ============================================================
+# Colors
+# ============================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# ============================================================
+# Usage / Help  (must come BEFORE any PHP detection)
+# ============================================================
+
+usage() {
+    cat << EOF
+${BOLD}local-wp — WP-CLI wrapper for Local by Flywheel sites${NC}
+
+${BOLD}USAGE:${NC}
+  local-wp <site-name> <wp-cli-command> [args...]
+  local-wp --help
+
+${BOLD}EXAMPLES:${NC}
+  # Database query
+  local-wp my-site db query "SELECT * FROM wp_posts LIMIT 10"
+
+  # Get a WordPress option
+  local-wp my-site option get blogname
+
+  # List installed plugins
+  local-wp my-site plugin list
+
+  # Export database
+  local-wp my-site db export ~/backup.sql
+
+${BOLD}ENVIRONMENT VARIABLES:${NC}
+  PHP_BIN   Override the PHP binary (skip auto-detection)
+  WP_CLI    Override the WP-CLI binary path (default: wp)
+
+${BOLD}HOW IT WORKS:${NC}
+  local-wp searches for the PHP binary used by your Local by Flywheel
+  site and delegates all arguments to WP-CLI using that PHP. This lets
+  you run WP-CLI commands without knowing the exact PHP path.
+
+  On macOS, Local stores PHP binaries under:
+    ~/Library/Application Support/Local/lightning-services/php-*/
+
+${BOLD}REQUIREMENTS:${NC}
+  - Local by Flywheel must be installed (macOS) or PHP_BIN must be set
+  - WP-CLI must be installed and available as 'wp' (or set WP_CLI)
+
+${BOLD}EXIT CODES:${NC}
+  0  Command succeeded
+  1  Error (see message)
+
+${BOLD}MORE INFO:${NC}
+  Repository: https://github.com/Hypercart-Dev-Tools/WP-Code-Check
+
+EOF
+}
+
+# Handle --help / -h immediately, before any environment probing
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h)
+            usage
+            exit 0
+            ;;
+    esac
+done
+
+# ============================================================
+# PHP binary detection (only reached for non-help invocations)
+# ============================================================
+
+# detect_php_bin — search macOS Local by Flywheel for a PHP binary.
+# Prints the path to stdout on success; prints nothing and returns 0
+# on failure so callers are not broken by set -e.
+detect_php_bin() {
+    local search_dirs=(
+        "${HOME}/Library/Application Support/Local/lightning-services"
+        "/Applications/Local.app/Contents/Resources/extraResources/lightning-services"
+    )
+
+    for dir in "${search_dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            continue
+        fi
+        # Find the highest-version PHP binary available
+        local php_bin
+        php_bin=$(find "$dir" -name "php-fpm" -o -name "php" 2>/dev/null \
+            | grep -v "php-fpm" \
+            | sort -rV \
+            | head -n 1)
+        if [[ -x "$php_bin" ]]; then
+            echo "$php_bin"
+            return 0
+        fi
+    done
+
+    # No Local PHP found — return 0 (not 1) so set -e does not abort the
+    # caller.  The empty output signals "not found" to the caller.
+    return 0
+}
+
+# Resolve PHP_BIN.  The || true guard ensures that even if detect_php_bin
+# were ever changed to return non-zero, set -e cannot silently kill the
+# script here — we fall through to the explicit error check below.
+PHP_BIN="${PHP_BIN:-$(detect_php_bin || true)}"
+
+# ============================================================
+# Argument validation
+# ============================================================
+
+if [[ $# -lt 1 ]]; then
+    echo -e "${RED}Error:${NC} site name required.\n" >&2
+    usage >&2
+    exit 1
+fi
+
+SITE_NAME="$1"
+shift
+
+if [[ $# -lt 1 ]]; then
+    echo -e "${RED}Error:${NC} WP-CLI command required after site name '${SITE_NAME}'.\n" >&2
+    usage >&2
+    exit 1
+fi
+
+# ============================================================
+# WP-CLI binary resolution
+# ============================================================
+
+WP_CLI="${WP_CLI:-wp}"
+
+if ! command -v "$WP_CLI" &>/dev/null; then
+    echo -e "${RED}Error:${NC} WP-CLI not found. Install it from https://wp-cli.org/ or set WP_CLI." >&2
+    exit 1
+fi
+
+# ============================================================
+# PHP resolution / fallback
+# ============================================================
+
+if [[ -z "$PHP_BIN" ]]; then
+    # Fall back to the system PHP if Local's PHP cannot be found
+    if command -v php &>/dev/null; then
+        PHP_BIN="$(command -v php)"
+        echo -e "${YELLOW}Warning:${NC} Local by Flywheel PHP not found for '${SITE_NAME}'. Using system PHP: ${PHP_BIN}" >&2
+    else
+        echo -e "${RED}Error:${NC} No PHP binary found." >&2
+        echo "  Set PHP_BIN to your PHP path, e.g.:" >&2
+        echo "    PHP_BIN=/usr/bin/php local-wp ${SITE_NAME} $*" >&2
+        exit 1
+    fi
+fi
+
+# ============================================================
+# Execute WP-CLI
+# ============================================================
+
+exec "$PHP_BIN" "$(command -v "$WP_CLI")" "$@"
