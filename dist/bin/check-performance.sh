@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.2.8"
+SCRIPT_VERSION="2.2.9"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -414,6 +414,33 @@ declare -a JSON_CHECKS=()
 # Note: Variable names kept as DRY_VIOLATIONS for backward compatibility
 declare -a DRY_VIOLATIONS=()
 DRY_VIOLATIONS_COUNT=0
+
+# Magic String Detector observability metrics (Path B)
+MAGIC_PATTERNS_PROCESSED=0
+MAGIC_TOTAL_RAW_MATCHES=0
+MAGIC_TOTAL_EXTRACTED_STRINGS=0
+MAGIC_TOTAL_UNIQUE_STRINGS=0
+MAGIC_TOTAL_FILTERED_STRINGS=0
+MAGIC_TOTAL_FILTERED_MIN_FILES=0
+MAGIC_TOTAL_FILTERED_MIN_MATCHES=0
+MAGIC_TOTAL_VIOLATIONS=0
+MAGIC_TOTAL_GREP_TIME=0
+MAGIC_TOTAL_EXTRACT_TIME=0
+MAGIC_TOTAL_AGGREGATE_TIME=0
+
+LAST_MAGIC_PATTERN_ID=""
+LAST_MAGIC_PATTERN_TITLE=""
+LAST_MAGIC_STATE="IDLE"
+LAST_MAGIC_RAW_MATCHES=0
+LAST_MAGIC_EXTRACTED_STRINGS=0
+LAST_MAGIC_UNIQUE_STRINGS=0
+LAST_MAGIC_FILTERED_STRINGS=0
+LAST_MAGIC_FILTERED_MIN_FILES=0
+LAST_MAGIC_FILTERED_MIN_MATCHES=0
+LAST_MAGIC_VIOLATIONS_ADDED=0
+LAST_MAGIC_GREP_TIME=0
+LAST_MAGIC_EXTRACT_TIME=0
+LAST_MAGIC_AGGREGATE_TIME=0
 CLONE_DETECTION_RAN=false  # Track whether clone detection was executed
 
 # Show enhanced help message
@@ -1600,6 +1627,40 @@ EOF
   ((DRY_VIOLATIONS_COUNT++)) || true
 }
 
+reset_magic_pattern_metrics() {
+  LAST_MAGIC_PATTERN_ID="${pattern_id:-}"
+  LAST_MAGIC_PATTERN_TITLE="${pattern_title:-}"
+  LAST_MAGIC_STATE="IDLE"
+  LAST_MAGIC_RAW_MATCHES=0
+  LAST_MAGIC_EXTRACTED_STRINGS=0
+  LAST_MAGIC_UNIQUE_STRINGS=0
+  LAST_MAGIC_FILTERED_STRINGS=0
+  LAST_MAGIC_FILTERED_MIN_FILES=0
+  LAST_MAGIC_FILTERED_MIN_MATCHES=0
+  LAST_MAGIC_VIOLATIONS_ADDED=0
+  LAST_MAGIC_GREP_TIME=0
+  LAST_MAGIC_EXTRACT_TIME=0
+  LAST_MAGIC_AGGREGATE_TIME=0
+}
+
+set_magic_pattern_state() {
+  LAST_MAGIC_STATE="$1"
+  debug_echo "  [STATE] ${LAST_MAGIC_PATTERN_ID:-unknown}: ${LAST_MAGIC_STATE}"
+}
+
+accumulate_magic_pattern_metrics() {
+  MAGIC_TOTAL_RAW_MATCHES=$((MAGIC_TOTAL_RAW_MATCHES + LAST_MAGIC_RAW_MATCHES))
+  MAGIC_TOTAL_EXTRACTED_STRINGS=$((MAGIC_TOTAL_EXTRACTED_STRINGS + LAST_MAGIC_EXTRACTED_STRINGS))
+  MAGIC_TOTAL_UNIQUE_STRINGS=$((MAGIC_TOTAL_UNIQUE_STRINGS + LAST_MAGIC_UNIQUE_STRINGS))
+  MAGIC_TOTAL_FILTERED_STRINGS=$((MAGIC_TOTAL_FILTERED_STRINGS + LAST_MAGIC_FILTERED_STRINGS))
+  MAGIC_TOTAL_FILTERED_MIN_FILES=$((MAGIC_TOTAL_FILTERED_MIN_FILES + LAST_MAGIC_FILTERED_MIN_FILES))
+  MAGIC_TOTAL_FILTERED_MIN_MATCHES=$((MAGIC_TOTAL_FILTERED_MIN_MATCHES + LAST_MAGIC_FILTERED_MIN_MATCHES))
+  MAGIC_TOTAL_VIOLATIONS=$((MAGIC_TOTAL_VIOLATIONS + LAST_MAGIC_VIOLATIONS_ADDED))
+  MAGIC_TOTAL_GREP_TIME=$((MAGIC_TOTAL_GREP_TIME + LAST_MAGIC_GREP_TIME))
+  MAGIC_TOTAL_EXTRACT_TIME=$((MAGIC_TOTAL_EXTRACT_TIME + LAST_MAGIC_EXTRACT_TIME))
+  MAGIC_TOTAL_AGGREGATE_TIME=$((MAGIC_TOTAL_AGGREGATE_TIME + LAST_MAGIC_AGGREGATE_TIME))
+}
+
 # Output final JSON
 output_json() {
   local exit_code="$1"
@@ -1654,6 +1715,25 @@ output_json() {
     fi
   done
 
+  local magic_string_metrics_json=$(cat <<EOF
+{
+  "patterns_processed": $MAGIC_PATTERNS_PROCESSED,
+  "total_raw_matches": $MAGIC_TOTAL_RAW_MATCHES,
+  "total_extracted_strings": $MAGIC_TOTAL_EXTRACTED_STRINGS,
+  "total_unique_strings": $MAGIC_TOTAL_UNIQUE_STRINGS,
+  "total_filtered_strings": $MAGIC_TOTAL_FILTERED_STRINGS,
+  "filtered_below_min_files": $MAGIC_TOTAL_FILTERED_MIN_FILES,
+  "filtered_below_min_matches": $MAGIC_TOTAL_FILTERED_MIN_MATCHES,
+  "total_violations": $MAGIC_TOTAL_VIOLATIONS,
+  "timing_ms": {
+    "grep": $MAGIC_TOTAL_GREP_TIME,
+    "extract": $MAGIC_TOTAL_EXTRACT_TIME,
+    "aggregate": $MAGIC_TOTAL_AGGREGATE_TIME
+  }
+}
+EOF
+)
+
     cat <<EOF
 {
   "version": "$SCRIPT_VERSION",
@@ -1678,6 +1758,7 @@ output_json() {
     "failed": $FIXTURE_VALIDATION_FAILED,
     "message": "Detection patterns verified against ${FIXTURE_VALIDATION_PASSED} test fixtures"
   },
+  "magic_string_metrics": $magic_string_metrics_json,
   "findings": [$findings_json],
   "checks": [$checks_json],
   "magic_string_violations": [$dry_violations_json]
@@ -2536,12 +2617,22 @@ generate_baseline_file() {
 # - MAX_LOOP_ITERATIONS limit on aggregation loops
 process_aggregated_pattern() {
   local pattern_file="$1"
+  local phase_start_time=0
+  local phase_end_time=0
+  local extracted_count=0
+  local total_unique_strings=0
+  local filtered_strings=0
+  local filtered_min_files=0
+  local filtered_min_matches=0
+  local violations_added=0
 
   # Load pattern metadata
   if ! load_pattern "$pattern_file"; then
     debug_echo "Failed to load pattern: $pattern_file"
     return 1
   fi
+
+  reset_magic_pattern_metrics
 
   # Debug: Log loaded pattern info
   debug_echo "==========================================="
@@ -2558,12 +2649,16 @@ process_aggregated_pattern() {
     return 0
   fi
 
+  MAGIC_PATTERNS_PROCESSED=$((MAGIC_PATTERNS_PROCESSED + 1))
+
   # Check if pattern_search is empty
   if [ -z "$pattern_search" ]; then
+    set_magic_pattern_state "COMPLETE"
     debug_echo "ERROR: pattern_search is EMPTY!"
     text_echo "  ${RED}→ Pattern: ${NC}"
     text_echo "  ${RED}→ Found 0${NC}"
     text_echo "${RED}0 raw matches${NC}"
+    accumulate_magic_pattern_metrics
     return 1
   fi
 
@@ -2617,8 +2712,8 @@ process_aggregated_pattern() {
   # Create temp files for aggregation
   local temp_matches=$(mktemp)
 
-  # PROFILING: Track time for each step
-  local step_start_time=$(date +%s%N 2>/dev/null || echo "0")
+  set_magic_pattern_state "GREP"
+  phase_start_time=$(date +%s%N 2>/dev/null || echo "0")
 
   # Run grep to find all matches using the pattern's search pattern
   # Note: pattern_search is set by load_pattern
@@ -2659,7 +2754,9 @@ process_aggregated_pattern() {
 
   # Check for timeout (exit code 124)
   if [ "$grep_exit_code" -eq 124 ]; then
+    set_magic_pattern_state "COMPLETE"
     text_echo "  ${RED}⚠ Scan timeout after ${MAX_SCAN_TIME}s - skipping pattern${NC}"
+    accumulate_magic_pattern_metrics
     rm -f "$temp_matches"
     return 1
   fi
@@ -2669,27 +2766,30 @@ process_aggregated_pattern() {
   local match_count=$(echo "$matches" | grep -c . 2>/dev/null)
   # Ensure match_count is a valid integer (default to 0 if empty/invalid)
   match_count=${match_count:-0}
+  LAST_MAGIC_RAW_MATCHES=$match_count
   debug_echo "Found $match_count raw matches"
 
-  # PROFILING: Log grep time
-  if [ "$PROFILE" = "1" ] && [ "$step_start_time" != "0" ]; then
-    local grep_end_time=$(date +%s%N 2>/dev/null || echo "0")
-    if [ "$grep_end_time" != "0" ]; then
-      local grep_duration=$(( (grep_end_time - step_start_time) / 1000000 ))
-      debug_echo "  [PROFILE] Grep step: ${grep_duration}ms"
-    fi
-    step_start_time=$(date +%s%N 2>/dev/null || echo "0")
+  phase_end_time=$(date +%s%N 2>/dev/null || echo "0")
+  if [ "$phase_start_time" != "0" ] && [ "$phase_end_time" != "0" ]; then
+    LAST_MAGIC_GREP_TIME=$(( (phase_end_time - phase_start_time) / 1000000 ))
+  fi
+  if [ "$PROFILE" = "1" ]; then
+    debug_echo "  [PROFILE] Grep step: ${LAST_MAGIC_GREP_TIME}ms"
   fi
 
   # SAFETY: Check if match count exceeds file limit (rough proxy for file count)
   if [ "$MAX_FILES" -gt 0 ] && [ "$match_count" -gt "$((MAX_FILES * 10))" ]; then
+    set_magic_pattern_state "COMPLETE"
     text_echo "  ${RED}⚠ Match count ($match_count) suggests excessive file processing - skipping pattern${NC}"
+    accumulate_magic_pattern_metrics
     rm -f "$temp_matches"
     return 1
   fi
 
   # Extract captured groups and aggregate
   if [ -n "$matches" ]; then
+    set_magic_pattern_state "EXTRACT"
+    phase_start_time=$(date +%s%N 2>/dev/null || echo "0")
     local iteration=0
     local last_progress_time=$(date +%s 2>/dev/null || echo "0")
 
@@ -2724,26 +2824,31 @@ process_aggregated_pattern() {
       local captured=$(echo "$code" | grep -oE "$pattern_search" | sed -E "s/.*['\"]([a-z0-9_]+)['\"].*/\1/" | head -1)
 
       if [ -n "$captured" ]; then
+        extracted_count=$((extracted_count + 1))
         # Escape pipe characters in the captured string for safe storage
         local escaped_captured=$(echo "$captured" | sed 's/|/\\|/g')
         echo "$escaped_captured|$file|$line" >> "$temp_matches"
       fi
     done <<< "$matches"
 
-    # PROFILING: Log extraction time
-    if [ "$PROFILE" = "1" ] && [ "$step_start_time" != "0" ]; then
-      local extract_end_time=$(date +%s%N 2>/dev/null || echo "0")
-      if [ "$extract_end_time" != "0" ]; then
-        local extract_duration=$(( (extract_end_time - step_start_time) / 1000000 ))
-        debug_echo "  [PROFILE] String extraction: ${extract_duration}ms"
-      fi
-      step_start_time=$(date +%s%N 2>/dev/null || echo "0")
+    LAST_MAGIC_EXTRACTED_STRINGS=$extracted_count
+
+    phase_end_time=$(date +%s%N 2>/dev/null || echo "0")
+    if [ "$phase_start_time" != "0" ] && [ "$phase_end_time" != "0" ]; then
+      LAST_MAGIC_EXTRACT_TIME=$(( (phase_end_time - phase_start_time) / 1000000 ))
+    fi
+    if [ "$PROFILE" = "1" ]; then
+      debug_echo "  [PROFILE] String extraction: ${LAST_MAGIC_EXTRACT_TIME}ms"
     fi
 
     # Aggregate by captured string
     if [ -f "$temp_matches" ] && [ -s "$temp_matches" ]; then
+      set_magic_pattern_state "AGGREGATE"
+      phase_start_time=$(date +%s%N 2>/dev/null || echo "0")
       local unique_strings=$(cut -d'|' -f1 "$temp_matches" | sort -u)
-      local total_unique_strings=$(echo "$unique_strings" | wc -l | tr -d ' ')
+      total_unique_strings=$(echo "$unique_strings" | wc -l | tr -d ' ')
+      total_unique_strings=${total_unique_strings:-0}
+      LAST_MAGIC_UNIQUE_STRINGS=$total_unique_strings
 
       local string_iteration=0
       local last_string_progress_time=$(date +%s 2>/dev/null || echo "0")
@@ -2795,19 +2900,35 @@ process_aggregated_pattern() {
 
           # Add to magic string violations
           add_dry_violation "$pattern_title" "$pattern_severity" "$unescaped_string" "$file_count" "$total_count" "$locations_json"
+          violations_added=$((violations_added + 1))
+        else
+          filtered_strings=$((filtered_strings + 1))
+          if [ "$file_count" -lt "$min_files" ]; then
+            filtered_min_files=$((filtered_min_files + 1))
+          fi
+          if [ "$total_count" -lt "$min_matches" ]; then
+            filtered_min_matches=$((filtered_min_matches + 1))
+          fi
         fi
       done <<< "$unique_strings"
 
-      # PROFILING: Log aggregation time
-      if [ "$PROFILE" = "1" ] && [ "$step_start_time" != "0" ]; then
-        local agg_end_time=$(date +%s%N 2>/dev/null || echo "0")
-        if [ "$agg_end_time" != "0" ]; then
-          local agg_duration=$(( (agg_end_time - step_start_time) / 1000000 ))
-          debug_echo "  [PROFILE] Aggregation: ${agg_duration}ms"
-        fi
+      LAST_MAGIC_FILTERED_STRINGS=$filtered_strings
+      LAST_MAGIC_FILTERED_MIN_FILES=$filtered_min_files
+      LAST_MAGIC_FILTERED_MIN_MATCHES=$filtered_min_matches
+      LAST_MAGIC_VIOLATIONS_ADDED=$violations_added
+
+      phase_end_time=$(date +%s%N 2>/dev/null || echo "0")
+      if [ "$phase_start_time" != "0" ] && [ "$phase_end_time" != "0" ]; then
+        LAST_MAGIC_AGGREGATE_TIME=$(( (phase_end_time - phase_start_time) / 1000000 ))
+      fi
+      if [ "$PROFILE" = "1" ]; then
+        debug_echo "  [PROFILE] Aggregation: ${LAST_MAGIC_AGGREGATE_TIME}ms"
       fi
     fi
   fi
+
+  set_magic_pattern_state "COMPLETE"
+  accumulate_magic_pattern_metrics
 
   # Cleanup
   rm -f "$temp_matches"
@@ -6294,6 +6415,12 @@ else
       violations_before=$DRY_VIOLATIONS_COUNT
 
       process_aggregated_pattern "$pattern_file"
+
+      if [ "$VERBOSE" = "true" ] || [ "$PROFILE" = "1" ]; then
+        text_echo "  Metrics: ${LAST_MAGIC_RAW_MATCHES} raw → ${LAST_MAGIC_EXTRACTED_STRINGS} extracted → ${LAST_MAGIC_UNIQUE_STRINGS} unique → ${LAST_MAGIC_VIOLATIONS_ADDED} violations"
+        text_echo "  Filtered: ${LAST_MAGIC_FILTERED_STRINGS} strings (min_files=${LAST_MAGIC_FILTERED_MIN_FILES}, min_matches=${LAST_MAGIC_FILTERED_MIN_MATCHES})"
+        text_echo "  Timing: grep=${LAST_MAGIC_GREP_TIME}ms extract=${LAST_MAGIC_EXTRACT_TIME}ms agg=${LAST_MAGIC_AGGREGATE_TIME}ms"
+      fi
 
       # Check if new violations were added
       violations_after=$DRY_VIOLATIONS_COUNT

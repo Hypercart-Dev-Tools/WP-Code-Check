@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Adds fixture coverage for both the ACF-style Launchpad-shaped case and a standalone baseline `_()` call
   - Adds safe fixture coverage proving standard WordPress i18n helpers do not trigger the rule
 
+- Added Path B observability for Magic String Detector aggregated patterns
+  - Tracks per-pattern phase timings for grep, extraction, and aggregation in `process_aggregated_pattern()`
+  - Tracks quality metrics for raw matches, extracted strings, unique strings, filtered strings, and emitted violations
+  - Logs lightweight state transitions (`GREP`, `EXTRACT`, `AGGREGATE`, `COMPLETE`) in debug output
+  - Shows per-pattern metrics in text output when `--verbose` or `PROFILE=1` is enabled
+  - Exposes cumulative `magic_string_metrics` in JSON output for downstream reporting
+  - Verified in text mode and JSON mode against `/Users/noelsaw/Documents/GH Repos/creditconnection2-self-service`
+
 ### Documentation
 
 - Added `PROJECT/1-INBOX/PATTERN-PROPOSAL-LAUNCHPAD-CRASH.md`
