@@ -5965,6 +5965,7 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
 
       local exclude_file_globs=""
       local exclude_line_patterns=""
+      local exclude_file_contains=""
       local current_exclusion_block=""
 
       while IFS= read -r json_line; do
@@ -5975,6 +5976,10 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
             ;;
           *'"exclude_patterns"'*)
             current_exclusion_block="exclude_patterns"
+            continue
+            ;;
+          *'"exclude_if_file_contains"'*)
+            current_exclusion_block="exclude_if_file_contains"
             continue
             ;;
         esac
@@ -5989,6 +5994,9 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
           if [ -n "$exclusion_value" ]; then
             if [ "$current_exclusion_block" = "exclude_files" ]; then
               exclude_file_globs="${exclude_file_globs}${exclusion_value}
+"
+            elif [ "$current_exclusion_block" = "exclude_if_file_contains" ]; then
+              exclude_file_contains="${exclude_file_contains}${exclusion_value}
 "
             else
               exclude_line_patterns="${exclude_line_patterns}${exclusion_value}
@@ -6034,6 +6042,16 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
                   ;;
               esac
             done <<< "$exclude_file_globs"
+          fi
+
+          if [ "$excluded_by_pattern" = false ] && [ -n "$exclude_file_contains" ]; then
+            while IFS= read -r contain_str; do
+              [ -z "$contain_str" ] && continue
+              if grep -qF "$contain_str" "$file" 2>/dev/null; then
+                excluded_by_pattern=true
+                break
+              fi
+            done <<< "$exclude_file_contains"
           fi
 
           if [ "$excluded_by_pattern" = false ] && [ -n "$exclude_line_patterns" ]; then

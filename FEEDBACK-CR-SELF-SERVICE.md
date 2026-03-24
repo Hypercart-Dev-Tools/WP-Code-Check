@@ -15,12 +15,12 @@
   **File:** `dist/patterns/php-shell-exec-functions.json`  
   **FPs eliminated:** 8 (all CRITICAL — all were `curl_exec($curl)` calls)
 
-- [ ] **FOLLOW-UP `php-dynamic-include.json` — WP-CLI bootstrap scripts still flagged as LFI** ⚠️ *Initial tweak in 740ba08 was insufficient*  
+- [x] **`php-dynamic-include.json` — WP-CLI bootstrap scripts no longer flagged as LFI** ✅ *Resolved in follow-up commit*  
   **Finding:** `check-user-meta.php:13` and `test-alternate-registry-id.php:24` — `$path` is iterated from a hardcoded static array, never user-controlled.  
-  **Attempted fix:** Added `wp-load` to `exclude_patterns`, but verification showed it does not suppress the actual matched line (`require_once $path;`).  
-  **Next fix:** Use `exclude_files` or a context-aware suppression that recognizes the surrounding `foreach ($wp_load_paths as $path) { if (file_exists($path)) { require_once $path; } }` bootstrap finder pattern.  
-  **File:** `dist/patterns/php-dynamic-include.json`  
-  **FPs remaining:** 2 (both CRITICAL)
+  **Attempted fix (740ba08 — insufficient):** Added `wp-load` to `exclude_patterns`, but the actual matched line is `require_once $path;` — it does not contain `wp-load`.  
+  **Proper fix:** Added new `exclude_if_file_contains` capability to the simple pattern runner and `dist/bin/check-performance.sh`. When a matched file's content contains any string listed in the new `exclude_if_file_contains` JSON array, all matches in that file are suppressed. Added `"wp eval-file"` to `php-dynamic-include.json` under this key — both WP-CLI scripts have this string in their docblock comment.  
+  **Files changed:** `dist/bin/check-performance.sh` (runner feature), `dist/patterns/php-dynamic-include.json` (new exclusion key)  
+  **FPs eliminated:** 2 (both CRITICAL)
 
 ---
 
@@ -90,12 +90,10 @@
 | Fix | File to Edit | Effort | FPs Eliminated | Status |
 |-----|-------------|--------|---------------|--------|
 | `\b` word boundary on `exec-call` | `php-shell-exec-functions.json` | 1 line | 8 | ✅ Done (740ba08) |
-| Add `wp-load` to `exclude_patterns` | `php-dynamic-include.json` | 1 line | 0 verified | ⚠️ Partial only; follow-up still needed |
+| `exclude_if_file_contains` + `wp eval-file` | `check-performance.sh` + `php-dynamic-include.json` | Medium | 2 verified | ✅ Done |
 | Single-quote inline spo-002 grep | `check-performance.sh` ~L3723 | 1 line | 28 verified | ✅ Done |
 | Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | 11 verified | ✅ Done |
 | Admin-only hook whitelist | `check-performance.sh` | Medium | 1+ per scan | 📋 Deferred |
 | N+1 loop containment tightening | `check-performance.sh` | Medium | 2+ per scan | 📋 Deferred |
 
-**Latest measured totals:** 99 findings before scanner fixes → **88 findings after scanner fixes**.
-
-**Important follow-up:** `php-dynamic-include` is still reporting 2 findings after the latest verification. The previous `wp-load` exclusion was too weak because the actual matched line is `require_once $path;`, not the nearby `file_exists($path)` / `wp-load.php` discovery line. That rule needs a better context-aware suppression or file exclusion strategy.
+**Latest measured totals:** 99 findings before scanner fixes → **88 findings after first round** → **86 findings after dynamic-include fix**.

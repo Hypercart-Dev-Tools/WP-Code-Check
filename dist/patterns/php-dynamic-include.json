@@ -26,8 +26,10 @@
     ],
     "exclude_patterns": [
       "//.*include",
-      "//.*require",
-      "wp-load"
+      "//.*require"
+    ],
+    "exclude_if_file_contains": [
+      "wp eval-file"
     ],
     "exclude_files": [
       "*/vendor/*",
