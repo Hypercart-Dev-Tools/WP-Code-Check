@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fixed bash `local: can only be used in a function` errors that appeared on every scan invocation. The simple-pattern runner loop uses `local` in top-level scope; replaced with plain variable assignments
+
 - N+1 pattern findings now include the actual source code line in the report. Previously the `code` field was empty because `find_meta_in_loop_line` only returned the line number without extracting the source text
 
 ### Tests
