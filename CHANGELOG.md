@@ -16,6 +16,14 @@ All notable changes to this project will be documented in this file.
 
 - Cross-rule deduplication for overlapping superglobal findings (`spo-002-superglobals`, `unsanitized-superglobal-read`, `unsanitized-superglobal-isset-bypass`). When the same file:line is flagged by multiple rules, only the first finding is kept
 
+### Fixed
+
+- N+1 pattern findings now include the actual source code line in the report. Previously the `code` field was empty because `find_meta_in_loop_line` only returned the line number without extracting the source text
+
+### Documentation
+
+- Added "WP Code Check Scanner — Quick Reference" section to `AGENTS.md` with CLI flags, MCP server configuration, output locations, and pattern library pointer for AI agent discoverability
+
 ## [2.2.9] - 2026-03-23
 
 ### Added
