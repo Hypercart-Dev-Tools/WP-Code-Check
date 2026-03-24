@@ -20,6 +20,12 @@ All notable changes to this project will be documented in this file.
 
 - N+1 pattern findings now include the actual source code line in the report. Previously the `code` field was empty because `find_meta_in_loop_line` only returned the line number without extracting the source text
 
+### Tests
+
+- Added false-positive guard cases to `n-plus-one-optimized.php` fixture: sequential `get_user_meta()` calls after loop closure should not be flagged
+- Expanded `limit-multiplier-from-count.php` fixture with display, comparison, and assignment uses of `count()` that should not match the multiplier pattern
+- Added admin-only hook whitelist cases to `admin-no-capability.php` fixture: `admin_notices`, `admin_init`, `admin_menu` hooks should be INFO, not HIGH
+
 ### Documentation
 
 - Added "WP Code Check Scanner — Quick Reference" section to `AGENTS.md` with CLI flags, MCP server configuration, output locations, and pattern library pointer for AI agent discoverability
