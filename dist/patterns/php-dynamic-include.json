@@ -28,6 +28,9 @@
       "//.*include",
       "//.*require"
     ],
+    "exclude_if_file_contains": [
+      "wp eval-file"
+    ],
     "exclude_files": [
       "*/vendor/*",
       "*/node_modules/*",

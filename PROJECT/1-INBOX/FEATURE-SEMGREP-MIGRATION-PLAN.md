@@ -3,10 +3,10 @@
 **Created:** 2026-02-10
 **Status:** Phase 0a Complete
 **Priority:** High
-**Last Updated:** 2026-02-09
+**Last Updated:** 2026-03-23
 
 ## Problem/Request
-Intermittent scan stalls occur on very large repositories (expected risk) and sometimes on smaller projects (unexpected). The current scanner mixes cached and uncached recursive search paths, with several raw `grep -r*` and `xargs grep` call sites that can still cause unstable runtime behavior.
+Intermittent scan stalls still matter on very large repositories and the scanner still mixes multiple search paths. The highest-risk problems are no longer unguarded hangs in the active path; they are now a maintainability split between `cached_grep()`-based scans, timeout-wrapped raw recursive file discovery, and helper-level `xargs` or raw `grep -r` fallback behavior.
 
 ## Context
 - Scanner entrypoint: `dist/bin/check-performance.sh`
@@ -16,16 +16,21 @@ Intermittent scan stalls occur on very large repositories (expected risk) and so
   - `cached_grep()`
   - `.wpcignore` support
   - `--skip-magic-strings`
-- Remaining high-risk hotspots still use raw recursive grep or raw xargs patterns:
-  - `dist/bin/check-performance.sh:2617`
-  - `dist/bin/check-performance.sh:3222`
-  - `dist/bin/check-performance.sh:4216`
-  - `dist/bin/check-performance.sh:4617`
-  - `dist/bin/check-performance.sh:5024`
-  - `dist/bin/check-performance.sh:5271`
-  - `dist/bin/check-performance.sh:5463`
-  - `dist/bin/check-performance.sh:5554`
-  - `dist/bin/check-performance.sh:5633`
+- Active scan path still contains timeout-wrapped raw recursive file-discovery calls:
+   - `dist/bin/check-performance.sh:4372` - `AJAX_FILES`
+   - `dist/bin/check-performance.sh:4773` - `TERMS_FILES`
+   - `dist/bin/check-performance.sh:5180` - `CRON_FILES`
+   - `dist/bin/check-performance.sh:5427` - `N1_FILES`
+   - `dist/bin/check-performance.sh:5619` - `THANKYOU_CONTEXT_FILES`
+   - `dist/bin/check-performance.sh:5710` - `SMART_COUPONS_FILES`
+   - `dist/bin/check-performance.sh:5722` - `PERF_RISK_FILES`
+   - `dist/bin/check-performance.sh:5789` - `JSON_RESPONSE_FILES`
+- Helper-level raw search behavior still exists and is part of the maintenance burden:
+   - `dist/bin/check-performance.sh:3378` - aggregated pattern `xargs grep`
+   - `dist/bin/check-performance.sh:3381` - aggregated pattern raw `grep -rHn` fallback
+   - `dist/bin/check-performance.sh:3576` - `fast_grep()` `xargs grep`
+   - `dist/bin/check-performance.sh:3579` - `fast_grep()` raw `grep -rHn` fallback
+   - `dist/bin/check-performance.sh:3634` - `cached_grep()` raw `grep -rHn` fallback
 
 ## Direct Answer: Improvements Possible on Raw Recursive/Xargs Paths
 Yes. The most impactful improvements are:
@@ -48,15 +53,15 @@ Yes. The most impactful improvements are:
 **Tasks**
 1. ~~Replace known raw recursive/xargs hotspots with safer cached/wrapped calls.~~ → Refined: xargs calls at lines 2617/3222 are intentionally using pre-cached file lists inside already-protected paths — not actual hotspots. The real issue was 8 unprotected `grep -rl` file-discovery calls.
 2. Standardize null-delimited file handling for all multi-file grep execution. → Deferred (existing `cached_grep` already uses `tr '\n' '\0' | xargs -0`; the 8 patched calls are file-discovery, not line-matching)
-3. ✅ **Ensure every expensive check uses timeout guards.** — Complete (2026-02-09). Wrapped 8 raw `grep -r` calls with `run_with_timeout "$MAX_SCAN_TIME"`:
-   - `AJAX_FILES` (line ~4216)
-   - `TERMS_FILES` (line ~4617)
-   - `CRON_FILES` (line ~5024)
-   - `N1_FILES` (line ~5271, pipeline — timeout wraps recursive grep stage)
-   - `THANKYOU_CONTEXT_FILES` (line ~5463)
-   - `SMART_COUPONS_FILES` (line ~5554)
-   - `PERF_RISK_FILES` (line ~5566)
-   - `JSON_RESPONSE_FILES` (line ~5633)
+3. ✅ **Ensure every expensive check uses timeout guards.** — Complete (2026-02-09). The active file-discovery calls remain raw `grep -r*`, but they are wrapped with `run_with_timeout "$MAX_SCAN_TIME"`:
+   - `AJAX_FILES` (line ~4372)
+   - `TERMS_FILES` (line ~4773)
+   - `CRON_FILES` (line ~5180)
+   - `N1_FILES` (line ~5427, pipeline — timeout wraps the recursive grep stage)
+   - `THANKYOU_CONTEXT_FILES` (line ~5619)
+   - `SMART_COUPONS_FILES` (line ~5710)
+   - `PERF_RISK_FILES` (line ~5722)
+   - `JSON_RESPONSE_FILES` (line ~5789)
 4. Add heartbeat logs every 10 seconds for long loops. → Deferred to Phase 0b
 5. Add top-N slow checks summary at end of scan. → Deferred to Phase 0b
 6. Improve docs for `.wpcignore`, `--skip-magic-strings`, and `MAX_SCAN_TIME`. → Deferred to Phase 0b
@@ -67,13 +72,13 @@ Yes. The most impactful improvements are:
 - Baseline performance snapshot (before/after) → Deferred to Phase 0b
 
 **Exit Criteria**
-- [x] No unguarded raw `grep -r*` in active scan path (remaining raw grep -r only inside `fast_grep()`/`cached_grep()` fallback paths — by design)
+- [x] No unguarded raw `grep -r*` in active scan path; however, active scan still contains timeout-wrapped raw file-discovery calls and helper internals still retain raw `grep -r` / `xargs grep` fallback behavior
 - [ ] Small-project scans complete reliably in repeated runs → Needs verification testing
 - [ ] Users can identify long-running checks from logs → Deferred to Phase 0b
 
 **Implementation Notes (2026-02-09):**
 - The xargs calls at lines 2617 and 3222 were originally listed as hotspots but are inside already-protected paths (pre-cached file list + `run_with_timeout`). Removed from scope.
-- Timeout behavior: on timeout, check returns empty result, reports "passed," scan continues. Silent degradation chosen over hang. Per-check timeout warnings deferred (see BACKLOG.md).
+- Timeout behavior: on timeout, check returns empty result, reports "passed," scan continues. Silent degradation chosen over hang. Per-check timeout warnings remain deferred and are now tracked in `4X4.md` instead of `BACKLOG.md`.
 - No new functions or abstractions introduced — reuses existing `run_with_timeout` infrastructure.
 
 ### Phase 1: Unified Search Backend Wrapper
@@ -113,17 +118,17 @@ Yes. The most impactful improvements are:
 - Semgrep is optional via feature flag.
 - Pilot only direct/noisy rule subset.
 
-**Candidate Rules (initial)**
+**Candidate Rules (reprioritized for current false-positive pressure)**
 1. `unsanitized-superglobal-read`
-2. `spo-002-superglobal-manipulation`
+2. `unsanitized-superglobal-isset-bypass`
 3. `wpdb-query-no-prepare`
-4. `php-eval-injection`
-5. `php-dynamic-include`
-6. `php-shell-exec-functions`
-7. `php-hardcoded-credentials`
-8. `unsanitized-superglobal-isset-bypass`
-9. `file-get-contents-url`
-10. `wp-json-html-escape` (evaluate feasibility)
+4. `file-get-contents-url`
+5. `wp-json-html-escape`
+6. `php-hardcoded-credentials`
+7. `php-eval-injection`
+8. `spo-002-superglobal-manipulation` - lower urgency after the inline grep quoting fix
+9. `php-dynamic-include` - lower urgency after the WP-CLI bootstrap false-positive fix
+10. `php-shell-exec-functions` - lower urgency after the `curl_exec()` word-boundary fix
 
 **Tasks**
 1. Implement `--search-backend semgrep` toggle (default remains current backend).

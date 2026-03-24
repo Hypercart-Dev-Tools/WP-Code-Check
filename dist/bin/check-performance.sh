@@ -3720,7 +3720,7 @@ SUPERGLOBAL_VISIBLE=""
 # PERFORMANCE: Use cached file list instead of grep -r
 # NOTE: Explicitly restrict to PHP files so that documentation (e.g. .md) and
 # non-PHP assets are not scanned when running in JS-only or mixed repos.
-SUPERGLOBAL_MATCHES=$(cached_grep --include=*.php -E "unset\\(\\$_(GET|POST|REQUEST|COOKIE)\\[|\\$_(GET|POST|REQUEST)[[:space:]]*=|\\$_(GET|POST|REQUEST|COOKIE)\\[[^]]*\\][[:space:]]*=" | \
+SUPERGLOBAL_MATCHES=$(cached_grep --include=*.php -E 'unset\(\$_(GET|POST|REQUEST|COOKIE)\[|\$_(GET|POST|REQUEST)[[:space:]]*=|\$_(GET|POST|REQUEST|COOKIE)\[[^]]*\][[:space:]]*=' | \
   grep -v '//.*\$_' || true)
 
 if [ -n "$SUPERGLOBAL_MATCHES" ]; then
@@ -5963,6 +5963,49 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
         include_args="--include=*.php"
       fi
 
+      local exclude_file_globs=""
+      local exclude_line_patterns=""
+      local exclude_file_contains=""
+      local current_exclusion_block=""
+
+      while IFS= read -r json_line; do
+        case "$json_line" in
+          *'"exclude_files"'*)
+            current_exclusion_block="exclude_files"
+            continue
+            ;;
+          *'"exclude_patterns"'*)
+            current_exclusion_block="exclude_patterns"
+            continue
+            ;;
+          *'"exclude_if_file_contains"'*)
+            current_exclusion_block="exclude_if_file_contains"
+            continue
+            ;;
+        esac
+
+        if [ -n "$current_exclusion_block" ]; then
+          if echo "$json_line" | grep -q ']'; then
+            current_exclusion_block=""
+            continue
+          fi
+
+          exclusion_value=$(echo "$json_line" | sed -n 's/^[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p')
+          if [ -n "$exclusion_value" ]; then
+            if [ "$current_exclusion_block" = "exclude_files" ]; then
+              exclude_file_globs="${exclude_file_globs}${exclusion_value}
+"
+            elif [ "$current_exclusion_block" = "exclude_if_file_contains" ]; then
+              exclude_file_contains="${exclude_file_contains}${exclusion_value}
+"
+            else
+              exclude_line_patterns="${exclude_line_patterns}${exclusion_value}
+"
+            fi
+          fi
+        fi
+      done < "$pattern_file"
+
       # Run grep with the pattern
       # PERFORMANCE: Use cached file list instead of grep -r
       matches=""
@@ -5977,6 +6020,7 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
       if [ "$match_count" -gt 0 ]; then
         # Apply baseline suppression
         suppressed_count=0
+        excluded_count=0
         visible_matches=""
 
         while IFS= read -r match; do
@@ -5986,8 +6030,44 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
           line=$(echo "$match" | cut -d: -f2)
           code=$(echo "$match" | cut -d: -f3-)
 
+          excluded_by_pattern=false
+
+          if [ -n "$exclude_file_globs" ]; then
+            while IFS= read -r exclude_glob; do
+              [ -z "$exclude_glob" ] && continue
+              case "$file" in
+                $exclude_glob)
+                  excluded_by_pattern=true
+                  break
+                  ;;
+              esac
+            done <<< "$exclude_file_globs"
+          fi
+
+          if [ "$excluded_by_pattern" = false ] && [ -n "$exclude_file_contains" ]; then
+            while IFS= read -r contain_str; do
+              [ -z "$contain_str" ] && continue
+              if grep -qF "$contain_str" "$file" 2>/dev/null; then
+                excluded_by_pattern=true
+                break
+              fi
+            done <<< "$exclude_file_contains"
+          fi
+
+          if [ "$excluded_by_pattern" = false ] && [ -n "$exclude_line_patterns" ]; then
+            while IFS= read -r exclude_pattern; do
+              [ -z "$exclude_pattern" ] && continue
+              if printf '%s\n' "$code" | grep -qE "$exclude_pattern" 2>/dev/null; then
+                excluded_by_pattern=true
+                break
+              fi
+            done <<< "$exclude_line_patterns"
+          fi
+
+          if [ "$excluded_by_pattern" = true ]; then
+            ((excluded_count++)) || true
           # Check baseline suppression
-          if should_suppress_finding "$pattern_id" "$file"; then
+          elif should_suppress_finding "$pattern_id" "$file"; then
             ((suppressed_count++)) || true
           else
             # Add to visible matches
@@ -6003,12 +6083,15 @@ $match"
           fi
         done <<< "$matches"
 
-        visible_count=$((match_count - suppressed_count))
+        visible_count=$((match_count - suppressed_count - excluded_count))
 
         if [ "$visible_count" -gt 0 ]; then
           text_echo "${check_color}  ✗ Found $visible_count violation(s)${NC}"
           if [ "$suppressed_count" -gt 0 ]; then
             text_echo "  ${BLUE}  (${suppressed_count} suppressed by baseline)${NC}"
+          fi
+          if [ "$excluded_count" -gt 0 ]; then
+            text_echo "  ${BLUE}  (${excluded_count} excluded by pattern filters)${NC}"
           fi
 
           # Increment error/warning counters

@@ -17,7 +17,7 @@
       },
       {
         "id": "exec-call",
-        "pattern": "exec[[:space:]]*\\("
+        "pattern": "\\bexec[[:space:]]*\\("
       },
       {
         "id": "system-call",

@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Refreshed planning docs to match the current codebase and consolidated active planning into `4X4.md`
+  - Updated `PROJECT/1-INBOX/FEATURE-SEMGREP-MIGRATION-PLAN.md` with current search-backend hotspots, refreshed Phase 0 status notes, and reprioritized the Semgrep pilot list based on current false-positive pressure
+  - Deprecated `PROJECT/2-WORKING/BACKLOG.md` as an active planning source and converted it into a pointer to `4X4.md` plus the Semgrep roadmap doc
+  - Populated `4X4.md` with current strategic goals, weekly work, prior-week accomplishments, and planning assumptions for WP Code Check
+
 - Added `PROJECT/1-INBOX/PATTERN-PROPOSAL-LAUNCHPAD-CRASH.md`
   - Captures the plan for converting the Launchpad crash lessons into generalized WPCC anti-pattern proposals
   - Recommends against a single environment-specific "crash detector"
