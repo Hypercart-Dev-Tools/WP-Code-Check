@@ -6054,10 +6054,10 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
         include_args="--include=*.php"
       fi
 
-      local exclude_file_globs=""
-      local exclude_line_patterns=""
-      local exclude_file_contains=""
-      local current_exclusion_block=""
+      exclude_file_globs=""
+      exclude_line_patterns=""
+      exclude_file_contains=""
+      current_exclusion_block=""
 
       while IFS= read -r json_line; do
         case "$json_line" in
