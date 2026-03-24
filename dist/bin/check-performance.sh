@@ -4268,9 +4268,11 @@ if [ -n "$ADMIN_MATCHES" ]; then
         admin_enqueue_scripts|admin_print_styles|admin_print_scripts| \
         network_admin_menu|user_admin_menu|network_admin_notices| \
         admin_bar_init|admin_action_*|load-*)
-          # Downgrade to INFO — the hook itself implies admin context
+          # Downgrade to INFO — the hook itself implies admin context.
+          # Bypass group_and_add_finding (its flush uses the caller's
+          # severity, which would overwrite INFO back to HIGH).
           ADMIN_SEEN_KEYS="${ADMIN_SEEN_KEYS}${key}"
-          group_and_add_finding "spo-004-missing-cap-check" "info" "INFO" "$file" "$lineno" "$code" "Admin-only hook '$hook_name' — implicit capability via hook context"
+          add_json_finding "spo-004-missing-cap-check" "info" "INFO" "$file" "$lineno" "Admin-only hook '$hook_name' — implicit capability via hook context" "$code"
           continue
           ;;
       esac
