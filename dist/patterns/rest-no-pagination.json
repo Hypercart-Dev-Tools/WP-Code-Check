@@ -12,7 +12,12 @@
     "file_patterns": ["*.php"],
     "search_pattern": "register_rest_route[[:space:]]*\\(",
     "validator_script": "validators/context-pattern-absent-check.sh",
-    "validator_args": ["'per_page'|\"per_page\"|'page'|\"page\"|'limit'|\"limit\"|pagination|paged|per_page", "15", "after"]
+    "validator_args": ["'per_page'|\"per_page\"|'page'|\"page\"|'limit'|\"limit\"|pagination|paged|per_page", "15", "after"],
+    "skip_if_context_matches": {
+      "pattern": "'methods'[[:space:]]*=>[[:space:]]*'(POST|PUT|DELETE|PATCH)'|WP_REST_Server::(CREATABLE|EDITABLE|DELETABLE)",
+      "lines": 3,
+      "direction": "after"
+    }
   },
   "remediation": {
     "summary": "Add pagination parameters to REST endpoint arguments and implement per_page limits in the callback.",

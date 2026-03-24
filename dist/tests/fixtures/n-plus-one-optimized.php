@@ -154,6 +154,51 @@ function get_order_counts_for_customers( $user_ids ) {
     return $counts;
 }
 
+// ============================================================
+// FALSE POSITIVE GUARD: Sequential meta calls AFTER loop closure
+// These should NOT be flagged as N+1 — the meta calls are outside the loop body
+// ============================================================
+
+/**
+ * FP CASE: get_user_meta() called sequentially for a single user AFTER a loop.
+ * The loop iterates over something else; the meta read is not inside it.
+ * This was the exact pattern from creditconnection2-self-service check-user-meta.php:23
+ */
+function process_users_then_read_single_meta( $users ) {
+    // Loop over users for some unrelated work
+    foreach ( $users as $user ) {
+        echo esc_html( $user->display_name );
+    }
+
+    // Sequential meta read for a single user — NOT inside the loop
+    $current_user_id = get_current_user_id();
+    $registry_id = get_user_meta( $current_user_id, 'creditregistry_id', true );
+    if ( empty( $registry_id ) ) {
+        $registry_id = get_user_meta( $current_user_id, 'credit_registry_id', true );
+    }
+
+    return $registry_id;
+}
+
+/**
+ * FP CASE: Single get_user_meta() re-read after processing loop results.
+ * This was the exact pattern from class-cr-business-rest-api.php:245
+ */
+function fetch_data_after_loop( $submissions ) {
+    foreach ( $submissions as $key => $submission ) {
+        $status = $submission['status'] ?? 'pending';
+        if ( $status === 'success' ) {
+            break;
+        }
+    }
+
+    // Re-read meta after loop — not inside loop body
+    $user_id = get_current_user_id();
+    $updated_id = get_user_meta( $user_id, 'cr_business_subscriber_registry_id', true );
+
+    return $updated_id;
+}
+
 /**
  * Helper: Bulk load recent orders (example implementation)
  */

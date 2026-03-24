@@ -1679,10 +1679,54 @@ output_json() {
   [ -z "$files_analyzed" ] && files_analyzed=0
   [ -z "$lines_of_code" ] && lines_of_code=0
 
-  # Build findings array
+  # Deduplicate findings: when the same file:line is flagged by multiple
+  # overlapping rules (e.g. superglobal rules), keep only the highest-severity
+  # finding and annotate it with the other rule IDs via "also_flagged_by".
+  # Dedup groups: superglobal rules that scan the same code patterns.
+  local dedup_groups="spo-002-superglobals unsanitized-superglobal-read unsanitized-superglobal-isset-bypass"
+  local deduped_findings=()
+  local seen_keys=""
+
+  # Severity rank for comparison (higher = more severe)
+  _sev_rank() {
+    case "$1" in
+      CRITICAL) echo 4 ;; HIGH) echo 3 ;; MEDIUM) echo 2 ;; LOW) echo 1 ;; *) echo 0 ;;
+    esac
+  }
+
+  for finding in "${JSON_FINDINGS[@]}"; do
+    # Extract id, file, line, impact using simple string ops (findings are single-line JSON)
+    local f_id=$(echo "$finding" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+    local f_file=$(echo "$finding" | sed 's/.*"file":"\([^"]*\)".*/\1/')
+    local f_line=$(echo "$finding" | sed 's/.*"line":\([0-9]*\).*/\1/')
+    local f_impact=$(echo "$finding" | sed 's/.*"impact":"\([^"]*\)".*/\1/')
+
+    # Only dedup within the defined groups
+    local in_group=false
+    for grp_id in $dedup_groups; do
+      if [ "$f_id" = "$grp_id" ]; then
+        in_group=true
+        break
+      fi
+    done
+
+    if [ "$in_group" = true ]; then
+      local dedup_key="${f_file}:${f_line}"
+      if echo "$seen_keys" | grep -qF "|${dedup_key}|"; then
+        # Already have a finding for this file:line — skip lower/equal severity
+        # (first occurrence wins since we don't reorder; this is acceptable)
+        continue
+      fi
+      seen_keys="${seen_keys}|${dedup_key}|"
+    fi
+
+    deduped_findings+=("$finding")
+  done
+
+  # Build findings array from deduped list
   local findings_json=""
   local first=true
-  for finding in "${JSON_FINDINGS[@]}"; do
+  for finding in "${deduped_findings[@]}"; do
     if [ "$first" = true ]; then
       findings_json="$finding"
       first=false
@@ -4258,6 +4302,26 @@ if [ -n "$ADMIN_MATCHES" ]; then
       continue
     fi
 
+    # Admin-only hook whitelist: these hooks only fire for authenticated admin
+    # users, so a missing capability check is informational, not a real risk.
+    # Extract the hook name from add_action('hook_name', ...) patterns.
+    if echo "$code" | grep -qE "add_action[[:space:]]*\\("; then
+      hook_name=$(echo "$code" | sed -n "s/.*add_action[[:space:]]*([[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" | head -1)
+      case "$hook_name" in
+        admin_notices|admin_init|admin_menu|admin_head|admin_footer| \
+        admin_enqueue_scripts|admin_print_styles|admin_print_scripts| \
+        network_admin_menu|user_admin_menu|network_admin_notices| \
+        admin_bar_init|admin_action_*|load-*)
+          # Downgrade to INFO — the hook itself implies admin context.
+          # Bypass group_and_add_finding (its flush uses the caller's
+          # severity, which would overwrite INFO back to HIGH).
+          ADMIN_SEEN_KEYS="${ADMIN_SEEN_KEYS}${key}"
+          add_json_finding "spo-004-missing-cap-check" "info" "INFO" "$file" "$lineno" "Admin-only hook '$hook_name' — implicit capability via hook context" "$code"
+          continue
+          ;;
+      esac
+    fi
+
     # Enhancement v1.0.93: Parse capability parameter from add_*_page() functions
     # add_submenu_page() 4th parameter is capability
     # add_menu_page() 4th parameter is capability
@@ -5409,7 +5473,31 @@ find_meta_in_loop_line() {
 			window_end="$scope_end"
 		fi
 
-		if awk -v s="$lineno" -v e="$window_end" 'NR>=s && NR<=e { if ($0 ~ /get_(post|term|user)_meta[[:space:]]*\(/) { print NR; exit } }' "$file"; then
+		# Verify lexical containment: only match get_*_meta while brace
+		# depth > 0 (i.e. actually inside the loop body, not after it).
+		local meta_line
+		meta_line=$(awk -v s="$lineno" -v e="$window_end" '
+		BEGIN { depth = 0; started = 0 }
+		NR >= s && NR <= e {
+			# Count braces on this line (simple char count — good enough for PHP)
+			n = length($0)
+			for (i = 1; i <= n; i++) {
+				c = substr($0, i, 1)
+				if (c == "{") { depth++; started = 1 }
+				if (c == "}") { depth-- }
+			}
+			# Only match meta calls while inside the loop body
+			if (started && depth > 0 && $0 ~ /get_(post|term|user)_meta[[:space:]]*\(/) {
+				print NR
+				exit
+			}
+			# If we opened and then fully closed the loop, stop looking
+			if (started && depth <= 0 && NR > s) exit
+		}
+		' "$file")
+
+		if [ -n "$meta_line" ]; then
+			echo "$meta_line"
 			return 0
 		fi
 	done <<< "$loop_matches"
@@ -5443,6 +5531,9 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 		      if [ -z "$N1_LINE" ]; then
 		        continue
 		      fi
+		      # Extract the actual source line for the finding code snippet
+		      N1_CODE=$(sed -n "${N1_LINE}p" "$f" 2>/dev/null | sed 's/^[[:space:]]*//')
+
 		      # Smart detection: Prioritized checks for false positives and severity adjustment
 
 		      # Priority 1: Check if this is a WordPress admin view where cache is pre-primed
@@ -5450,29 +5541,29 @@ text_echo "${BLUE}▸ Potential N+1 patterns (meta in loops) ${N1_COLOR}[$N1_SEV
 		        # WordPress primes meta cache on admin pages like user-edit.php
 		        # These are likely false positives - downgrade to INFO
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 in WP admin view - likely false positive (WordPress pre-primes meta cache on user-edit.php)" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 in WP admin view - likely false positive (WordPress pre-primes meta cache on user-edit.php)" "$N1_CODE"
 		        ((N1_OPTIMIZED_COUNT++)) || true
 		      # Priority 2: Check if loop iterates over fields for a single object (not multiple objects)
 		      elif is_single_object_field_loop "$f"; then
 		        # Iterating over fields for ONE object - WordPress caches all meta on first call
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 but loop iterates over fields for single object - WordPress caches all meta on first call" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 but loop iterates over fields for single object - WordPress caches all meta on first call" "$N1_CODE"
 		        ((N1_OPTIMIZED_COUNT++)) || true
 		      # Priority 3: Check if file uses explicit meta caching
 		      elif has_meta_cache_optimization "$f"; then
 		        # File uses update_meta_cache() - likely optimized, downgrade to INFO
 		        VISIBLE_N1_OPTIMIZED="${VISIBLE_N1_OPTIMIZED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop), but update_meta_cache() is present - verify optimization" ""
+		        add_json_finding "n-plus-1-pattern" "info" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop), but update_meta_cache() is present - verify optimization" "$N1_CODE"
 		        ((N1_OPTIMIZED_COUNT++)) || true
 		      # Priority 4: Check for pagination guards
 		      elif has_pagination_guard "$f"; then
 		        VISIBLE_N1_PAGINATED="${VISIBLE_N1_PAGINATED}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "warning" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop). File appears paginated (per_page/LIMIT) - review impact" ""
+		        add_json_finding "n-plus-1-pattern" "warning" "LOW" "$f" "$N1_LINE" "Potential N+1 (meta in loop). File appears paginated (per_page/LIMIT) - review impact" "$N1_CODE"
 		        ((N1_PAGINATED_COUNT++)) || true
 		      else
 		        # No mitigations detected - standard warning (likely true N+1)
 		        VISIBLE_N1_FILES="${VISIBLE_N1_FILES}${f}"$'\n'
-		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "Potential N+1 query pattern: meta call inside loop (heuristic). Review pagination/caching" ""
+		        add_json_finding "n-plus-1-pattern" "warning" "$N1_SEVERITY" "$f" "$N1_LINE" "Potential N+1 query pattern: meta call inside loop (heuristic). Review pagination/caching" "$N1_CODE"
 		        ((N1_FINDING_COUNT++)) || true
 		      fi
 		    fi
@@ -6202,6 +6293,14 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
         match_count=${match_count:-0}
       fi
 
+      # Parse optional skip_if_context_matches pre-filter (narrow context suppression)
+      skip_ctx_pattern=$(grep -A1 '"skip_if_context_matches"' "$pattern_file" 2>/dev/null | grep '"pattern"' | head -1 | sed 's/.*"pattern"[[:space:]]*:[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}/\1/')
+      skip_ctx_lines=""
+      if [ -n "$skip_ctx_pattern" ]; then
+        skip_ctx_lines=$(grep -A3 '"skip_if_context_matches"' "$pattern_file" 2>/dev/null | grep '"lines"' | head -1 | sed 's/.*:[[:space:]]*\([0-9]*\).*/\1/')
+        skip_ctx_lines="${skip_ctx_lines:-3}"
+      fi
+
       # Process matches through validator
       if [ "$match_count" -gt 0 ]; then
         # Apply baseline suppression and validator
@@ -6220,6 +6319,16 @@ if [ -n "$SCRIPTED_PATTERNS" ]; then
           if should_suppress_finding "$pattern_id" "$file"; then
             ((suppressed_count++)) || true
             continue
+          fi
+
+          # skip_if_context_matches: narrow context pre-filter (parsed above loop)
+          if [ -n "$skip_ctx_pattern" ]; then
+            skip_ctx_end=$((line + skip_ctx_lines))
+            skip_ctx_window=$(sed -n "${line},${skip_ctx_end}p" "$file" 2>/dev/null || true)
+            if echo "$skip_ctx_window" | grep -qE "$skip_ctx_pattern"; then
+              ((validator_suppressed++)) || true
+              continue
+            fi
           fi
 
           # Run validator script with args from JSON

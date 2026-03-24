@@ -147,3 +147,37 @@ function check_user_capability( $user_id ) {
     return true;
 }
 
+// ============================================================
+// ADMIN-ONLY HOOK WHITELIST - Should be INFO, not HIGH
+// These hooks inherently require admin context
+// ============================================================
+
+// add_action with admin_notices hook - should be downgraded to INFO
+// This was the exact FP from creditconnection2-self-service credit-registry-forms.php:48
+function check_plugin_dependencies() {
+    if (!is_plugin_active('required-plugin/required-plugin.php')) {
+        add_action('admin_notices', 'show_dependency_notice');
+        deactivate_plugins(plugin_basename(__FILE__));
+        return false;
+    }
+    return true;
+}
+
+function show_dependency_notice() {
+    echo '<div class="notice notice-error"><p>Required plugin is not active.</p></div>';
+}
+
+// add_action with admin_init hook - should be downgraded to INFO
+add_action( 'admin_init', 'register_plugin_settings' );
+
+function register_plugin_settings() {
+    register_setting( 'my_plugin_options', 'my_plugin_setting' );
+}
+
+// add_action with admin_menu hook - should be downgraded to INFO
+add_action( 'admin_menu', 'add_plugin_admin_menu' );
+
+function add_plugin_admin_menu() {
+    add_options_page( 'Plugin Settings', 'Plugin Settings', 'manage_options', 'my-plugin', 'render_settings' );
+}
+

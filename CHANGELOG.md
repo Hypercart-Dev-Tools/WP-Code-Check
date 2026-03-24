@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Admin-only hook whitelist for `spo-004-missing-cap-check`: `add_action()` calls using inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, `admin_head`, `admin_footer`, `admin_enqueue_scripts`, `admin_print_styles`, `admin_print_scripts`, `network_admin_menu`, `user_admin_menu`, `network_admin_notices`, `admin_bar_init`, `admin_action_*`, `load-*`) are now downgraded to INFO severity instead of HIGH, reducing false positives for capability check findings
+
+- N+1 loop detection (`find_meta_in_loop_line`) now uses brace-depth tracking to verify `get_*_meta` calls are lexically inside a loop body, not just within 80 lines of a loop keyword. Eliminates false positives from sequential meta calls after loop closure
+
+- Tightened `limit-multiplier-from-count` JSON pattern to require `count(...) * <number>` instead of matching any `count()` call. Eliminates false positives from display/comparison uses of `count()`
+
+- `rest-no-pagination` now skips non-GET endpoints (POST, PUT, DELETE, PATCH) via new `skip_if_context_matches` scripted runner feature. Reduces false positives on action/mutation endpoints where pagination is inapplicable
+
+- Cross-rule deduplication for overlapping superglobal findings (`spo-002-superglobals`, `unsanitized-superglobal-read`, `unsanitized-superglobal-isset-bypass`). When the same file:line is flagged by multiple rules, only the first finding is kept
+
+### Fixed
+
+- N+1 pattern findings now include the actual source code line in the report. Previously the `code` field was empty because `find_meta_in_loop_line` only returned the line number without extracting the source text
+
+### Tests
+
+- Added false-positive guard cases to `n-plus-one-optimized.php` fixture: sequential `get_user_meta()` calls after loop closure should not be flagged
+- Expanded `limit-multiplier-from-count.php` fixture with display, comparison, and assignment uses of `count()` that should not match the multiplier pattern
+- Added admin-only hook whitelist cases to `admin-no-capability.php` fixture: `admin_notices`, `admin_init`, `admin_menu` hooks should be INFO, not HIGH
+
+### Documentation
+
+- Added "WP Code Check Scanner — Quick Reference" section to `AGENTS.md` with CLI flags, MCP server configuration, output locations, and pattern library pointer for AI agent discoverability
+
 ## [2.2.9] - 2026-03-23
 
 ### Added

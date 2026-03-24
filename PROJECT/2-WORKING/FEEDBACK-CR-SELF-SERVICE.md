@@ -1,72 +1,129 @@
-Verdict: Mostly False Positives / Scanner Noise
-
-"Shell command execution" (CRITICAL) — False Positive
-All 8 findings flag curl_exec($curl). This is PHP's cURL library function, not shell execution. It's the standard way to make HTTP requests in PHP without WordPress's wp_remote_* wrappers. No shell is involved — completely safe.
-
-"Direct superglobal manipulation" on CURLOPT_POST/CURLOPT_POSTFIELDS (HIGH) — False Positive
-The scanner is incorrectly matching curl_setopt($curl, CURLOPT_POST, true) as "superglobal manipulation." These are cURL options, not $_POST superglobal writes. This accounts for ~17 of the findings.
-
-"Dynamic PHP include/require" (CRITICAL) — False Positive
-Both check-user-meta.php:13 and test-alternate-registry-id.php:24 are WP-CLI test scripts that locate wp-load.php from a hardcoded relative path array. The $path variable is never user-controlled — it's iterated from a static array. No risk.
-
-"N+1 query pattern" (CRITICAL) — False Positive
-check-user-meta.php:23 — This is a flat script calling get_user_meta() sequentially for a single user, not inside a loop over users.
-class-cr-business-rest-api.php:245 — This is a single get_user_meta() re-read after processing, not an N+1 pattern.
-
-"Admin function missing capability check" (HIGH) — False Positive
-credit-registry-forms.php:48 — add_action('admin_notices', ...) is a standard WordPress pattern for showing a dependency notice when a plugin is deactivated. The admin_notices hook itself only fires in the admin panel for authenticated users. The unset($_GET['activate']) on line 51 is also a standard WP pattern to suppress the "Plugin activated" message after forced deactivation.
-
-6. Unsanitized $_GET['view_file'] (HIGH) — Valid Issue
-At admin-test-page.php:191, $_GET['view_file'] is used without sanitize_file_name(). The strpos($view_file, '..') === false check on line 193 is a weak directory traversal guard (can be bypassed with encodings). Should use sanitize_file_name() like view_dir does on line 147.
-
-7. Unsanitized $_GET['view_dir'] display before sanitization (HIGH) — Valid Issue
-At admin-test-page.php:145, $_GET['view_dir'] is output with esc_html() (safe for XSS), but the sanitization via sanitize_file_name() happens on line 147 — after the display. The display itself is safe due to esc_html(), but the order is confusing.
-
-8. $_POST['force_refresh'] (HIGH) — Low Risk
-At api-functions.php:1014, this is compared strictly to the string 'true', so it can only ever be a boolean. No injection vector. However, this runs inside a WP AJAX handler — verify nonce checks exist upstream.
-
-Many $_GET reads with sanitize_text_field() — False Positive
-Lines in class-cr-rest-api.php and class-cr-business-rest-api.php that do sanitize_text_field($_GET['registry_id']) are already properly sanitized. The scanner flags the raw $_GET access but ignores the wrapping sanitization.
+# WPCC Pattern Library — False Positive Review
+**Source:** AI review of creditconnection2-self-service scan  
+**Date:** 2026-03-23  
+**Scan findings:** 99 total (original) → **31 after all fixes** | **Estimated true positives:** ~25–30
 
 ---
 
-Easy wins
-curl_exec() flagged as shell execution — The regex is likely matching /\b(exec|shell_exec|system|passthru)\s*\(/. Just add a negative lookbehind for curl_:
+## Action Items
 
+### ✅ Fix Now — High Confidence, Low Effort
 
-/\b(?<!curl_)(exec|shell_exec|system|passthru)\s*\(/
-CURLOPT_POST flagged as superglobal manipulation — The regex is probably matching POST in any context. If the rule targets $_POST, ensure the pattern anchors on the $_ prefix:
+- [x] **FIX `php-shell-exec-functions.json` — `exec-call` pattern matches `curl_exec()`** ✅ *Fixed in commit 740ba08*  
+  **Pattern:** `exec[[:space:]]*\(` has no word boundary → matches `curl_exec(`.  
+  **Fix:** Change to `\bexec[[:space:]]*\(` in the `exec-call` sub-pattern.  
+  **File:** `dist/patterns/php-shell-exec-functions.json`  
+  **FPs eliminated:** 8 (all CRITICAL — all were `curl_exec($curl)` calls)
 
+- [x] **`php-dynamic-include.json` — WP-CLI bootstrap scripts no longer flagged as LFI** ✅ *Resolved in follow-up commit*  
+  **Finding:** `check-user-meta.php:13` and `test-alternate-registry-id.php:24` — `$path` is iterated from a hardcoded static array, never user-controlled.  
+  **Attempted fix (740ba08 — insufficient):** Added `wp-load` to `exclude_patterns`, but the actual matched line is `require_once $path;` — it does not contain `wp-load`.  
+  **Proper fix:** Added new `exclude_if_file_contains` capability to the simple pattern runner and `dist/bin/check-performance.sh`. When a matched file's content contains any string listed in the new `exclude_if_file_contains` JSON array, all matches in that file are suppressed. Added `"wp eval-file"` to `php-dynamic-include.json` under this key — both WP-CLI scripts have this string in their docblock comment.  
+  **Files changed:** `dist/bin/check-performance.sh` (runner feature), `dist/patterns/php-dynamic-include.json` (new exclusion key)  
+  **FPs eliminated:** 2 (both CRITICAL)
 
-/\$_(POST|GET|REQUEST|SERVER)\s*\[/
-That alone would eliminate ~25 false positives from this report.
+---
 
-Sanitized reads flagged as unsanitized — This is the biggest noise source. A single-line lookahead can catch the most common WordPress pattern where the $_GET/$_POST access is wrapped in a sanitization call:
+### ✅ Implemented After Investigation
 
+- [x] **FIX `spo-002-superglobals` inline grep corruption** ✅ *Implemented in scanner*  
+  **Scan log findings:** 31 total spo-002 findings. 16 are `CURLOPT_POST`/`CURLOPT_POSTFIELDS`, 2 are JS `type: 'POST'` strings, 4 are `$_SERVER` reads (SERVER not in the pattern alternation), 1 is the only legitimate finding (line 1014).  
+  **Root cause confirmed:** The inline bash spo-002 grep (check-performance.sh ~line 3723) uses a **double-quoted string with `\\$_`**. In bash double-quotes, `\\` → `\` and then `$_` starts expansion of the bash `$_` special variable (last argument of the previous command). At runtime, `$_` contains the last argument from `text_echo "▸ Direct superglobal manipulation..."` — an ANSI-coloured string including `[HIGH]`. This corrupts the entire ERE pattern, causing it to match incorrectly in a non-deterministic way.  
+  **The JSON pattern itself (`\$_(GET|POST...)`) is correct** — tested via `load_pattern` + direct grep, it does NOT match CURLOPT_POST. The bug is entirely in the inline bash code, not the JSON pattern file.  
+  **Fix implemented:** Changed the inline grep at line 3723 from double-quoted to single-quoted string, which prevents `$_` expansion. This is a **scanner bug, not a pattern bug**. The JSON file did not need to change.  
+  **File to fix:** `dist/bin/check-performance.sh` ~line 3723  
+  **Verified impact:** `spo-002-superglobals` dropped from **31 → 3** findings in the follow-up scan. Remaining 3 are legitimate review cases: `$_POST['force_refresh']`, `unset($_GET['activate'])`, and `$_GET['view_errors']` conditional logic.
 
-/(?<!sanitize_text_field\()(?<!sanitize_file_name\()(?<!esc_html\()(?<!esc_attr\()(?<!wp_verify_nonce\()(?<!absint\()\$_(GET|POST|REQUEST)\s*\[/
-Or invert it — match the line, then exclude if the $_GET[...] appears as an argument to a known sanitizer on the same line. A two-pass approach is cleaner:
+- [x] **FIX simple runner ignoring `exclude_patterns` / `exclude_files`** ✅ *Implemented in scanner*  
+  **Scan log findings:** 30 `unsanitized-superglobal-read` findings. Confirmed FPs include: `class-cr-rest-api.php:90`, `class-cr-rest-api.php:98`, `class-cr-rest-api.php:843`, `class-cr-business-rest-api.php:103`, `class-cr-business-rest-api.php:138`, `class-cr-business-rest-api.php:857` — all are same-line ternary patterns like `isset($_GET['x']) ? sanitize_text_field($_GET['x']) : ''`.  
+  **Root cause confirmed:** The simple pattern runner (`check-performance.sh` ~line 5970) runs `cached_grep -E "$pattern_search"` but **never applies `exclude_patterns` from the JSON definition**. The `exclude_patterns` array in `unsanitized-superglobal-read.json` (which includes `sanitize_`, `isset\(`, `esc_`, etc.) is loaded but silently ignored. The legacy inline checks manually pipe through `grep -v` to apply exclusions; the JSON-driven simple runner does not.  
+  **This is NOT a multiline issue** — the flagged lines all have the sanitizer wrapper on the same line. The exclusion simply isn't being applied at all by the simple runner.  
+  **Additional FPs from same root cause:** `clear-person-cache.php:34`, `setup-user-registry-id.php:23-24`, `set-account-type.php:26-27` — all properly guarded `$_POST` reads with nonce verification on the same line.  
+  **Fix implemented:** The simple pattern runner now parses both `exclude_patterns` and `exclude_files` from the JSON pattern file and filters matches before JSON findings are added. This improves behavior across all JSON-defined `grep`/`simple` patterns, not just `unsanitized-superglobal-read`.  
+  **File to fix:** `dist/bin/check-performance.sh` ~line 5970 (simple pattern runner grep call)  
+  **Verified impact:** `unsanitized-superglobal-read` dropped from **30 → 19** findings in the follow-up scan. The remaining 19 are mostly other classes of reads that still require separate tuning, especially the dedicated `unsanitized-superglobal-isset-bypass` rule.
 
-Match $_GET['foo']
-Skip if the match is inside sanitize_text_field(, absint(, wp_verify_nonce(, etc.
-isset($_GET[...]) / isset($_POST[...]) flagged — isset() checks don't read the value. These should be excluded entirely:
+- [x] **FIX admin-only hook whitelist for capability check false positives** ✅ *Implemented in scanner*
+  **Finding:** `credit-registry-forms.php:48` — `add_action('admin_notices', ...)` flagged for missing capability check. `admin_notices` only fires for authenticated admin users.
+  **Reviewer recommendation:** Whitelist inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, etc.)
+  **Fix implemented:** Added admin-only hook whitelist in the `spo-004-missing-cap-check` section of `check-performance.sh` (~line 4261). When `add_action()` uses a whitelisted hook, the finding is still recorded but downgraded to INFO severity instead of HIGH. Whitelisted hooks: `admin_notices`, `admin_init`, `admin_menu`, `admin_head`, `admin_footer`, `admin_enqueue_scripts`, `admin_print_styles`, `admin_print_scripts`, `network_admin_menu`, `user_admin_menu`, `network_admin_notices`, `admin_bar_init`, `admin_action_*` (glob), `load-*` (glob).
+  **File changed:** `dist/bin/check-performance.sh` ~line 4261
+  **FPs eliminated:** 1+ per scan (downgraded to INFO)
 
+---
 
-/(?<!isset\()\$_(GET|POST|REQUEST)\[/
-Harder but doable
-Dynamic include with hardcoded paths — The scanner can't easily tell that $path comes from a static array vs user input. But you could reduce noise by checking if the variable was assigned from a literal array within N lines above. Alternatively, skip flagging when the require is inside a file_exists() guard on the same variable — that pattern almost always indicates a bootstrap loader, not user-controlled inclusion.
+### ✅ Previously Deferred — Now Implemented
 
-N+1 detection — The heuristic "meta call inside loop" needs to actually verify there is a loop. If the scanner is matching get_user_meta anywhere near a foreach/for/while, it should confirm the meta call is lexically inside the loop body (between { and }), not just nearby by line count.
+- [x] **FIX N+1 loop detection now verifies lexical containment** ✅ *Implemented in scanner*
+  **Finding 1:** `check-user-meta.php:23` — `get_user_meta()` called sequentially for a single user, not inside a user loop.
+  **Finding 2:** `class-cr-business-rest-api.php:245` — single `get_user_meta()` re-read after processing.
+  **Root cause:** `find_meta_in_loop_line()` used a simple line-range check (loop line + 80 lines forward) without verifying the meta call was lexically inside the loop's braces. Sequential `get_*_meta()` calls after a loop's closing `}` were incorrectly flagged.
+  **Fix implemented:** Replaced the line-range `awk` in `find_meta_in_loop_line()` with brace-depth tracking. The new `awk` counts `{` and `}` from the loop line forward, only matching `get_(post|term|user)_meta` while depth > 0. Once the loop body closes (depth returns to 0), scanning stops — meta calls after the loop are no longer flagged.
+  **File changed:** `dist/bin/check-performance.sh` ~line 5413 (`find_meta_in_loop_line()`)
+  **FPs eliminated:** 2+ per scan
 
-Not really fixable with regex
-Admin capability check — Determining whether a current_user_can() check exists somewhere in the call chain before an add_action('admin_notices', ...) requires control-flow analysis. A regex scanner can't do this reliably. Best approach: downgrade this to INFO severity, or maintain a whitelist of hooks that are inherently admin-only (admin_notices, admin_init, etc.).
+---
 
-Summary of impact
-Fix	Effort	False positives eliminated
-curl_exec negative lookbehind	1 line	8
-Anchor superglobal on $_ prefix	1 line	~17
-Skip isset() wrapping	1 line	~10
-Skip known sanitizer wrapping	Medium	~20
-Loop verification for N+1	Medium	2
-Whitelist admin-only hooks	Low	1
-The first three fixes alone would cut this report from 99 findings to roughly 40, with almost no loss of true positives.
+### 📋 Round 2 — Post-Scan Analysis (2026-03-24)
+
+- [x] **FIX `limit-multiplier-from-count` — nearly 100% FPs, no multiplier context** ✅ *Implemented in pattern*
+  **Findings:** 24 findings, all are `count()` used for display (`echo`), array key assignment, or loop comparison (`count($x) < $length`). Zero are `count()` multiplied into a SQL `LIMIT` clause.
+  **Root cause:** The JSON `search_pattern` was `count\(` (matching any `count()` call). The inline check at ~line 5122 correctly requires `count(...) * <number>`, but the simple runner ran the broader JSON pattern separately.
+  **Fix:** Tightened JSON `search_pattern` to `count\([^)]*\)[[:space:]]*\*[[:space:]]*[0-9]` — now requires the multiplier operator, matching only the inline check's intent.
+  **File changed:** `dist/patterns/limit-multiplier-from-count.json`
+  **Verified impact:** 24 → **0** findings (all were FPs)
+
+- [x] **FIX `rest-no-pagination` — flags non-GET action endpoints** ✅ *Implemented in scanner + pattern*
+  **Findings:** 16 findings. Routes like `/business/refresh`, `/person/switch-user`, `/business/submit-update` use POST/PUT/DELETE — pagination is inapplicable.
+  **Root cause:** The validator checked 15-line context for pagination keywords but didn't account for HTTP method.
+  **Fix:** Added `skip_if_context_matches` capability to the scripted pattern runner. When a match's narrow context (3 lines) contains a pattern like `'methods' => 'POST'`, the finding is suppressed before the validator runs. Added the method-detection pattern to `rest-no-pagination.json`.
+  **Files changed:** `dist/bin/check-performance.sh` (scripted runner), `dist/patterns/rest-no-pagination.json` (new `skip_if_context_matches` key)
+  **Verified impact:** 16 → **8** findings (8 POST/PUT/DELETE endpoints suppressed; 8 GET endpoints correctly retained)
+
+- [x] **FIX cross-rule deduplication for overlapping superglobal findings** ✅ *Implemented in scanner*
+  **Findings:** 14 unique `file:line` locations appeared in 2–4 rules simultaneously (`spo-002-superglobals`, `unsanitized-superglobal-read`, `unsanitized-superglobal-isset-bypass`).
+  **Root cause:** Three superglobal rules overlap in scope but ran independently with no dedup.
+  **Fix:** Added a deduplication pass in the JSON report builder (~line 1683). For a defined set of overlapping rule IDs, when the same `file:line` appears in multiple rules, only the first (highest-priority) finding is kept. Uses a seen-keys set for O(n) dedup.
+  **File changed:** `dist/bin/check-performance.sh` (JSON report builder)
+  **Verified impact:** Eliminated all cross-rule duplicates — **0 remaining duplicate file:line locations** in scan output. Total superglobal findings: 36 → **13** (spo-002: 3, unsanitized-read: 10, isset-bypass: 0 after dedup)
+
+---
+
+### ✔️ No Action Required — Already Handled or Misdiagnosed
+
+- [x] **SKIP — `isset()` exclusion for superglobal reads**  
+  `isset\(` is already in `exclude_patterns` for `unsanitized-superglobal-read.json`. Reviewer's suggestion is already implemented.
+
+- [x] **SKIP — `$_` prefix anchoring for superglobal manipulation**  
+  All three sub-patterns in `spo-002-superglobals` already require `$_` prefix. The reviewer's suggested fix is already in place.
+
+- [x] **SKIP — Sanitizer negative-lookbehind regex for `unsanitized-superglobal-read`**  
+  The `exclude_patterns` list already handles same-line sanitizer wrapping. The multiline case is a structural grep limitation, not addressable by the proposed regex.
+
+---
+
+## Valid Issues Found (Not FPs — Tracker for Plugin Owner)
+
+| # | File | Line | Issue | Risk |
+|---|------|------|-------|------|
+| 6 | `admin-test-page.php` | 191 | `$_GET['view_file']` used without `sanitize_file_name()`; `strpos($view_file, '..')` bypass-able via encoding | HIGH |
+| 7 | `admin-test-page.php` | 145 | `$_GET['view_dir']` displayed with `esc_html()` before `sanitize_file_name()` on line 147 — safe but misordered | LOW (confusing) |
+| 8 | `api-functions.php` | 1014 | `$_POST['force_refresh']` in AJAX handler — strict `=== 'true'` comparison limits injection, but verify nonce upstream | LOW–MEDIUM |
+
+---
+
+## Impact Summary
+
+| Fix | File to Edit | Effort | FPs Eliminated | Status |
+|-----|-------------|--------|---------------|--------|
+| `\b` word boundary on `exec-call` | `php-shell-exec-functions.json` | 1 line | 8 | ✅ Done (740ba08) |
+| `exclude_if_file_contains` + `wp eval-file` | `check-performance.sh` + `php-dynamic-include.json` | Medium | 2 verified | ✅ Done |
+| Single-quote inline spo-002 grep | `check-performance.sh` ~L3723 | 1 line | 28 verified | ✅ Done |
+| Apply `exclude_patterns` in simple runner | `check-performance.sh` ~L5970 | Medium | 11 verified | ✅ Done |
+| Admin-only hook whitelist | `check-performance.sh` ~L4261 | Low | 1+ per scan (→ INFO) | ✅ Done |
+| N+1 loop containment (brace-depth) | `check-performance.sh` ~L5413 | Medium | 2+ per scan | ✅ Done |
+| Tighten `limit-multiplier-from-count` pattern | `limit-multiplier-from-count.json` | 1 line | 24 verified | ✅ Done |
+| `skip_if_context_matches` for `rest-no-pagination` | `check-performance.sh` + `rest-no-pagination.json` | Medium | 8 verified | ✅ Done |
+| Cross-rule dedup for superglobal findings | `check-performance.sh` (JSON builder) | Medium | 23 duplicates | ✅ Done |
+
+**Latest measured totals:** 99 → 88 → 86 → **31 findings** (2026-03-24, after Round 2 fixes).
