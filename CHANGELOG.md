@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed stale-registry pattern-loader fallback that could make the Magic String Detector appear stuck
+  - Root cause: stale registry state forced the fallback parser path, pattern extraction failed there, `pattern_search` could become empty, and the first simple Magic String rule then looked like a hang
+  - Switched the fallback Python heredocs in `dist/lib/pattern-loader.sh` to tab-stripping heredocs so indented closing markers terminate correctly when the registry is stale
+  - Added a guard in `dist/bin/check-performance.sh` to skip simple rules with empty search patterns and emit an explicit warning instead of broad-matching the entire scan set
+  - Verified against `/Users/noelsaw/Documents/GH Repos/creditconnection2-self-service` with `--verbose`, profiling, debug tracing, and AI triage flags enabled
+  - Result: the scan now completes through Magic String Detector and Function Clone Detector; the verification run finished in 35s with `MAGIC_STRING_DETECTOR` profiled at 21311ms
+
 #### Phase 0: Timeout Guards for Unprotected Recursive Grep Calls
 
 - **Wrapped 8 raw `grep -r` file-discovery calls with `run_with_timeout "$MAX_SCAN_TIME"`**

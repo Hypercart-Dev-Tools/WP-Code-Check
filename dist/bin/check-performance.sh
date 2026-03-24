@@ -81,7 +81,7 @@ source "$REPO_ROOT/lib/pattern-loader.sh"
 # This is the ONLY place the version number should be defined.
 # All other references (logs, JSON, banners) use this variable.
 # Update this ONE line when bumping versions - never hardcode elsewhere.
-SCRIPT_VERSION="2.2.7"
+SCRIPT_VERSION="2.2.8"
 
 # Get the start/end line range for the enclosing function/method.
 #
@@ -5824,6 +5824,12 @@ if [ -n "$SIMPLE_PATTERNS" ]; then
       if [ "$check_severity" = "CRITICAL" ] || [ "$check_severity" = "HIGH" ]; then check_color="${RED}"; fi
 
       text_echo "${BLUE}▸ $pattern_title ${check_color}[$check_severity]${NC}"
+
+      if [ -z "$pattern_search" ]; then
+		text_echo "  ${YELLOW}⚠ Empty search pattern for $pattern_id - skipping rule${NC}"
+		debug_echo "Skipping simple pattern with empty search: $pattern_id ($pattern_file)"
+		continue
+	  fi
 
       # Build --include flags from pattern_file_patterns
       include_args=""
