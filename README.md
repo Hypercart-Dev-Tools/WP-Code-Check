@@ -224,7 +224,7 @@ cd ~/bin/ai-ddtk
 WP Code Check provides **two complementary analysis tools** for complete coverage:
 
 #### **Quick Scanner** (Bash - Zero Dependencies)
-- **30+ WordPress-specific checks** in under 5 seconds
+- **54 WordPress-specific checks** in under 5 seconds
 - **Critical**: Unbounded queries, insecure deserialization, localStorage sensitive data, client-side serialization, **direct database queries without $wpdb->prepare()**
 - **High**: Direct superglobal manipulation, **unsanitized superglobal read**, **admin functions without capability checks**, **WooCommerce N+1 patterns**, AJAX without nonce validation, unbounded SQL, expensive WP functions in polling
 - **Medium**: N+1 patterns, transients without expiration, HTTP requests without timeout, unsafe RegExp construction, PHP short tags, **WooCommerce Subscriptions queries without limits**
@@ -536,7 +536,7 @@ WP Code Check is a **complete code quality suite** with multiple specialized too
 
 | Tool | Type | Purpose | Speed |
 |------|------|---------|-------|
-| **Quick Scanner** | Bash | 30+ WordPress antipatterns | <5s |
+| **Quick Scanner** | Bash | 54 WordPress antipatterns | <5s |
 | **JSON to HTML Converter** | Python | Beautiful HTML reports from scan logs | <1s |
 | **GitHub Issue Creator** | Bash | Auto-create GitHub issues from scan results | <2s |
 | **Slack Integration** | Bash | CI/CD notifications | Instant |
