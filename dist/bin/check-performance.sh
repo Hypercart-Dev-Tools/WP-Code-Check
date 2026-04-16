@@ -4437,34 +4437,45 @@ AJAX_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rln $EXCLUDE_ARGS --include
 if [ -n "$AJAX_FILES" ]; then
   # SAFEGUARD: Use safe_file_iterator() instead of "for file in $AJAX_FILES"
   # File paths with spaces will break the loop without this helper (see common-helpers.sh)
-  safe_file_iterator "$AJAX_FILES" | while IFS= read -r file; do
-    hook_count=$(grep -E "wp_ajax" "$file" 2>/dev/null | wc -l | tr -d '[:space:]')
-    nonce_count=$(grep -E "check_ajax_referer[[:space:]]*\\(|wp_verify_nonce[[:space:]]*\\(" "$file" 2>/dev/null | wc -l | tr -d '[:space:]')
+  # NOTE: Process substitution < <(...) is used instead of pipe | while to avoid subshell
+  # scoping — pipe creates a subshell where AJAX_NONCE_FAIL and AJAX_NONCE_FINDING_COUNT
+  # changes are lost when the subshell exits, causing the check to always report "passed".
+  while IFS= read -r file; do
+    # Count add_action('wp_ajax_*') registrations (both authenticated and nopriv variants)
+    # NOTE: grep -c always outputs "0" on no match (exit 1); use || true not || echo 0
+    # to avoid capturing "0\n0" which breaks integer comparisons downstream.
+    handler_count=$(grep -cE "add_action[[:space:]]*\([[:space:]]*['\"]wp_ajax_" "$file" 2>/dev/null || true)
+    nonce_count=$(grep -cE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(" "$file" 2>/dev/null || true)
 
-    if [ -z "$hook_count" ] || [ "$hook_count" -eq 0 ]; then
+    if [ -z "$handler_count" ] || [ "$handler_count" -eq 0 ]; then
       continue
     fi
 
-	    # Require at least one nonce validation somewhere in the file
-	    # if any wp_ajax hook is present. This avoids false positives in
-	    # common patterns like shared handlers for wp_ajax_/wp_ajax_nopriv_
-	    # while still flagging completely unprotected files.
-	    if [ -z "$nonce_count" ] || [ "$nonce_count" -eq 0 ]; then
-	      :
-	    else
-	      continue
-	    fi
+    # Flag if zero nonce calls, OR if nonce calls are significantly fewer than handler
+    # registrations (each unique action appears twice: wp_ajax_ + wp_ajax_nopriv_,
+    # so nonce_count should be at least half the handler registrations).
+    # A file with 14 add_action lines and 0 nonce calls is clearly unprotected.
+    # A file with 14 add_action lines and 1-2 nonce calls is likely under-protected.
+    unique_handlers=$(grep -E "add_action[[:space:]]*\([[:space:]]*['\"]wp_ajax_" "$file" 2>/dev/null \
+      | grep -oE "'wp_ajax_[^']+'" | sed "s/wp_ajax_nopriv_/wp_ajax_/" | sort -u | wc -l | tr -d '[:space:]')
+    sufficient_nonces=$(( ${unique_handlers:-0} > 0 ? ${unique_handlers:-0} : 1 ))
+
+    if [ "${nonce_count:-0}" -ge "$sufficient_nonces" ]; then
+      continue
+    fi
+
     if should_suppress_finding "wp-ajax-no-nonce" "$file"; then
       continue
     fi
 
-    lineno=$(grep -n "wp_ajax" "$file" 2>/dev/null | head -1 | cut -d: -f1)
-    code=$(grep -n "wp_ajax" "$file" 2>/dev/null | head -1 | cut -d: -f2-)
-    text_echo "  $file: wp_ajax handler missing nonce validation"
-    add_json_finding "ajax-no-nonce" "error" "$AJAX_NONCE_SEVERITY" "$file" "${lineno:-0}" "wp_ajax handler missing nonce validation" "$code"
+    lineno=$(grep -n "add_action.*wp_ajax_" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+    code=$(grep -n "add_action.*wp_ajax_" "$file" 2>/dev/null | head -1 | cut -d: -f2-)
+    missing=$(( ${unique_handlers:-0} - ${nonce_count:-0} < 0 ? 0 : ${unique_handlers:-0} - ${nonce_count:-0} ))
+    text_echo "  $file: $unique_handlers wp_ajax handler(s), only $nonce_count nonce check(s) — $missing handler(s) likely missing CSRF protection"
+    add_json_finding "ajax-no-nonce" "error" "$AJAX_NONCE_SEVERITY" "$file" "${lineno:-0}" "wp_ajax handlers missing CSRF nonce verification ($unique_handlers handler(s), $nonce_count nonce check(s))" "$code"
     AJAX_NONCE_FAIL=true
     ((AJAX_NONCE_FINDING_COUNT++))
-  done
+  done < <(safe_file_iterator "$AJAX_FILES")
 fi
 if [ "$AJAX_NONCE_FAIL" = true ]; then
   if [ "$AJAX_NONCE_SEVERITY" = "CRITICAL" ] || [ "$AJAX_NONCE_SEVERITY" = "HIGH" ]; then

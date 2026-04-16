@@ -183,6 +183,10 @@ def format_context(hits: list[dict[str, Any]], max_context_chars: int = 80000) -
         else:
             header = f"[{hit.get('path') or source or 'unknown'}]"
 
+        repo_label = str(hit.get("repo_label") or "").strip()
+        if repo_label:
+            header = f"[{repo_label} :: {header[1:-1]}]"
+
         block = f"=== {header} ===\n{content}\n"
         if total + len(block) > max_context_chars:
             break
