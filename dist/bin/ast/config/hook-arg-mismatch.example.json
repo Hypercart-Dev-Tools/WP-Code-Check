@@ -1,0 +1,4 @@
+{
+    "target_hooks": ["woocommerce_*", "wp_*"],
+    "checks": ["arg_count", "priority_conflict", "fire_arg_count"]
+}

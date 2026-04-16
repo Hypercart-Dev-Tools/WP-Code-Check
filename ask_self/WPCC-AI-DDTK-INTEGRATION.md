@@ -86,6 +86,15 @@ the current and planned architecture.
 │   ┌─────────────────── Step 4: Runtime Verification (optional) ────────────┐    │
 │   │                        (requires running WP site)                       │    │
 │   │                                                                         │    │
+│   │   ┌───────────────────────────────────────────────────────────────────┐  │    │
+│   │   │   Playwright + Passwordless Login (pw_auth)                      │  │    │
+│   │   │                                                                   │  │    │
+│   │   │   mu-plugin auto-login · no credentials in agent context         │  │    │
+│   │   │   Authenticated page loads at near-manual-operator quality        │  │    │
+│   │   │   Drives all runtime tools below (QM, HookTrace, DOM checks)     │  │    │
+│   │   └───────────────────────────────────────────────────────────────────┘  │    │
+│   │          │ authenticated browser sessions                                │    │
+│   │          ▼                                                               │    │
 │   │   ┌─────────────────────┐     ┌──────────────────────┐                  │    │
 │   │   │   Query Monitor     │     │   HookTrace          │                  │    │
 │   │   │                     │     │                      │                  │    │
@@ -113,9 +122,9 @@ the current and planned architecture.
 │   ┌───────────────────────────────────────────────────────────────────────────┐  │
 │   │                          MCP Server (26 tools)                           │  │
 │   │                                                                          │  │
-│   │  local_wp_*  ·  wpcc_*  ·  qm_*  ·  pw_auth_*  ·  tmux_*              │  │
-│   │  ask_self_query  ·  ask_self_review  ·  wpcc_ast_check                  │  │
-│   │  hooktrace_*  (planned)                                                  │  │
+│   │  pw_auth_* (passwordless login)  ·  qm_* (profiling)  ·  wpcc_* (scan) │  │
+│   │  local_wp_* (site mgmt)  ·  tmux_* (sessions)  ·  wpcc_ast_check      │  │
+│   │  ask_self_query  ·  ask_self_review  ·  hooktrace_* (planned)           │  │
 │   └───────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -142,18 +151,20 @@ COMPONENT OWNERSHIP
   │              │    │              │    │              │
   │ · Scanner    │    │ · RAG engine │    │ · MCP server │
   │ · 54 grep    │    │ · Ingest     │    │ · Loop ctrl  │
-  │   patterns   │    │ · Query      │    │ · QM bridge  │
-  │ · Semgrep    │    │ · Review     │    │ · HookTrace  │
-  │   rules      │    │   (planned)  │    │   bridge     │
-  │ · AST checker│    │ · Harness    │    │   (planned)  │
-  │ · Pattern    │    │   config     │    │ · Playwright │
-  │   library    │    │ · System     │    │   auth       │
-  │              │    │   instruct.  │    │ · LocalWP    │
+  │   patterns   │    │ · Query      │    │ · Playwright │
+  │ · Semgrep    │    │ · Review     │    │   + password-│
+  │   rules      │    │   (planned)  │    │   less login │
+  │ · AST checker│    │ · Harness    │    │   mu-plugin  │
+  │ · Pattern    │    │   config     │    │ · QM bridge  │
+  │   library    │    │ · System     │    │ · HookTrace  │
+  │              │    │   instruct.  │    │   (planned)  │
+  │              │    │              │    │ · LocalWP    │
   │              │    │              │    │ · Recipes    │
   └──────┬───────┘    └──────┬───────┘    └──────┬───────┘
          │                   │                   │
          │     detection     │   understanding   │  orchestration
-         │     + structure   │   + enrichment    │  + runtime
+         │     + structure   │   + enrichment    │  + runtime +
+         │                   │                   │  auth
          │                   │                   │
          └───────────────────┴───────────────────┘
                       │

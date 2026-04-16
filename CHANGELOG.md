@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- AST hook analysis: new `HookRegistrationVisitor` (`dist/bin/ast/HookRegistrationVisitor.php`) extracts `add_action`, `add_filter`, `do_action`, `apply_filters`, `remove_action`, and `remove_filter` calls from the AST, along with function/method parameter counts for cross-referencing
+- New AST rule `hook-arg-mismatch` with three checks:
+  - `arg_count`: detects callbacks that require more parameters than `accepted_args` will provide, or define extra parameters that will never receive values
+  - `priority_conflict`: flags multiple different callbacks registered on the same hook at the same priority within the scanned codebase
+  - `fire_arg_count`: detects `do_action`/`apply_filters` fire points that pass fewer arguments than registered callbacks expect
+- New AST rule `hook-inventory`: outputs all hook registrations and fire points found in scanned files, sorted by hook name and priority — no findings, just structured data for audit and exploration
+- Test fixture `dist/tests/fixtures/ast-hook-mismatch.php` covering all three hook-arg-mismatch checks including class-based `[$this, 'method']` callbacks
+- Example config `dist/bin/ast/config/hook-arg-mismatch.example.json` with `target_hooks` and `checks` options
+
 ### Changed
 
 - Admin-only hook whitelist for `spo-004-missing-cap-check`: `add_action()` calls using inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, `admin_head`, `admin_footer`, `admin_enqueue_scripts`, `admin_print_styles`, `admin_print_scripts`, `network_admin_menu`, `user_admin_menu`, `network_admin_notices`, `admin_bar_init`, `admin_action_*`, `load-*`) are now downgraded to INFO severity instead of HIGH, reducing false positives for capability check findings
