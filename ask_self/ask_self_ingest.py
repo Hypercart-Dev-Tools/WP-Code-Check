@@ -15,63 +15,52 @@ from pathlib import Path
 from typing import Any
 
 import requests
-import sqlite_vec
 
-from wpdbtk.ask_self_helpers import (
-    CHUNK_TARGET_CHARS,
-    PRIORITY,
-    chunk_changelog,
-    chunk_code,
-    chunk_text,
-    classify_doc,
-)
+try:
+    from ask_self_harness import (
+        DEFAULT_HARNESS_PATH,
+        REPO_ROOT,
+        classify_path,
+        get_corpus_settings,
+        get_default_db_path,
+        get_github_settings,
+        load_runtime_env,
+        load_harness_config,
+        pick_github_token,
+    )
+    from ask_self_helpers import (
+        chunk_changelog,
+        chunk_code,
+        chunk_lines,
+        chunk_text,
+    )
+except ImportError:  # pragma: no cover - package import path
+    from .ask_self_harness import (
+        DEFAULT_HARNESS_PATH,
+        REPO_ROOT,
+        classify_path,
+        get_corpus_settings,
+        get_default_db_path,
+        get_github_settings,
+        load_runtime_env,
+        load_harness_config,
+        pick_github_token,
+    )
+    from .ask_self_helpers import (
+        chunk_changelog,
+        chunk_code,
+        chunk_lines,
+        chunk_text,
+    )
 
 EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
-DEFAULT_PR_FETCH_LIMIT = 200
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DB_PATH = REPO_ROOT / "temp" / "rag" / "wpdbtk-self-ask.sqlite"
-
-INCLUDE_DOCS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^[^/]+\.md$"),
-    re.compile(r"^PROJECT/.+\.md$"),
-)
-
-EXCLUDE_PATHS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^node_modules/"),
-    re.compile(r"^\.git/"),
-    re.compile(r"^data/"),
-    re.compile(r"^temp/"),
-    re.compile(r"^tests/"),
-    re.compile(r"^scratch/"),
-)
-
-DEFAULT_DOC_EXTENSIONS: tuple[str, ...] = (".md",)
-
-# --- Source-code corpus mode ---
-
-INCLUDE_SOURCE: tuple[re.Pattern[str], ...] = (
-    # Root-level wpdbtk-*.py CLI scripts
-    re.compile(r"^wpdbtk-[^/]+\.py$"),
-    # wpdbtk/ package modules (excluding __pycache__ etc.)
-    re.compile(r"^wpdbtk/[^/]+\.py$"),
-)
-
-EXCLUDE_SOURCE_PATHS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^\.git/"),
-    re.compile(r"^\.venv/"),
-    re.compile(r"^node_modules/"),
-    re.compile(r"^mlx-embeddings/"),
-    re.compile(r"^vector/"),
-    re.compile(r"^spike/"),
-    re.compile(r"^temp/"),
-    re.compile(r"^scratch/"),
-)
-
-DEFAULT_SOURCE_EXTENSIONS: tuple[str, ...] = (".py",)
-
 INGEST_MODES = ("docs", "code", "all")
+
+DEFAULT_HARNESS = load_harness_config(DEFAULT_HARNESS_PATH)
+DEFAULT_GITHUB_SETTINGS = get_github_settings(DEFAULT_HARNESS)
+DEFAULT_DB_PATH = get_default_db_path(DEFAULT_HARNESS, repo_root=REPO_ROOT)
+DEFAULT_PR_FETCH_LIMIT = int(DEFAULT_GITHUB_SETTINGS.get("default_fetch_limit") or 200)
 
 
 @dataclass
@@ -82,7 +71,6 @@ class ChunkRow:
     pr_number: int | None = None
     version: str | None = None
     priority: int = 1
-
 
 
 def _vector_to_blob(values: list[float]) -> bytes:
@@ -97,7 +85,8 @@ def _compile_patterns(patterns: list[str] | tuple[str, ...] | None) -> list[re.P
 
 def _normalize_extensions(extensions: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
     if not extensions:
-        return DEFAULT_DOC_EXTENSIONS
+        return (".md",)
+
     cleaned: list[str] = []
     for ext in extensions:
         text = str(ext).strip()
@@ -106,18 +95,20 @@ def _normalize_extensions(extensions: list[str] | tuple[str, ...] | None) -> tup
         if not text.startswith("."):
             text = "." + text
         cleaned.append(text.lower())
+
     if not cleaned:
-        return DEFAULT_DOC_EXTENSIONS
+        return (".md",)
     return tuple(dict.fromkeys(cleaned))
 
 
 def walk_repo_files(
     repo_root: Path,
     *,
-    include_patterns: list[re.Pattern[str]] | tuple[re.Pattern[str], ...] = INCLUDE_DOCS,
-    exclude_patterns: list[re.Pattern[str]] | tuple[re.Pattern[str], ...] = EXCLUDE_PATHS,
-    extensions: list[str] | tuple[str, ...] = DEFAULT_DOC_EXTENSIONS,
+    include_patterns: list[re.Pattern[str]] | tuple[re.Pattern[str], ...],
+    exclude_patterns: list[re.Pattern[str]] | tuple[re.Pattern[str], ...],
+    extensions: list[str] | tuple[str, ...],
 ) -> list[Path]:
+    """Walk the repository and return files matching the configured corpus rules."""
     ext_filter = _normalize_extensions(extensions)
     found: list[Path] = []
     for path in repo_root.rglob("*"):
@@ -130,7 +121,7 @@ def walk_repo_files(
             continue
         if any(rx.search(rel) for rx in include_patterns):
             found.append(path)
-    found.sort(key=lambda p: p.as_posix())
+    found.sort(key=lambda item: item.as_posix())
     return found
 
 
@@ -157,6 +148,7 @@ def embed_one(text: str, api_key: str, *, task_type: str = "RETRIEVAL_DOCUMENT")
 
 
 def embed_batch(texts: list[str], api_key: str, *, concurrency: int = 4) -> list[list[float]]:
+    """Embed a batch of chunks with simple retry handling."""
     out: list[list[float] | None] = [None] * len(texts)
 
     def work(idx: int) -> None:
@@ -176,7 +168,7 @@ def embed_batch(texts: list[str], api_key: str, *, concurrency: int = 4) -> list
         for fut in futures:
             fut.result()
 
-    return [v for v in out if v is not None]
+    return [value for value in out if value is not None]
 
 
 def fetch_merged_prs(
@@ -186,7 +178,8 @@ def fetch_merged_prs(
     token: str | None,
     limit: int = DEFAULT_PR_FETCH_LIMIT,
 ) -> list[dict[str, Any]]:
-    if not token:
+    """Fetch merged PRs for optional repo-history grounding."""
+    if not token or not owner or not repo:
         return []
 
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
@@ -228,6 +221,9 @@ def fetch_merged_prs(
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
+    """Create a fresh sqlite-vec index."""
+    import sqlite_vec
+
     db_path.parent.mkdir(parents=True, exist_ok=True)
     if db_path.exists():
         db_path.unlink()
@@ -255,6 +251,7 @@ def open_db(db_path: Path) -> sqlite3.Connection:
 
 
 def insert_chunk(conn: sqlite3.Connection, row: ChunkRow, embedding: list[float]) -> None:
+    """Insert a metadata row plus its embedding vector."""
     cur = conn.execute(
         (
             "INSERT INTO chunks (source, path, pr_number, version, priority, content) "
@@ -269,9 +266,20 @@ def insert_chunk(conn: sqlite3.Connection, row: ChunkRow, embedding: list[float]
     )
 
 
+def _chunk_file(text: str, *, chunker: str) -> list[str] | list[dict[str, str | None]]:
+    if chunker == "changelog":
+        return chunk_changelog(text)
+    if chunker == "python":
+        return chunk_code(text)
+    if chunker == "line":
+        return chunk_lines(text)
+    return chunk_text(text)
+
+
 def build_doc_rows(
     repo_root: Path,
     *,
+    harness_config: dict[str, Any],
     max_doc_files: int | None = None,
     include_patterns: list[str] | tuple[str, ...] | None = None,
     exclude_patterns: list[str] | tuple[str, ...] | None = None,
@@ -279,47 +287,24 @@ def build_doc_rows(
     source_allowlist: list[str] | tuple[str, ...] | None = None,
     mode: str = "docs",
 ) -> list[ChunkRow]:
-    """Build ChunkRows from the repository corpus.
-
-    *mode* controls which default patterns are applied when *include_patterns*,
-    *exclude_patterns*, and *doc_extensions* are not explicitly overridden:
-
-    - ``"docs"``  — Markdown documentation (default).
-    - ``"code"``  — Python source files under ``wpdbtk/`` and root-level
-      ``wpdbtk-*.py`` scripts.
-    - ``"all"``   — Both docs and code combined.
-    """
+    """Build chunk rows from the repository corpus."""
     if mode not in INGEST_MODES:
         raise ValueError(f"build_doc_rows: mode must be one of {INGEST_MODES}")
 
-    # Resolve effective defaults based on mode when caller didn't override.
     if include_patterns is not None:
         inc_rx = _compile_patterns(list(include_patterns))
-    elif mode == "code":
-        inc_rx = list(INCLUDE_SOURCE)
-    elif mode == "all":
-        inc_rx = list(INCLUDE_DOCS) + list(INCLUDE_SOURCE)
-    else:  # "docs"
-        inc_rx = list(INCLUDE_DOCS)
+    else:
+        inc_rx = _compile_patterns(get_corpus_settings(harness_config, mode)["include_patterns"])
 
     if exclude_patterns is not None:
         exc_rx = _compile_patterns(list(exclude_patterns))
-    elif mode == "code":
-        exc_rx = list(EXCLUDE_SOURCE_PATHS)
-    elif mode == "all":
-        # Union: keep a path only if it passes both sets.
-        exc_rx = list(EXCLUDE_PATHS) + [p for p in EXCLUDE_SOURCE_PATHS if p not in EXCLUDE_PATHS]
     else:
-        exc_rx = list(EXCLUDE_PATHS)
+        exc_rx = _compile_patterns(get_corpus_settings(harness_config, mode)["exclude_patterns"])
 
     if doc_extensions is not None:
         ext_list: list[str] = list(doc_extensions)
-    elif mode == "code":
-        ext_list = list(DEFAULT_SOURCE_EXTENSIONS)
-    elif mode == "all":
-        ext_list = list(DEFAULT_DOC_EXTENSIONS) + list(DEFAULT_SOURCE_EXTENSIONS)
     else:
-        ext_list = list(DEFAULT_DOC_EXTENSIONS)
+        ext_list = get_corpus_settings(harness_config, mode)["extensions"]
 
     files = walk_repo_files(
         repo_root,
@@ -330,21 +315,23 @@ def build_doc_rows(
     if max_doc_files is not None:
         files = files[: max(0, max_doc_files)]
 
-    allowed_sources = {str(s).strip() for s in (source_allowlist or []) if str(s).strip()}
-
+    allowed_sources = {str(item).strip() for item in (source_allowlist or []) if str(item).strip()}
     rows: list[ChunkRow] = []
+
     for file_path in files:
         rel = file_path.relative_to(repo_root).as_posix()
         text = file_path.read_text(encoding="utf-8", errors="replace")
-        doc_class = classify_doc(rel)
+        doc_class = classify_path(rel, harness_config)
         source = str(doc_class["source"])
         priority = int(doc_class["priority"])
+        chunker = str(doc_class.get("chunker") or "text")
 
         if allowed_sources and source not in allowed_sources:
             continue
 
-        if source == "changelog":
-            for entry in chunk_changelog(text):
+        chunks = _chunk_file(text, chunker=chunker)
+        if chunker == "changelog":
+            for entry in chunks:
                 rows.append(
                     ChunkRow(
                         source="changelog",
@@ -354,31 +341,23 @@ def build_doc_rows(
                         content=str(entry["content"]),
                     )
                 )
-        elif source in ("module", "script", "test"):
-            for chunk in chunk_code(text):
-                rows.append(
-                    ChunkRow(
-                        source=source,
-                        path=rel,
-                        priority=priority,
-                        content=chunk,
-                    )
+            continue
+
+        for chunk in chunks:
+            rows.append(
+                ChunkRow(
+                    source=source,
+                    path=rel,
+                    priority=priority,
+                    content=str(chunk),
                 )
-        else:
-            for chunk in chunk_text(text):
-                rows.append(
-                    ChunkRow(
-                        source=source,
-                        path=rel,
-                        priority=priority,
-                        content=chunk,
-                    )
-                )
+            )
 
     return rows
 
 
 def build_pr_rows(prs: list[dict[str, Any]]) -> list[ChunkRow]:
+    """Build chunk rows from merged pull request metadata."""
     rows: list[ChunkRow] = []
     for pr in prs:
         pr_num = pr.get("number")
@@ -393,8 +372,8 @@ def build_pr_rows(prs: list[dict[str, Any]]) -> list[ChunkRow]:
                 source="pr",
                 path=f"PR #{pr_num}",
                 pr_number=int(pr_num),
-                priority=PRIORITY["pr"],
-                content=text[: CHUNK_TARGET_CHARS * 2],
+                priority=1,
+                content=text[: 9600],
             )
         )
     return rows
@@ -403,11 +382,12 @@ def build_pr_rows(prs: list[dict[str, Any]]) -> list[ChunkRow]:
 def ingest(
     *,
     repo_root: Path = REPO_ROOT,
-    db_path: Path = DEFAULT_DB_PATH,
+    db_path: Path | None = None,
+    harness_config_path: Path = DEFAULT_HARNESS_PATH,
     include_prs: bool = True,
-    github_owner: str = "Hypercart-Dev-Tools",
-    github_repo: str = "WP-DB-Toolkit",
-    pr_fetch_limit: int = DEFAULT_PR_FETCH_LIMIT,
+    github_owner: str | None = None,
+    github_repo: str | None = None,
+    pr_fetch_limit: int | None = None,
     max_doc_files: int | None = None,
     max_rows: int | None = None,
     concurrency: int = 4,
@@ -417,13 +397,26 @@ def ingest(
     source_allowlist: list[str] | None = None,
     mode: str = "docs",
 ) -> dict[str, Any]:
+    """Build the local ask-self vector index."""
+    harness_config = load_harness_config(harness_config_path)
+    load_runtime_env(harness_config, repo_root=repo_root)
+
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError("GOOGLE_API_KEY not set")
 
+    resolved_db_path = db_path or get_default_db_path(harness_config, repo_root=repo_root)
+    github_settings = get_github_settings(harness_config)
+    owner = github_owner if github_owner is not None else str(github_settings.get("owner") or "")
+    repo = github_repo if github_repo is not None else str(github_settings.get("repo") or "")
+    limit = pr_fetch_limit if pr_fetch_limit is not None else int(
+        github_settings.get("default_fetch_limit") or DEFAULT_PR_FETCH_LIMIT
+    )
+
     t0 = time.time()
     doc_rows = build_doc_rows(
         repo_root,
+        harness_config=harness_config,
         max_doc_files=max_doc_files,
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,
@@ -431,14 +424,14 @@ def ingest(
         source_allowlist=source_allowlist,
         mode=mode,
     )
+
     prs: list[dict[str, Any]] = []
     if include_prs:
-        token = os.getenv("SLEUTH_RAG_GITHUB_PAT") or os.getenv("GITHUB_TOKEN")
         prs = fetch_merged_prs(
-            owner=github_owner,
-            repo=github_repo,
-            token=token,
-            limit=pr_fetch_limit,
+            owner=owner,
+            repo=repo,
+            token=pick_github_token(harness_config),
+            limit=limit,
         )
 
     all_rows = doc_rows + build_pr_rows(prs)
@@ -447,7 +440,7 @@ def ingest(
 
     embeddings = embed_batch([row.content for row in all_rows], api_key, concurrency=concurrency)
 
-    conn = open_db(db_path)
+    conn = open_db(resolved_db_path)
     try:
         with conn:
             for row, embedding in zip(all_rows, embeddings):
@@ -460,15 +453,17 @@ def ingest(
     finally:
         conn.close()
 
+    corpus_settings = get_corpus_settings(harness_config, mode)
     return {
-        "db_path": str(db_path),
+        "db_path": str(resolved_db_path),
         "total_chunks": int(total),
         "by_source": {str(source): int(count) for source, count in by_source_rows},
         "corpus_policy": {
             "mode": mode,
-            "include_patterns": include_patterns or [r.pattern for r in INCLUDE_DOCS],
-            "exclude_patterns": exclude_patterns or [r.pattern for r in EXCLUDE_PATHS],
-            "doc_extensions": doc_extensions or list(DEFAULT_DOC_EXTENSIONS),
+            "harness_config": str(harness_config.get("_config_path", harness_config_path)),
+            "include_patterns": include_patterns or corpus_settings["include_patterns"],
+            "exclude_patterns": exclude_patterns or corpus_settings["exclude_patterns"],
+            "extensions": doc_extensions or corpus_settings["extensions"],
             "source_allowlist": source_allowlist or [],
         },
         "elapsed_seconds": round(time.time() - t0, 2),
@@ -476,69 +471,96 @@ def ingest(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Build local ask-self sqlite index (Python scaffold)")
-    parser.add_argument("--db-path", default=str(DEFAULT_DB_PATH), help="Output sqlite DB path")
-    parser.add_argument("--repo-root", default=str(REPO_ROOT), help="Repo root to ingest")
+    parser = argparse.ArgumentParser(description="Build local ask-self sqlite index")
+    parser.add_argument(
+        "--db-path",
+        default=None,
+        help="Output sqlite DB path (defaults to the harness-defined path)",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=str(REPO_ROOT),
+        help="Repo root to ingest",
+    )
+    parser.add_argument(
+        "--harness-config",
+        default=str(DEFAULT_HARNESS_PATH),
+        help="Path to repo-specific harness JSON",
+    )
     parser.add_argument("--no-prs", action="store_true", help="Skip GitHub PR ingestion")
-    parser.add_argument("--github-owner", default="Hypercart-Dev-Tools", help="GitHub owner/org")
-    parser.add_argument("--github-repo", default="WP-DB-Toolkit", help="GitHub repository")
-    parser.add_argument("--pr-fetch-limit", type=int, default=DEFAULT_PR_FETCH_LIMIT, help="Max merged PRs")
-    parser.add_argument("--max-doc-files", type=int, default=None, help="Limit markdown files for quick spikes")
-    parser.add_argument("--max-rows", type=int, default=None, help="Limit total chunks for quick spikes")
+    parser.add_argument(
+        "--github-owner",
+        default=None,
+        help="GitHub owner/org override",
+    )
+    parser.add_argument(
+        "--github-repo",
+        default=None,
+        help="GitHub repository override",
+    )
+    parser.add_argument(
+        "--pr-fetch-limit",
+        type=int,
+        default=None,
+        help="Max merged PRs (defaults to the harness setting)",
+    )
+    parser.add_argument("--max-doc-files", type=int, default=None, help="Limit corpus files")
+    parser.add_argument("--max-rows", type=int, default=None, help="Limit total chunks")
     parser.add_argument("--concurrency", type=int, default=4, help="Embedding concurrency")
     parser.add_argument(
         "--include-pattern",
         action="append",
         dest="include_patterns",
         default=None,
-        help="Regex to include repo-relative docs (repeatable)",
+        help="Regex to include repo-relative files (repeatable)",
     )
     parser.add_argument(
         "--exclude-pattern",
         action="append",
         dest="exclude_patterns",
         default=None,
-        help="Regex to exclude repo-relative docs (repeatable)",
+        help="Regex to exclude repo-relative files (repeatable)",
     )
     parser.add_argument(
         "--doc-ext",
+        "--ext",
         action="append",
         dest="doc_extensions",
         default=None,
-        help="Document extension to ingest (repeatable, e.g. md)",
+        help="Corpus file extension to ingest (repeatable, e.g. md or py)",
     )
     parser.add_argument(
         "--source",
         action="append",
         dest="source_allowlist",
         default=None,
-        help="Allow only classified source(s): doc, changelog, strategy (repeatable)",
+        help="Allow only classified source(s) from the harness config",
     )
-    parser.add_argument("--json", action="store_true", help="Emit JSON summary")
     parser.add_argument(
         "--mode",
         choices=list(INGEST_MODES),
         default="docs",
-        help="Corpus mode: docs (default), code (Python source), or all",
+        help="Corpus mode: docs, code, or all",
     )
+    parser.add_argument("--json", action="store_true", help="Emit JSON summary")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-
     try:
-        summary = ingest(
+        result = ingest(
             repo_root=Path(args.repo_root),
-            db_path=Path(args.db_path),
+            db_path=Path(args.db_path) if args.db_path else None,
+            harness_config_path=Path(args.harness_config),
             include_prs=not args.no_prs,
             github_owner=args.github_owner,
             github_repo=args.github_repo,
             pr_fetch_limit=args.pr_fetch_limit,
             max_doc_files=args.max_doc_files,
             max_rows=args.max_rows,
-            concurrency=max(1, args.concurrency),
+            concurrency=args.concurrency,
             include_patterns=args.include_patterns,
             exclude_patterns=args.exclude_patterns,
             doc_extensions=args.doc_extensions,
@@ -553,14 +575,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.json:
-        print(json.dumps({"ok": True, **summary}, ensure_ascii=False, indent=2))
+        print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
     else:
-        print("Ingest complete")
-        print(f"  DB: {summary['db_path']}")
-        print(f"  Total chunks: {summary['total_chunks']}")
-        print(f"  By source: {summary['by_source']}")
-        print(f"  Elapsed: {summary['elapsed_seconds']}s")
-
+        print(
+            f"Indexed {result['total_chunks']} chunks into {result['db_path']}"
+            f" in {result['elapsed_seconds']}s"
+        )
     return 0
 
 

@@ -10,6 +10,10 @@ All notable changes to this project will be documented in this file.
 
 - N+1 loop detection (`find_meta_in_loop_line`) now uses brace-depth tracking to verify `get_*_meta` calls are lexically inside a loop body, not just within 80 lines of a loop keyword. Eliminates false positives from sequential meta calls after loop closure
 
+- Renamed the Python self-ask scaffold directory from `ask-self` to `ask_self` and refactored ingest/query scripts to use a repo-specific harness config. The scaffold can now swap corpus rules, repo labels, DB naming, PR defaults, and tenancy env vars without changing core code
+- Replaced the self-ask prompts file with a user-editable `ask_self_system_instructions.json` convention and added layered synthesis instructions for Gemini Pro. Final answers can now return structured question assessment plus a suggested better question when the original ask is too vague, broad, or underspecified
+- Added `ask_self/README.md` as a maintainer-oriented architectural overview for spinning the scaffold into its own repo. The harness now auto-loads credentials from a gitignored `temp/ask-self-rag.env` path by default so runtime secrets stay out of committed files
+
 - Tightened `limit-multiplier-from-count` JSON pattern to require `count(...) * <number>` instead of matching any `count()` call. Eliminates false positives from display/comparison uses of `count()`
 
 - `rest-no-pagination` now skips non-GET endpoints (POST, PUT, DELETE, PATCH) via new `skip_if_context_matches` scripted runner feature. Reduces false positives on action/mutation endpoints where pagination is inapplicable
