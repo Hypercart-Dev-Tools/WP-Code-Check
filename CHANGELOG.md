@@ -37,9 +37,9 @@ All notable changes to this project will be documented in this file.
 
 - Calibrated `wp_ajax handlers without nonce validation` detection in `dist/bin/check-performance.sh` to catch missing CSRF protection reliably:
   - Replaced pipe-based `safe_file_iterator ... | while` loop with process substitution `while ...; done < <(...)` so failure flags and counters are preserved (no subshell scope loss)
-  - Improved handler-to-nonce coverage logic by comparing unique `wp_ajax_*` registrations to nonce checks instead of only checking whether any nonce exists in the file
+  - Upgraded from file-level to endpoint-level verification by mapping each `add_action('wp_ajax_*', callback)` registration to its callback and checking that callback body for `check_ajax_referer()`, `wp_verify_nonce()`, or `check_admin_referer()`
   - Fixed grep-count fallback handling (`grep -c ... || true`) to avoid malformed `0\n0` values during arithmetic comparisons
-  - Verified against the Bloomz universal child theme case where 27 AJAX endpoints were missing nonce verification
+  - Verified against the Bloomz universal child theme case (issue #768 scope), where the check now reports per-endpoint missing nonce findings instead of coarse file-level flags
 
 - N+1 pattern findings now include the actual source code line in the report. Previously the `code` field was empty because `find_meta_in_loop_line` only returned the line number without extracting the source text
 

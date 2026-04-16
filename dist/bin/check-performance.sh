@@ -2363,6 +2363,46 @@ find_callback_capability_check() {
   return 1  # No capability check found
 }
 
+# Find callback function in same file and check for nonce verification
+# Usage: find_callback_nonce_check "file.php" "callback_function_name"
+# Returns: 0 if nonce verification found, 1 if not found
+find_callback_nonce_check() {
+  local file="$1"
+  local callback_name="$2"
+
+  # Sanitize callback name (remove quotes/whitespace and normalize Class::method)
+  callback_name=$(echo "$callback_name" | sed "s/['\"]//g" | tr -d '[:space:]')
+  callback_name="${callback_name##*::}"
+
+  # Skip if callback is empty or looks dynamic
+  if [ -z "$callback_name" ] || [[ "$callback_name" =~ ^\$ ]] || [[ "$callback_name" =~ ^function ]]; then
+    return 1
+  fi
+
+  local func_line
+  func_line=$(grep -n "^[[:space:]]*function[[:space:]]\+${callback_name}[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+
+  if [ -z "$func_line" ]; then
+    func_line=$(grep -n "^[[:space:]]*\(public\|private\|protected\)\([[:space:]]\+static\)\?[[:space:]]\+function[[:space:]]\+${callback_name}[[:space:]]*(" "$file" 2>/dev/null | head -1 | cut -d: -f1)
+  fi
+
+  if [ -z "$func_line" ]; then
+    return 1
+  fi
+
+  local range function_start function_end func_body
+  range=$(get_function_scope_range "$file" "$func_line" 80)
+  function_start=${range%%:*}
+  function_end=${range##*:}
+  func_body=$(sed -n "${function_start},${function_end}p" "$file" 2>/dev/null || true)
+
+  if echo "$func_body" | grep -qE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(|check_admin_referer[[:space:]]*\("; then
+    return 0
+  fi
+
+  return 1
+}
+
 # Conditional echo - only outputs in text mode
 text_echo() {
 	if [ "$OUTPUT_FORMAT" = "text" ]; then
@@ -4438,43 +4478,62 @@ if [ -n "$AJAX_FILES" ]; then
   # SAFEGUARD: Use safe_file_iterator() instead of "for file in $AJAX_FILES"
   # File paths with spaces will break the loop without this helper (see common-helpers.sh)
   # NOTE: Process substitution < <(...) is used instead of pipe | while to avoid subshell
-  # scoping — pipe creates a subshell where AJAX_NONCE_FAIL and AJAX_NONCE_FINDING_COUNT
+  # scoping - pipe creates a subshell where AJAX_NONCE_FAIL and AJAX_NONCE_FINDING_COUNT
   # changes are lost when the subshell exits, causing the check to always report "passed".
   while IFS= read -r file; do
-    # Count add_action('wp_ajax_*') registrations (both authenticated and nopriv variants)
-    # NOTE: grep -c always outputs "0" on no match (exit 1); use || true not || echo 0
-    # to avoid capturing "0\n0" which breaks integer comparisons downstream.
-    handler_count=$(grep -cE "add_action[[:space:]]*\([[:space:]]*['\"]wp_ajax_" "$file" 2>/dev/null || true)
-    nonce_count=$(grep -cE "check_ajax_referer[[:space:]]*\(|wp_verify_nonce[[:space:]]*\(" "$file" 2>/dev/null || true)
-
-    if [ -z "$handler_count" ] || [ "$handler_count" -eq 0 ]; then
+    registrations=$(grep -nE "add_action[[:space:]]*\([[:space:]]*['\"]wp_ajax_" "$file" 2>/dev/null || true)
+    if [ -z "$registrations" ]; then
       continue
     fi
 
-    # Flag if zero nonce calls, OR if nonce calls are significantly fewer than handler
-    # registrations (each unique action appears twice: wp_ajax_ + wp_ajax_nopriv_,
-    # so nonce_count should be at least half the handler registrations).
-    # A file with 14 add_action lines and 0 nonce calls is clearly unprotected.
-    # A file with 14 add_action lines and 1-2 nonce calls is likely under-protected.
-    unique_handlers=$(grep -E "add_action[[:space:]]*\([[:space:]]*['\"]wp_ajax_" "$file" 2>/dev/null \
-      | grep -oE "'wp_ajax_[^']+'" | sed "s/wp_ajax_nopriv_/wp_ajax_/" | sort -u | wc -l | tr -d '[:space:]')
-    sufficient_nonces=$(( ${unique_handlers:-0} > 0 ? ${unique_handlers:-0} : 1 ))
+    # Build endpoint map: normalize wp_ajax_nopriv_* to wp_ajax_* and pair it with callback.
+    # This allows endpoint-level verification instead of file-level nonce counting.
+    endpoint_rows=""
+    while IFS= read -r match; do
+      [ -z "$match" ] && continue
+      lineno="${match%%:*}"
+      code="${match#*:}"
 
-    if [ "${nonce_count:-0}" -ge "$sufficient_nonces" ]; then
-      continue
-    fi
+      action=$(echo "$code" | sed -nE "s/.*add_action[[:space:]]*\([[:space:]]*['\"](wp_ajax_[^'\"]+)['\"][[:space:]]*,.*/\1/p")
+      callback_name=$(echo "$code" | sed -nE "s/.*add_action[[:space:]]*\([[:space:]]*['\"]wp_ajax_[^'\"]+['\"][[:space:]]*,[[:space:]]*['\"]([^'\"]+)['\"].*/\1/p")
 
-    if should_suppress_finding "wp-ajax-no-nonce" "$file"; then
-      continue
-    fi
+      if [ -z "$callback_name" ]; then
+        callback_name=$(echo "$code" | sed -nE "s/.*\[[^,]*,[[:space:]]*['\"]([^'\"]+)['\"].*/\1/p")
+      fi
+      if [ -z "$callback_name" ]; then
+        callback_name=$(echo "$code" | sed -nE "s/.*array[[:space:]]*\([^,]*,[[:space:]]*['\"]([^'\"]+)['\"].*/\1/p")
+      fi
 
-    lineno=$(grep -n "add_action.*wp_ajax_" "$file" 2>/dev/null | head -1 | cut -d: -f1)
-    code=$(grep -n "add_action.*wp_ajax_" "$file" 2>/dev/null | head -1 | cut -d: -f2-)
-    missing=$(( ${unique_handlers:-0} - ${nonce_count:-0} < 0 ? 0 : ${unique_handlers:-0} - ${nonce_count:-0} ))
-    text_echo "  $file: $unique_handlers wp_ajax handler(s), only $nonce_count nonce check(s) — $missing handler(s) likely missing CSRF protection"
-    add_json_finding "ajax-no-nonce" "error" "$AJAX_NONCE_SEVERITY" "$file" "${lineno:-0}" "wp_ajax handlers missing CSRF nonce verification ($unique_handlers handler(s), $nonce_count nonce check(s))" "$code"
-    AJAX_NONCE_FAIL=true
-    ((AJAX_NONCE_FINDING_COUNT++))
+      [ -z "$action" ] && continue
+      normalized_action=$(echo "$action" | sed 's/^wp_ajax_nopriv_/wp_ajax_/')
+      endpoint_rows="${endpoint_rows}${normalized_action}\t${callback_name}\t${lineno}\t${code}\n"
+    done <<< "$registrations"
+
+    [ -z "$endpoint_rows" ] && continue
+
+    unique_endpoints=$(printf "%b" "$endpoint_rows" | awk -F '\t' '!seen[$1 FS $2]++')
+
+    while IFS= read -r endpoint; do
+      [ -z "$endpoint" ] && continue
+
+      normalized_action=$(echo "$endpoint" | cut -f1)
+      callback_name=$(echo "$endpoint" | cut -f2)
+      lineno=$(echo "$endpoint" | cut -f3)
+      code=$(echo "$endpoint" | cut -f4-)
+
+      if should_suppress_finding "wp-ajax-no-nonce" "$file"; then
+        continue
+      fi
+
+      if find_callback_nonce_check "$file" "$callback_name"; then
+        continue
+      fi
+
+      text_echo "  $file:$lineno ${normalized_action} callback '${callback_name}' missing nonce verification"
+      add_json_finding "ajax-no-nonce" "error" "$AJAX_NONCE_SEVERITY" "$file" "${lineno:-0}" "wp_ajax endpoint '${normalized_action}' callback '${callback_name}' missing CSRF nonce verification" "$code"
+      AJAX_NONCE_FAIL=true
+      ((AJAX_NONCE_FINDING_COUNT++))
+    done <<< "$unique_endpoints"
   done < <(safe_file_iterator "$AJAX_FILES")
 fi
 if [ "$AJAX_NONCE_FAIL" = true ]; then
