@@ -36,16 +36,20 @@ the current and planned architecture.
 │   │   │  ┌───────────────┐  │     │  ┌────────────────┐  │                  │    │
 │   │   │  │ grep patterns │  │     │  │ Return shapes  │  │                  │    │
 │   │   │  │ (54 rules)    │  │     │  │ Contract checks│  │                  │    │
-│   │   │  └───────────────┘  │     │  │ Hook registr.  │  │                  │    │
-│   │   │  ┌───────────────┐  │     │  └────────────────┘  │                  │    │
-│   │   │  │ Semgrep rules │  │     │                      │                  │    │
-│   │   │  │ (pilot, opt.) │  │     │  wpcc-ast-check.php  │                  │    │
-│   │   │  └───────────────┘  │     └──────────────────────┘                  │    │
-│   │   │                     │                                               │    │
-│   │   │  check-performance  │     Findings:                                 │    │
-│   │   │  .sh                │     · missing return keys                     │    │
-│   │   └─────────────────────┘     · shape mismatches                        │    │
-│   │                                · contract violations                     │    │
+│   │   │  └───────────────┘  │     │  │ Hook arg count │  │                  │    │
+│   │   │  ┌───────────────┐  │     │  │ Priority clash │  │                  │    │
+│   │   │  │ Semgrep rules │  │     │  │ Fire arg count │  │                  │    │
+│   │   │  │ (pilot, opt.) │  │     │  │ Hook inventory │  │                  │    │
+│   │   │  └───────────────┘  │     │  └────────────────┘  │                  │    │
+│   │   │                     │     │                      │                  │    │
+│   │   │  check-performance  │     │  wpcc-ast-check.php  │                  │    │
+│   │   │  .sh                │     └──────────────────────┘                  │    │
+│   │   └─────────────────────┘                                               │    │
+│   │                                Findings:                                 │    │
+│   │   Findings:                    · missing return keys                     │    │
+│   │   · security patterns          · shape mismatches                        │    │
+│   │   · performance anti-patterns  · hook arg mismatches                     │    │
+│   │   · unbounded queries          · priority conflicts                      │    │
 │   │   Findings:                                                              │    │
 │   │   · security patterns        ◄── violations? → fix, loop to Step 1      │    │
 │   │   · performance anti-patterns                                            │    │
@@ -523,7 +527,7 @@ Fix-Iterate Loop (AI-DDTK)
     "properties": {
       "rule": {
         "type": "string",
-        "enum": ["return-array-shape"],
+        "enum": ["return-array-shape", "hook-arg-mismatch", "hook-inventory"],
         "description": "Which AST rule to run"
       },
       "paths": {
