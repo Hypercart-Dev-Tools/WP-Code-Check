@@ -4,6 +4,26 @@
 
 This README is written for the next LLM or engineer who inherits this folder and wants to maintain or spin it out into its own repository.
 
+**Requirements**
+
+Python 3.10+ with the following packages:
+
+| Package      | Purpose                                | Install                  |
+|--------------|----------------------------------------|--------------------------|
+| `requests`   | Gemini API and GitHub API calls        | `pip install requests`   |
+| `sqlite-vec` | Vector similarity search in SQLite     | `pip install sqlite-vec` |
+
+Standard library modules used: `sqlite3`, `json`, `re`, `pathlib`, `dataclasses`, `concurrent.futures`, `argparse`, `array`, `os`, `sys`.
+
+Quick setup:
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install requests sqlite-vec
+```
+
+You also need a `GOOGLE_API_KEY` for Gemini embedding and synthesis. Optionally a `GITHUB_TOKEN` for PR ingestion. See **Credential Handling** below.
+
 **Purpose**
 This package exists to answer questions about a repository using the repository itself as the source of truth.
 
@@ -11,6 +31,21 @@ This package exists to answer questions about a repository using the repository 
 - It retrieves semantically relevant chunks for a user question.
 - It synthesizes a final answer from retrieved context instead of answering from model memory alone.
 - It can assess whether the original question is vague, broad, or underspecified, and suggest a better question.
+
+**Use Cases**
+
+*Standalone*
+
+- **Codebase Q&A** — Ask natural-language questions about a repo and get answers grounded in the actual source, docs, and changelog rather than model memory. Useful for onboarding, auditing, or navigating a large codebase.
+- **PR-aware context** — With GitHub PR ingestion enabled, answers can draw on merged PR descriptions and discussion, surfacing decisions that live in review threads rather than code comments.
+- **Question quality feedback** — The system assesses whether a question is vague or underspecified, and suggests a sharper reformulation. Useful for building self-service Q&A interfaces where users may not know how to ask.
+
+*Integrated with the WPCC scanner*
+
+- **Finding triage and explanation** — After the scanner flags issues, pipe findings into ask_self to get repo-grounded context: "Is this `eval()` usage intentional?" or "How does this repo typically handle `$wpdb->prepare()`?" Cuts triage time by distinguishing known patterns from real concerns.
+- **False positive reduction** — The scanner's grep-based detection cannot see multi-line sanitization or architectural intent. ask_self can retrieve chunks showing a flagged pattern is wrapped in a mitigation elsewhere, acting as a semantic second opinion on structural matches.
+- **Pattern gap discovery** — "What risks exist in this repo that the scanner doesn't currently check for?" is a question ask_self can attempt since it has both the pattern library and the source indexed together.
+- **Repo-grounded remediation** — Instead of generic remediation advice, ask_self can show how the specific repo already handles a given pattern, producing fix suggestions that match the existing codebase conventions.
 
 **Core Files**
 - `ask_self_ingest.py`: builds the local sqlite-vec index from the configured corpus.
