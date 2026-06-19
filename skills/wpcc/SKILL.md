@@ -136,7 +136,7 @@ Running: "<SCANNER>" --paths "<TARGET>" <FLAGS>
 Use the Bash tool with a generous timeout (scanner default is 300 s; allow 360 s):
 
 ```bash
-REPORT_JSON=$(mktemp /tmp/wpcc-XXXXXX.json)
+REPORT_JSON=$(mktemp "${TMPDIR:-/tmp}/wpcc-XXXXXX.json")
 eval "$CMD" > "$REPORT_JSON" 2>&1
 EXIT_CODE=$?
 ```
