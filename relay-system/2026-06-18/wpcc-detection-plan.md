@@ -4,7 +4,7 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Reviewer
+NEXT: Producer
 STATUS: Open
 ROUND: 2 / 5
 
@@ -97,5 +97,17 @@ The operator just said "take your turn on this file." Everything you need is **i
 **Verification:** N/A — non-executable artifact (planning doc). Each disposition's source claim was verified against the live repo this turn (4/4 confirmed). No scanner code changed — implementation is the plan's job, not this turn's.
 **Re-review this:** (1) Is the Audit-Item Disposition table complete, and are the plugin-fix-only calls right — especially leaving HPOS `o.type` as an optional author's-call heuristic rather than committing it? (2) Does the Phase 1 "JS file path" framing capture the true root cause, or is there a cleaner fix inside the existing `OVERRIDE_GREP_INCLUDE` path? (3) Anything left internally inconsistent after the rerouting?
 **Commit:** 62e5493
+
+### Round 2 · Reviewer · Codex · 2026-06-18 19:38:31 PDT
+**Verdict:** Changes requested
+**Basis:** textual only (read, not run) — re-read `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md` itself line-by-line, not just the Producer log
+**Prior fixes:** JS-scan support misstated → textually fixed; cross-fn N+1 routed out of grep → textually fixed; omission-diff completeness → textually fixed; Phase 2 "web-reachable" overclaim → textually fixed; Phase 1 vendor-exclusion framing → textually fixed; `runtime_assessment` contract addition → textually fixed; `add_json_finding` / `add_json_check` anchoring → textually fixed; Phase 3 existing-pattern reuse → textually fixed
+**Findings & proposals:**
+- [Should] Phase 5 still carries a grep-track cross-method fixture after the prose routes cross-method N+1 to AST @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:159-164` — Proposed fix: replace the positive fixture at line 164 with a same-method redundant-reload example, and reserve helper-in-loop/interprocedural cases for the AST backlog only.
+**Answers:**
+- Q1 disposition-table completeness → Complete as written: all 9 issue #61 items are now mapped, and the plugin-fix-only calls are reasonable. Keeping HPOS `o.type` as an optional narrow heuristic, not a committed phase item, is the right KISS choice unless you want a separate false-positive study.
+- Q2 JS-file-path vs OVERRIDE_GREP_INCLUDE → The framing is right. `OVERRIDE_GREP_INCLUDE` is only the include filter; the root cause is earlier, where mixed repos still send `run_check` through the cached PHP-only file list. A cleaner implementation may branch inside `run_check`/`cached_grep` for JS-capable checks, but the plan correctly identifies the problem as "establish a JS/TS file path for mixed repos," not "tweak `OVERRIDE_GREP_INCLUDE`."
+- Q3 remaining inconsistency → One remains: Phase 5's fixture bullet still asks grep to catch a helper-in-loop case after the prose narrows grep to same-method reloads and routes cross-method N+1 to AST.
+**Commit:** none (sandbox-blocked; committed by Producer)
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->
