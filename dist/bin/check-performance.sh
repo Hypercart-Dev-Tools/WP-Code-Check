@@ -1029,7 +1029,13 @@ json_escape() {
 # Count PHP files in scan path
 count_analyzed_files() {
   local scan_path="$1"
-  find "$scan_path" -name "*.php" -type f 2>/dev/null | wc -l | tr -d '[:space:]'
+  # Honor EXCLUDE_DIRS (vendor/node_modules/etc.) so the reported count matches
+  # what is actually scanned — otherwise vendor inflates files_analyzed.
+  if [ -n "$GREP_EXCLUSIONS" ]; then
+    sh -c "find '$scan_path' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" | wc -l | tr -d '[:space:]'
+  else
+    find "$scan_path" -name "*.php" -type f 2>/dev/null | wc -l | tr -d '[:space:]'
+  fi
 }
 
 # Count total lines of code in PHP files
@@ -1039,8 +1045,13 @@ count_lines_of_code() {
   
   # Use find + wc for efficient line counting
   if command -v find &> /dev/null && command -v wc &> /dev/null; then
-    # Count lines in all PHP files, sum the results
-    total_lines=$(find "$scan_path" -name "*.php" -type f -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' 2>/dev/null || echo "0")
+    if [ -n "$GREP_EXCLUSIONS" ]; then
+      # Honor EXCLUDE_DIRS; sum per-file to stay robust on empty lists and spaced paths
+      total_lines=$(sh -c "find '$scan_path' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" | while IFS= read -r f; do wc -l < "$f" 2>/dev/null; done | awk '{s+=$1} END{print s+0}')
+    else
+      # Count lines in all PHP files, sum the results
+      total_lines=$(find "$scan_path" -name "*.php" -type f -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' 2>/dev/null || echo "0")
+    fi
   fi
   
   # Ensure we return a number
@@ -1457,7 +1468,10 @@ fi
 # ============================================================================
 
 # Add a finding to the JSON findings array
-# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"] ["guarded_bool"] ["sanitized_bool"]
+# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"] ["guarded_bool"] ["sanitized_bool"] ["runtime_assessment"]
+# runtime_assessment (optional, 12th arg): one-line exploitability note for severity
+#   calibration, e.g. "inert-on-standard-host" / "live-entrypoint". JSON string when
+#   set, else null. Report renderers/triage display is wired in Phase 6.
 # Phase 2 Enhancement: Optional guards/sanitizers context arrays; Phase 2.2: optional guarded/sanitized booleans for downstream consumers
 add_json_finding() {
   local rule_id="$1"
@@ -1471,6 +1485,7 @@ add_json_finding() {
   local sanitizers="${9:-}"  # Optional: space-separated list of detected sanitizers
   local guarded_flag="${10:-}"     # Optional: "true"/"false" when guarded status is known
   local sanitized_flag="${11:-}"   # Optional: "true"/"false" when sanitized status is known
+  local runtime_assessment="${12:-}"  # Optional: one-line exploitability note (e.g. "inert-on-standard-host", "live-entrypoint")
 
   # Truncate code snippet to 200 characters for display
   local truncated_code="$code"
@@ -1585,8 +1600,16 @@ add_json_finding() {
     fi
   fi
 
+  # Optional one-line runtime exploitability assessment (severity calibration).
+  # Emitted as a JSON string when provided, else null — so existing rules stay
+  # schema-compatible and consumers (report renderers, AI triage) feature-detect it.
+  local runtime_json="null"
+  if [ -n "$runtime_assessment" ]; then
+    runtime_json="\"$(json_escape "$runtime_assessment")\""
+  fi
+
   local finding=$(cat <<EOF
-{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json,"guarded":$guarded_json,"sanitized":$sanitized_json}
+{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json,"guarded":$guarded_json,"sanitized":$sanitized_json,"runtime_assessment":$runtime_json}
 EOF
 )
   JSON_FINDINGS+=("$finding")
@@ -2818,7 +2841,7 @@ process_aggregated_pattern() {
   local matches
   local grep_exit_code=0
 
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+  if [ "${PHP_FILE_COUNT:-0}" -eq 1 ]; then
     # Single file - use direct grep
     matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -Hn $include_args -E "$pattern_search" "$PHP_FILE_LIST" 2>/dev/null) || grep_exit_code=$?
   else
@@ -3455,8 +3478,8 @@ run_check() {
   # When there are no PHP files (e.g., JS/Node-only projects), fall back
   # to recursive grep over the original paths so JS/headless patterns
   # still run.
-  if [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
-    if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+  if [ "${PHP_FILE_COUNT:-0}" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+    if [ "${PHP_FILE_COUNT:-0}" -eq 1 ]; then
       result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
     else
       result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
@@ -3593,7 +3616,7 @@ else
 
   PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
 
-  if [ "$PHP_FILE_COUNT" -eq 0 ]; then
+  if [ "${PHP_FILE_COUNT:-0}" -eq 0 ]; then
     # Relaxed PHP gate: it's valid to have JS/Node-only projects.
     # We log for debugging but do not exit, so JS/Node/Headless checks can still run.
     debug_echo "No PHP files found in: $PATHS"
@@ -3607,11 +3630,43 @@ else
   fi
 fi
 
+# ============================================================================
+# JS/TS FILE LIST CACHE (mixed-repo support)
+# ============================================================================
+# PHP_FILE_LIST above is PHP-only. JS-capable checks (secret scan, DOM-XSS) must
+# scan JS/TS files, which in a mixed PHP+JS repo are otherwise never reached
+# (cached_grep over the PHP-only list silently matches nothing). Build a parallel
+# JS file list honoring EXCLUDE_DIRS and skipping minified/bundled files. Consumed
+# by js_cached_grep(); single-file paths are handled directly in that function.
+JS_FILE_LIST=""
+JS_FILE_COUNT=0
+JS_FILE_LIST_CACHE=""
+if [ ! -f "$PATHS" ]; then
+  JS_FILE_LIST_CACHE=$(mktemp)
+  if [ -n "$GREP_EXCLUSIONS" ]; then
+    sh -c "find '$PATHS' \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \) -type f 2>/dev/null | $GREP_EXCLUSIONS" | grep -vE '(\.min\.js|bundle[^/]*\.js)$' > "$JS_FILE_LIST_CACHE"
+  else
+    find "$PATHS" \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \) -type f 2>/dev/null | grep -vE '(\.min\.js|bundle[^/]*\.js)$' > "$JS_FILE_LIST_CACHE"
+  fi
+  JS_FILE_COUNT=$(wc -l < "$JS_FILE_LIST_CACHE" | tr -d ' ')
+  if [ "${JS_FILE_COUNT:-0}" -eq 0 ]; then
+    rm -f "$JS_FILE_LIST_CACHE"
+    JS_FILE_LIST=""
+  else
+    debug_echo "Cached $JS_FILE_COUNT JS/TS files"
+    JS_FILE_LIST="$JS_FILE_LIST_CACHE"
+  fi
+fi
+
 # Cleanup function to remove cache on exit
 cleanup_php_cache() {
   if [ -n "$PHP_FILE_LIST_CACHE" ] && [ -f "$PHP_FILE_LIST_CACHE" ]; then
     rm -f "$PHP_FILE_LIST_CACHE"
     debug_echo "Cleaned up PHP file cache"
+  fi
+  if [ -n "$JS_FILE_LIST_CACHE" ] && [ -f "$JS_FILE_LIST_CACHE" ]; then
+    rm -f "$JS_FILE_LIST_CACHE"
+    debug_echo "Cleaned up JS file cache"
   fi
 }
 trap cleanup_php_cache EXIT
@@ -3660,7 +3715,7 @@ fast_grep() {
       cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
     else
       # Fallback to recursive grep if cache not available
-      grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+      grep -rHn $EXCLUDE_ARGS "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
     fi
   fi
 }
@@ -3706,7 +3761,7 @@ cached_grep() {
   # recursive grep on the original paths. This lets JS/Node-only repos
   # (no PHP files) still be scanned safely without depending on the
   # PHP_FILE_LIST cache.
-  elif [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+  elif [ "${PHP_FILE_COUNT:-0}" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
     # FIX v2.2.3: Use null-delimited input (tr '\n' '\0') with xargs -0
@@ -3715,7 +3770,39 @@ cached_grep() {
     tr '\n' '\0' < "$PHP_FILE_LIST" | xargs -0 grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
   else
     # No PHP cache (e.g., JS-only project). Fall back to recursive grep.
-    grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+    grep -rHn $EXCLUDE_ARGS "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+  fi
+}
+
+# ============================================================================
+# JS/TS GREP HELPER (mixed-repo aware)
+# ============================================================================
+# Like cached_grep(), but scans the JS/TS file list (JS_FILE_LIST) instead of the
+# PHP one — so JS-targeted checks (secret scan, DOM-XSS) actually run in mixed
+# PHP+JS repos. Same calling convention: js_cached_grep [grep_options] pattern
+js_cached_grep() {
+  local grep_args=()
+  local pattern=""
+
+  while [ $# -gt 0 ]; do
+    if [ $# -eq 1 ]; then
+      pattern="$1"
+      shift
+    else
+      grep_args+=("$1")
+      shift
+    fi
+  done
+
+  if [ -f "$PATHS" ]; then
+    # Single file mode: scan it directly (caller owns the extension choice).
+    grep -Hn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+  elif [ "${JS_FILE_COUNT:-0}" -gt 0 ] && [ -n "$JS_FILE_LIST" ] && [ -f "$JS_FILE_LIST" ]; then
+    # Null-delimited to survive paths with spaces (e.g. "/Users/name/Local Sites/...").
+    tr '\n' '\0' < "$JS_FILE_LIST" | xargs -0 grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+  else
+    # No JS cache (e.g. PHP-only repo). Fall back to recursive grep with exclusions.
+    grep -rHn $EXCLUDE_ARGS "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
   fi
 }
 
