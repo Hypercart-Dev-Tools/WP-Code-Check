@@ -4,7 +4,7 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Reviewer
+NEXT: Producer
 STATUS: Open
 ROUND: 1 / 5
 
@@ -62,5 +62,22 @@ The operator just said "take your turn on this file." Everything you need is **i
 - Should cross-method N+1 (Phase 5) ship as a bounded "redundant reload" heuristic, or defer entirely to BACKLOG as too FP-prone for bash?
 - Is a 4-tier severity matrix (Phase 6) the right scope, or over-engineered for a grep-based scanner?
 **Commit:** f8dca89
+
+### Round 1 · Reviewer · Codex · 2026-06-18 19:24:29 PDT
+**Verdict:** Changes requested
+**Basis:** textual only (read, not run)
+**Findings & proposals:**
+- [Blocker] JS-scan support is misstated @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:64,114-125,133-145` — `OVERRIDE_GREP_INCLUDE` is not enough in mixed repos because `run_check` consumes the cached PHP-only file list when PHP exists (`dist/bin/check-performance.sh:3454-3465`, `3587-3606`), so Phases 3-4 assume infrastructure that is not there. Proposed fix: require a separate JS/TS file cache or a forced recursive path for non-PHP overrides, and revise the Architecture Notes accordingly.
+- [Blocker] `wc-n-plus-one-crossfn` is not buildable as written in this bash architecture @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:155-164` — the current WC N+1 rule only inspects same-file loop windows and loop-body calls (`dist/bin/check-performance.sh:5678-5726`), while the repo's AST/PHPStan track already places nullability/list-vs-single/interprocedural cases outside grep's comfort zone (`PROJECT/3-COMPLETED/P1-PHP-PARSER.md:78-85`, `575-590`). Proposed fix: move cross-method N+1 to BACKLOG/AST track; keep Phase 5 to privilege simulation plus, at most, same-method redundant reloads.
+- [Blocker] The omission-diff is incomplete @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:43-54,190-196` — the relay explicitly calls out the HPOS `o.type` bug, the `$parts[0]` guard, and the toolbar null-guard, but the plan gives those audit items no home or explicit defer/disposition. Proposed fix: add an appendix or Out-of-Scope bullets that maps each omitted audit item either to this plan, to the PHPStan/AST track, or to plugin-fix-only; author's call on whether HPOS alias misuse merits a narrow SQL heuristic.
+- [Should] Phase 2 should claim "likely direct-access PHP candidate" rather than literal "web-reachable" @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:92-105` — bash/grep can detect missing guards and top-level side effects, not actual route/webserver reachability. Proposed fix: tighten the rule text and QA around heuristic recall/precision.
+- [Should] Phase 1 describes vendor exclusion as missing @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:74-85`, but default exclusions already exist in `EXCLUDE_DIRS` and `GREP_EXCLUSIONS` (`dist/bin/check-performance.sh:146-147`, `986-1008`, `3587-3589`). Proposed fix: rewrite this phase around closing exclusion leaks across all scan paths and optionally adding `--include-vendor`, not "adding" vendor exclusion from scratch.
+- [Should] `runtime_assessment` needs a JSON/output contract @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:173-176` — `add_json_finding` currently emits `message`, `context`, `guards`, `sanitizers`, `guarded`, and `sanitized`, but no `runtime_assessment` field (`dist/bin/check-performance.sh:1460-1592`). Proposed fix: state whether the assessment lives in `message`, reuses an existing array, or adds a new JSON key plus downstream report/triage updates.
+- [Pass] The plan correctly anchors new inline/scripted checks on `add_json_finding` and `add_json_check`; those are the real emission points today (`dist/bin/check-performance.sh:1462-1605`).
+- [Pass] Phase 3 is buildable once the JS path bug is addressed: WPCC already has reusable secret detectors for PHP and client-side JS in `dist/patterns/php-hardcoded-credentials.json:2-18` and `dist/patterns/headless/api-key-exposure.json:2-18`.
+**Answers:**
+- "Should cross-method N+1 ship or defer to BACKLOG?" → Defer to BACKLOG — the current scanner only correlates loop-body calls within a same-file window, not helper call chains.
+- "Is a 4-tier severity matrix right scope or over-engineered?" → Right scope — the scanner already speaks `CRITICAL/HIGH/MEDIUM/LOW`; the missing work is per-finding runtime downgrades.
+**Commit:** none (git metadata write blocked by sandbox; `git commit` failed creating `.git/index.lock`)
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->
