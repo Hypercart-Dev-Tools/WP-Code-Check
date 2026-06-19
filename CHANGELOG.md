@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
   - `priority_conflict`: flags multiple different callbacks registered on the same hook at the same priority within the scanned codebase
   - `fire_arg_count`: detects `do_action`/`apply_filters` fire points that pass fewer arguments than registered callbacks expect
 - New AST rule `hook-inventory`: outputs all hook registrations and fire points found in scanned files, sorted by hook name and priority — no findings, just structured data for audit and exploration
+- `wpcc` Claude Code personal skill (`skills/wpcc/SKILL.md`) — invoke WPCC from any Claude Code session on this device with `/wpcc [path] [strict|baseline|triage|verbose]`; includes 4-step ordered path resolver (`$WPCC_HOME` → canonical → PATH executable → fail-loud), plain-language flag mapping, JSON summarization with severity breakdown, and correct exit-code disambiguation (`--strict` warnings vs errors vs timeout vs crash). Install: `ln -sfn "$(pwd)/skills/wpcc" ~/.claude/skills/wpcc`
 - Test fixture `dist/tests/fixtures/ast-hook-mismatch.php` covering all three hook-arg-mismatch checks including class-based `[$this, 'method']` callbacks
 - Example config `dist/bin/ast/config/hook-arg-mismatch.example.json` with `target_hooks` and `checks` options
 

@@ -1,7 +1,7 @@
 ---
 Author: Noel (with Claude Code, Opus 4.8)
 Date: 2026-06-18
-Status: IN PROGRESS
+Status: COMPLETE
 Priority: P2
 Goal: Author a device-global Claude skill (`~/.claude/skills/wpcc/SKILL.md`) so that any Claude Code session on this machine — regardless of working directory or repo — can invoke WP Code Check (WPCC) against a target path, summarize the findings, and hand back the report, without the user remembering the scanner's flags or absolute path.
 Source: User request — "make a Claude skill file to invoke WPCC in any claude session on this device."
@@ -12,7 +12,7 @@ Scope: Skill authoring + invocation/summarization logic only. No changes to the 
 
 | Most Recently Completed Phase | What's Next |
 |---|---|
-| **Phase 3 — Output Parsing & Findings Summarization** (2026-06-18) | Phase 4 — Robustness, Docs & Cross-Session Verification |
+| **Phase 4 — Robustness, Docs & Cross-Session Verification** (2026-06-18) | — complete — |
 
 ---
 
