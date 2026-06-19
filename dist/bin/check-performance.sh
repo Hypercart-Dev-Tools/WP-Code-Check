@@ -145,7 +145,7 @@ HTTP_TIMEOUT_BACKWARD_LINES=20
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=24  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
 SKIP_MAGIC_STRINGS=false    # Magic String Detector runs by default (use --skip-magic-strings to disable)
 
@@ -2257,6 +2257,16 @@ run_fixture_validation() {
     "wp-user-query-meta-bloat.php:new WP_User_Query:1"
     "limit-multiplier-from-count.php:count( \$user_ids ):1"
     "array-merge-in-loop.php:array_merge:1"
+
+    # php-direct-access-entrypoint fixtures
+    # (+) unguarded $wpdb work at top level — must be flagged; confirm escalator pattern present
+    "php-direct-access-entrypoint-wpdb.php:wpdb->get_results:1"
+    # (+) portable wp-load.php bootstrap with no guard — must be flagged (escalated); confirm bootstrap pattern present
+    "php-direct-access-entrypoint-wpload.php:wp-load.php:1"
+    # (−) class-only include — confirm the class definition is present (file integrity check)
+    "php-direct-access-entrypoint-class-only.php:class My_Class_Only:1"
+    # (−) guarded file — confirm the ABSPATH guard is present (file integrity check)
+    "php-direct-access-entrypoint-guarded.php:defined( 'ABSPATH' ) || exit:1"
   )
 
   local fixture_count="$default_fixture_count"
@@ -4635,6 +4645,200 @@ if [ "$AJAX_NONCE_FAIL" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "wp_ajax handlers without nonce validation" "$AJAX_NONCE_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Direct-Access / Unauthenticated Entrypoint Detection
+# Rule: php-direct-access-entrypoint
+# Flags .php files that lack an ABSPATH/WPINC guard while performing real work
+# (DB access, output, WP bootstrap, file I/O) at the top level.
+#
+# Suppression: pure class/function-definition files are skipped (no top-level
+# executable statements).
+#
+# Escalators (raise impact + record in message):
+#   wp-load    — file bootstraps WP via require/include of wp-load.php
+#   db         — top-level $wpdb usage
+#   output     — top-level echo / print_r
+#   file-io    — top-level fopen / fputcsv
+#   privilege  — top-level wp_set_current_user
+#
+# Severity calibration (runtime_assessment):
+#   live-entrypoint          — portable wp-load.php bootstrap found → HIGH
+#   inert-on-standard-host   — non-portable hardcoded path OR no WP bootstrap → MEDIUM
+#   direct-access-candidate  — escalators present but no bootstrap detected → HIGH
+# ============================================================================
+
+DIRECT_ACCESS_SEVERITY=$(get_severity "php-direct-access-entrypoint" "HIGH")
+DIRECT_ACCESS_COLOR="${YELLOW}"
+if [ "$DIRECT_ACCESS_SEVERITY" = "CRITICAL" ] || [ "$DIRECT_ACCESS_SEVERITY" = "HIGH" ]; then DIRECT_ACCESS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ PHP direct-access entrypoint candidates (no ABSPATH guard) ${DIRECT_ACCESS_COLOR}[$DIRECT_ACCESS_SEVERITY]${NC}"
+DIRECT_ACCESS_FAIL=false
+DIRECT_ACCESS_FINDING_COUNT=0
+
+# Collect all PHP files that do NOT contain an ABSPATH/WPINC guard.
+# We search for files that DO have the guard, then invert — this is cheaper
+# than per-file negative grep in a large tree.
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
+# Anchored to the start of a code line (optionally after `<?php`, `if (`, `!`) so a
+# guard mention inside a docblock/comment (e.g. "// no defined('ABSPATH') guard")
+# does NOT count as a real guard — that would falsely suppress the finding.
+GUARDED_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rlnE $EXCLUDE_ARGS --include="*.php" \
+  -e "^[[:space:]]*(<\?php[[:space:]]+)?(if[[:space:]]*\([[:space:]]*)?!?[[:space:]]*defined[[:space:]]*\([[:space:]]*['\"]ABSPATH['\"]" \
+  -e "^[[:space:]]*(<\?php[[:space:]]+)?(if[[:space:]]*\([[:space:]]*)?!?[[:space:]]*defined[[:space:]]*\([[:space:]]*['\"]WPINC['\"]" \
+  "$PATHS" 2>/dev/null || true)
+
+# Build the full PHP file list for this check (respects PHP_FILE_LIST cache)
+DA_ALL_FILES=""
+if [ -f "$PATHS" ]; then
+  DA_ALL_FILES="$PATHS"
+elif [ "${PHP_FILE_COUNT:-0}" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+  DA_ALL_FILES=$(cat "$PHP_FILE_LIST" 2>/dev/null || true)
+elif [ -n "$GREP_EXCLUSIONS" ]; then
+  # Fallback when the PHP cache is not visible in this context — still honor
+  # EXCLUDE_DIRS so vendor/node_modules/etc. never leak into entrypoint findings.
+  DA_ALL_FILES=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "find '$PATHS' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" || true)
+else
+  DA_ALL_FILES=$(run_with_timeout "$MAX_SCAN_TIME" find "$PATHS" -name "*.php" -type f 2>/dev/null || true)
+fi
+
+if [ -n "$DA_ALL_FILES" ]; then
+  # SAFEGUARD: Use safe_file_iterator() for file paths that may contain spaces
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    # Skip if this file has a guard
+    if echo "$GUARDED_FILES" | grep -qxF "$file"; then
+      continue
+    fi
+
+    if should_suppress_finding "php-direct-access-entrypoint" "$file"; then
+      continue
+    fi
+
+    # Read file content once for all pattern checks below
+    file_content=$(cat "$file" 2>/dev/null || true)
+    [ -z "$file_content" ] && continue
+
+    # ------------------------------------------------------------------
+    # Escalator detection — check which risk signals are present at the
+    # file level. These serve dual purpose: (a) measure real-world impact
+    # and (b) suppress pure class/function-definition files that have no
+    # top-level executable statements (an autoloaded include with only a
+    # class body will fire no escalator and is silently skipped below).
+    # ------------------------------------------------------------------
+    escalators=""
+    escalator_notes=""
+
+    # Escalator: WP bootstrap via wp-load.php
+    bootstrap_portable=false
+    bootstrap_nonportable=false
+    if echo "$file_content" | grep -qE "(require|include)(_once)?[^;]*wp-load\.php"; then
+      # Portable path (relative / dirname / ABSPATH-derived) vs hardcoded local path.
+      # Non-portable = the wp-load require also names a developer-local absolute path.
+      if echo "$file_content" | grep -qE "(require|include)(_once)?[^;]*(/Users/|/home/[^/]+/|Local Sites/)[^;]*wp-load\.php"; then
+        bootstrap_nonportable=true
+        escalators="${escalators} wp-load-nonportable"
+        escalator_notes="${escalator_notes} bootstraps-WP(non-portable-path)"
+      else
+        bootstrap_portable=true
+        escalators="${escalators} wp-load"
+        escalator_notes="${escalator_notes} bootstraps-WP(portable)"
+      fi
+    fi
+
+    # Escalator: $wpdb usage anywhere in file (class methods included —
+    # a class that directly calls $wpdb without being loaded through WP is
+    # an entrypoint concern if the file itself lacks a guard)
+    if echo "$file_content" | grep -qE '\$wpdb->'; then
+      escalators="${escalators} db"
+      escalator_notes="${escalator_notes} wpdb-access"
+    fi
+
+    # Escalator: output statements (echo / print_r)
+    if echo "$file_content" | grep -qE '(^|;)[[:space:]]*(echo|print_r)[[:space:](]'; then
+      escalators="${escalators} output"
+      escalator_notes="${escalator_notes} outputs-data"
+    fi
+
+    # Escalator: file I/O
+    if echo "$file_content" | grep -qE '(fopen|fputcsv|file_put_contents)[[:space:](]'; then
+      escalators="${escalators} file-io"
+      escalator_notes="${escalator_notes} file-io"
+    fi
+
+    # Escalator: privilege simulation
+    if echo "$file_content" | grep -qE 'wp_set_current_user[[:space:](]'; then
+      escalators="${escalators} privilege"
+      escalator_notes="${escalator_notes} sets-current-user"
+    fi
+
+    # Trim leading space from notes
+    escalator_notes="${escalator_notes# }"
+    escalators="${escalators# }"
+
+    # ------------------------------------------------------------------
+    # Suppression: if NO escalator fired, this file has none of the
+    # interesting side-effect patterns — skip it (pure definitions,
+    # config arrays, etc. are not entrypoint candidates).
+    # ------------------------------------------------------------------
+    if [ -z "$escalators" ]; then
+      continue
+    fi
+
+    # ------------------------------------------------------------------
+    # Severity calibration + runtime_assessment
+    # ------------------------------------------------------------------
+    finding_severity="$DIRECT_ACCESS_SEVERITY"
+    runtime_assessment="direct-access-candidate"
+
+    if [ "$bootstrap_portable" = true ]; then
+      finding_severity="HIGH"
+      runtime_assessment="live-entrypoint"
+    elif [ "$bootstrap_nonportable" = true ]; then
+      finding_severity="MEDIUM"
+      runtime_assessment="inert-on-standard-host"
+    else
+      finding_severity="$DIRECT_ACCESS_SEVERITY"
+      runtime_assessment="direct-access-candidate"
+    fi
+
+    # ------------------------------------------------------------------
+    # Build message
+    # ------------------------------------------------------------------
+    if [ -n "$escalator_notes" ]; then
+      da_message="Direct-access entrypoint candidate: no ABSPATH/WPINC guard found. Escalators: ${escalator_notes}. An unauthenticated HTTP request can reach this file and trigger the flagged operations. Add defined(ABSPATH)||exit at the top, or move the file outside the webroot."
+    else
+      da_message="Direct-access entrypoint candidate: no ABSPATH/WPINC guard found. File contains top-level executable statements reachable via direct HTTP request. Add defined(ABSPATH)||exit at the top, or move the file outside the webroot."
+    fi
+
+    # Use line 1 as the finding location (the missing guard belongs at the top)
+    da_line=1
+    da_code=$(echo "$file_content" | head -5 | tr '\n' ' ')
+
+    text_echo "  $file:$da_line [escalators: ${escalators:-none}] $runtime_assessment"
+    add_json_finding "php-direct-access-entrypoint" "error" "$finding_severity" \
+      "$file" "$da_line" "$da_message" "$da_code" \
+      "" "" "" "" "$runtime_assessment"
+
+    DIRECT_ACCESS_FAIL=true
+    ((DIRECT_ACCESS_FINDING_COUNT++))
+  done < <(safe_file_iterator "$DA_ALL_FILES")
+fi
+
+if [ "$DIRECT_ACCESS_FAIL" = true ]; then
+  if [ "$DIRECT_ACCESS_SEVERITY" = "CRITICAL" ] || [ "$DIRECT_ACCESS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "PHP direct-access entrypoint candidates" "$DIRECT_ACCESS_SEVERITY" "failed" "$DIRECT_ACCESS_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "PHP direct-access entrypoint candidates" "$DIRECT_ACCESS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
