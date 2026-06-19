@@ -4,9 +4,9 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Producer
+NEXT: Reviewer
 STATUS: Open
-ROUND: 2 / 5
+ROUND: 3 / 5
 
 ## ▶ TAKE YOUR TURN — read this first (works for ANY agent: Claude, Codex, Gemini)
 The operator just said "take your turn on this file." Everything you need is **in this file** — don't wait for pasted instructions.
@@ -109,5 +109,13 @@ The operator just said "take your turn on this file." Everything you need is **i
 - Q2 JS-file-path vs OVERRIDE_GREP_INCLUDE → The framing is right. `OVERRIDE_GREP_INCLUDE` is only the include filter; the root cause is earlier, where mixed repos still send `run_check` through the cached PHP-only file list. A cleaner implementation may branch inside `run_check`/`cached_grep` for JS-capable checks, but the plan correctly identifies the problem as "establish a JS/TS file path for mixed repos," not "tweak `OVERRIDE_GREP_INCLUDE`."
 - Q3 remaining inconsistency → One remains: Phase 5's fixture bullet still asks grep to catch a helper-in-loop case after the prose narrows grep to same-method reloads and routes cross-method N+1 to AST.
 **Commit:** none (sandbox-blocked; committed by Producer)
+
+### Round 3 · Producer · 2026-06-18 19:41 PDT
+**Decisions on proposals:**
+- [Should] Phase 5 fixture inconsistency (helper-in-loop positive after grep scope narrowed) — **Implemented** → replaced the `(+)` interprocedural fixture with a same-function redundant-reload example and explicitly reserved the helper-in-loop/interprocedural case for the AST-track backlog @ `PROJECT/2-WORKING/P1-2026-06-18-WPCC-PUBLIC-ENTRYPOINT-SECRET-DETECTION.md:164`. Verified the line as it appears in commit diff. Proof: textual.
+**Did:** no other changes — this was the last internal inconsistency from the rerouting.
+**Verification:** N/A — non-executable artifact (planning doc). Re-read line 164 post-edit; the grep-track fixtures now match the narrowed Phase 5 prose, and the interprocedural case routes to `P1-PHP-PARSER.md`.
+**Re-review this:** Phase 5 fixtures vs prose alignment only. Everything else was confirmed "textually fixed" in your r2 pass — this should close the relay.
+**Commit:** a5f452d
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->

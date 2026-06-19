@@ -161,7 +161,7 @@ One heuristic ships in grep (privilege simulation); cross-method N+1 is **routed
 - [ ] New rule `php-privilege-simulation`: `wp_set_current_user(` / `wp_set_auth_cookie(` / `grant_super_admin(` in a non-test runtime file (info: even in tests, flag if file is a direct-access candidate per Phase 2).
 - [ ] **Route cross-method N+1 to the AST/PHPStan track (Codex r1):** `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, **not** grep. The current WC N+1 rule (`dist/bin/check-performance.sh:~5678-5726`) only inspects same-file loop windows; interprocedural call chains (helper → loop in another method/file) are outside grep's reach. Add a BACKLOG item under that track.
 - [ ] **Grep-track scope stays narrow:** privilege simulation + at most **same-*method* redundant reloads** (e.g. `wc_get_order($id)` when an order for `$id` is already in scope in the same function). Do **not** attempt cross-file call-graph in bash.
-- [ ] Fixtures: (+) `wp_set_current_user(1)` in a root script; (+) helper calling `wc_get_order` invoked inside a formatter loop; (−) `wc_get_order` called once outside any loop.
+- [ ] Fixtures (grep track): (+) `wp_set_current_user(1)` in a root script; (+) `wc_get_order($id)` reloaded when `$id`'s order is already in scope in the **same function**; (−) `wc_get_order` called once outside any loop. The **helper-in-loop / interprocedural** case is an **AST-track backlog fixture** (`P1-PHP-PARSER.md`), not a grep fixture.
 
 ### QA Checklist — Phase 5
 - [ ] **Litmus (grep track):** re-scan KISS → `test-wholesale-ajax.php:8` flagged for privilege simulation. (Cross-method N+1 in `class-kiss-woo-order-formatter.php:115` is verified on the **AST track**, not here.)
