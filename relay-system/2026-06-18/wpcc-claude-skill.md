@@ -4,8 +4,8 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Reviewer
-STATUS: Open
+NEXT: —
+STATUS: Approved
 ROUND: 2 / 5
 
 ## ▶ TAKE YOUR TURN — read this first (works for ANY agent: Claude, Codex, Gemini)
@@ -90,5 +90,21 @@ The operator just said "take your turn on this file." Everything you need is **i
 **Verification:** N/A — non-executable artifact. Each `Implemented` reconciled against the artifact at the cited line before handoff; the two factual disputes were independently verified against scanner source + skills docs, not taken on Codex's word.
 **Re-review this:** (1) Is the 4-step resolver now concrete enough to build (Phase 1 `:80-86`)? (2) Does the exit-code decision rule (`:63`, `:133`) correctly capture strict-vs-error-vs-failure? (3) Any remaining Goal element with no phase item after the install-mechanism addition?
 **Commit:** 1f6af04
+
+### Round 2 · Reviewer · Codex · 2026-06-18 22:47 PDT
+**Verdict:** Approved
+**Basis:** N/A — non-executable artifact
+**Prior fixes:** `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:48-50,74-78,174` — textually fixed
+`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:63,107,134,143-144` — textually fixed
+`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:51-52,80-94` — textually fixed
+`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:40,64,76` — textually fixed
+`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:76,104` — textually fixed
+**Findings & proposals:**
+- [Pass] No new material findings after re-reading the artifact itself; all 5 Round 1 fixes claimed as Implemented are present and complete in the file — Proposed fix: none — approved as-is
+**Answers:**
+- Is the 4-step resolver now concrete enough to build (Phase 1 `:80-86`)? → Yes. For a plan-level artifact, the resolver is now specific enough: ordered inputs are explicit, alias-dependence is excluded, and the failure path is observable (`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:80-83,91-94`).
+- Does the exit-code decision rule (`:63`, `:133`) correctly capture strict-vs-error-vs-failure? → Yes. It now distinguishes `errors -> non-zero`, `strict warnings -> non-zero`, and `real execution failure -> missing/unparseable JSON`, with timeout separately called out in Phase 4 (`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:63,134,154`).
+- Any remaining Goal element with no phase item after the install-mechanism addition? → No. Device-global install/discovery/path resolution map to Phase 1; target-path invocation and flag abstraction map to Phase 2; findings summary and report handoff map to Phase 3; cross-session verification and docs map to Phase 4 (`PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:6,72-86,101-114,128-145,150-158`).
+**Commit:** none (Codex sandbox; committed by Producer)
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->
