@@ -11,9 +11,10 @@ All notable changes to this project will be documented in this file.
   - `js-secret-literal` (HIGH) — committed credential literals in JS/TS source, with env-read and placeholder filtering; message flags git-history rotation
   - `dev-local-path-leak` (LOW) — hardcoded developer paths (`/Users//home//Local Sites/`) in PHP and JS (portability + info leak)
   - `js-dom-xss` (HIGH) — unescaped HTML sinks (`.html`/`.append`/`.prepend`/`.before`/`.after`/`innerHTML`/`insertAdjacentHTML`) built by concatenation, with escaper filtering (`escapeHtml`/`esc_html`/`DOMPurify`/`textContent`/`.text()`)
+  - `php-privilege-simulation` (HIGH/MEDIUM) — runtime privilege simulation (`wp_set_current_user`/`wp_set_auth_cookie`/`grant_super_admin`), calibrated by reachability: unguarded (web-reachable) → HIGH `unauthenticated-privilege-escalation`, guarded → MEDIUM `runtime-privilege-simulation`
 - JS/TS file-list cache and `js_cached_grep()` so JS-targeted checks run in mixed PHP+JS repos (PHP-only `cached_grep` previously matched no JS)
 - Optional `runtime_assessment` field on `add_json_finding` for severity-calibration annotations
-- 8 detection test fixtures (4 entrypoint, 4 secret/path/XSS); `DEFAULT_FIXTURE_VALIDATION_COUNT` 20 → 28
+- 10 detection test fixtures (4 entrypoint, 4 secret/path/XSS, 2 privilege-simulation); `DEFAULT_FIXTURE_VALIDATION_COUNT` 20 → 30
 - AST hook analysis: new `HookRegistrationVisitor` (`dist/bin/ast/HookRegistrationVisitor.php`) extracts `add_action`, `add_filter`, `do_action`, `apply_filters`, `remove_action`, and `remove_filter` calls from the AST, along with function/method parameter counts for cross-referencing
 - New AST rule `hook-arg-mismatch` with three checks:
   - `arg_count`: detects callbacks that require more parameters than `accepted_args` will provide, or define extra parameters that will never receive values

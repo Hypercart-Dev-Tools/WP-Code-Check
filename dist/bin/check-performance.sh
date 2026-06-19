@@ -145,7 +145,7 @@ HTTP_TIMEOUT_BACKWARD_LINES=20
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=28  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=30  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
 SKIP_MAGIC_STRINGS=false    # Magic String Detector runs by default (use --skip-magic-strings to disable)
 
@@ -2278,6 +2278,12 @@ run_fixture_validation() {
     "dev-local-path-leak.js:/home/deploy:1"
     # (+) DOM-XSS sink data present in js-dom-xss fixture
     "js-dom-xss.js:order.total:1"
+
+    # P5 (issue #61) privilege-simulation fixtures — integrity checks
+    # (+) unguarded privilege escalation present (per-fixture scan proves HIGH/unauthenticated)
+    "php-privilege-simulation-unguarded.php:wp_set_current_user:1"
+    # (+) guarded privilege simulation present (per-fixture scan proves MEDIUM/runtime)
+    "php-privilege-simulation-guarded.php:wp_set_current_user:1"
   )
 
   local fixture_count="$default_fixture_count"
@@ -5036,6 +5042,75 @@ if [ "$JS_XSS_FAIL" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "JavaScript DOM-XSS (unescaped HTML sinks)" "$JS_XSS_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: php-privilege-simulation  (issue #61, Phase 5)
+# ============================================================================
+# Flags runtime privilege simulation in PHP: wp_set_current_user(),
+# wp_set_auth_cookie(), grant_super_admin(). A plugin/theme file that
+# programmatically assumes another user (especially admin id 1) is a
+# privilege-escalation smell. Calibrated by reachability (runtime_assessment):
+#   unauthenticated-privilege-escalation — file lacks an ABSPATH/WPINC guard,
+#       so an unauthenticated direct request can reach it -> HIGH (error)
+#   runtime-privilege-simulation         — guarded file (not web-reachable; may be
+#       a legit admin flow or a test harness) -> MEDIUM (warning), review
+# This is the KISS test-wholesale-ajax.php case: an unguarded "test" script that
+# escalates to admin is HIGH — the missing guard dominates the test-name signal.
+# Same-method / cross-method N+1 reload heuristics are DEFERRED to the AST track
+# (function-scope tracking is outside grep's reach) — see plan Deferred section.
+# ============================================================================
+PRIV_SIM_SEVERITY=$(get_severity "php-privilege-simulation" "HIGH")
+PRIV_SIM_COLOR="${RED}"
+text_echo "${BLUE}▸ PHP privilege simulation (wp_set_current_user / auth-cookie / super-admin) ${PRIV_SIM_COLOR}[$PRIV_SIM_SEVERITY]${NC}"
+PRIV_SIM_FAIL=false
+PRIV_SIM_HAS_HIGH=false
+PRIV_SIM_FINDING_COUNT=0
+
+PRIV_SIM_MATCHES=$(cached_grep $PHP_INCLUDE -E "(wp_set_current_user|wp_set_auth_cookie|grant_super_admin)[[:space:]]*\(" || true)
+
+if [ -n "$PRIV_SIM_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+    if should_suppress_finding "php-privilege-simulation" "$file"; then
+      continue
+    fi
+
+    # Guard detection — anchored to a code line (optionally after <?php / if ( / !)
+    # so an ABSPATH mention inside a docblock/comment does not count as a guard.
+    if grep -qE "^[[:space:]]*(<\?php[[:space:]]+)?(if[[:space:]]*\([[:space:]]*)?!?[[:space:]]*defined[[:space:]]*\([[:space:]]*['\"](ABSPATH|WPINC)['\"]" "$file" 2>/dev/null; then
+      priv_level="warning"; priv_impact="MEDIUM"; priv_rt="runtime-privilege-simulation"
+      priv_msg="Runtime privilege simulation in a guarded PHP file. Programmatically assuming another user (esp. admin id 1) outside an explicit, audited admin flow is a privilege-escalation risk. Verify it is gated behind capability checks; remove from shipped runtime code."
+    else
+      priv_level="error"; priv_impact="HIGH"; priv_rt="unauthenticated-privilege-escalation"; PRIV_SIM_HAS_HIGH=true
+      priv_msg="Privilege simulation in a web-reachable PHP file (no ABSPATH/WPINC guard). An unauthenticated direct request can reach this and assume another user's identity (commonly admin id 1). Add defined(ABSPATH)||exit and remove runtime privilege changes."
+    fi
+
+    text_echo "  ${PRIV_SIM_COLOR}→ $file:$line [$priv_rt]${NC}"
+    add_json_finding "php-privilege-simulation" "$priv_level" "$priv_impact" \
+      "$file" "$line" "$priv_msg" "$code" \
+      "" "" "" "" "$priv_rt"
+    PRIV_SIM_FAIL=true
+    ((PRIV_SIM_FINDING_COUNT++))
+  done <<< "$PRIV_SIM_MATCHES"
+fi
+
+if [ "$PRIV_SIM_FAIL" = true ]; then
+  if [ "$PRIV_SIM_HAS_HIGH" = true ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"; ((ERRORS++))
+    add_json_check "PHP privilege simulation" "HIGH" "failed" "$PRIV_SIM_FINDING_COUNT"
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"; ((WARNINGS++))
+    add_json_check "PHP privilege simulation" "MEDIUM" "failed" "$PRIV_SIM_FINDING_COUNT"
+  fi
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "PHP privilege simulation" "$PRIV_SIM_SEVERITY" "passed" 0
 fi
 text_echo ""
 

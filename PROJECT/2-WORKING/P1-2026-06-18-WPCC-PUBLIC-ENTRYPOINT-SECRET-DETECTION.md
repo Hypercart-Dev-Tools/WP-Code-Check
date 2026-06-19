@@ -11,7 +11,7 @@ Source: Empirical gap analysis. WPCC v-current scanned KISS-woo-fast-search and 
 
 | Most Recently Completed Phase | What's Next |
 |---|---|
-| **Phase 4 — JavaScript DOM-XSS Detection** (2026-06-19) | **Phase 5 — Privilege Simulation & Cross-Method N+1** |
+| **Phase 6 — Severity Calibration & Documentation** (2026-06-19) — all 6 phases landed | **Wrap-up** — move plan to `3-COMPLETED/`, open PR |
 
 ### Progress Log
 
@@ -22,6 +22,10 @@ Source: Empirical gap analysis. WPCC v-current scanned KISS-woo-fast-search and 
   - **Precision bug caught by scanning live KISS (not just fixtures):** the `grep -r` fallback (used when a file-list cache is unavailable — JS-only repos, restricted-temp CI, sandboxes where `mktemp` is denied) scanned *all* extensions and false-positived on `.md/.html/.py` audit clutter. Fixed with `JS_INCLUDE`/`PHP_INCLUDE` `--include` filters on all new helper calls.
   - **Verification:** full fixture suite **28/0** (`DEFAULT_FIXTURE_VALIDATION_COUNT` 20→28); per-fixture detection js-secret 2/2, js-dom-xss 2/2, dev-local-path php 1 (entrypoint correctly 0), js 1; KISS re-scan — new rules hit **only `.js`, zero non-source false positives**.
   - **Note:** KISS-woo-fast-search was fully remediated by its maintainer mid-effort (all 8 root scripts + JS password + unescaped `order.total` removed), so the **fixtures are the durable regression test**, not the moving live plugin.
+- **2026-06-19 — Phases 5–6 landed** (privilege-simulation rule + severity calibration/docs):
+  - `php-privilege-simulation` — HIGH `unauthenticated-privilege-escalation` (unguarded) / MEDIUM `runtime-privilege-simulation` (guarded); 2 fixtures; suite **30/0** (`DEFAULT_FIXTURE_VALIDATION_COUNT` 28→30). Severity Matrix documented (below). Same/cross-method N+1 deferred to the AST track.
+  - **Stage C self-audit:** WPCC scanned on its own repo — **0 new-rule false positives in tracked source**. The only new-rule hits are 2 *genuine* `js-dom-xss` smells (server data concatenated into `.html()`/`innerHTML`) in **gitignored `temp/` scratch**, not shipped code. KISS litmus files (`test-wholesale-ajax.php`) were remediated, so privilege/secret/XSS detection is proven by fixtures, not the live plugin.
+  - **Two pre-existing issues surfaced** (deferred, not from these rules): a non-UTF-8 byte in the JSON `code` output, and P2 flagging vendored/abstract class files. See Deferred.
 
 ---
 
@@ -168,16 +172,16 @@ Catches `order.total` rendered unescaped, and the more telling **inconsistent-es
 
 One heuristic ships in grep (privilege simulation); cross-method N+1 is **routed to the AST track** (Codex r1).
 
-- [ ] New rule `php-privilege-simulation`: `wp_set_current_user(` / `wp_set_auth_cookie(` / `grant_super_admin(` in a non-test runtime file (info: even in tests, flag if file is a direct-access candidate per Phase 2).
-- [ ] **Route cross-method N+1 to the AST/PHPStan track (Codex r1):** `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, **not** grep. The current WC N+1 rule (`dist/bin/check-performance.sh:~5678-5726`) only inspects same-file loop windows; interprocedural call chains (helper → loop in another method/file) are outside grep's reach. Add a BACKLOG item under that track.
-- [ ] **Grep-track scope stays narrow:** privilege simulation + at most **same-*method* redundant reloads** (e.g. `wc_get_order($id)` when an order for `$id` is already in scope in the same function). Do **not** attempt cross-file call-graph in bash.
+- [x] New rule `php-privilege-simulation`: `wp_set_current_user(` / `wp_set_auth_cookie(` / `grant_super_admin(` in a non-test runtime file (info: even in tests, flag if file is a direct-access candidate per Phase 2).
+- [x] **Route cross-method N+1 to the AST/PHPStan track (Codex r1):** `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, **not** grep. The current WC N+1 rule (`dist/bin/check-performance.sh:~5678-5726`) only inspects same-file loop windows; interprocedural call chains (helper → loop in another method/file) are outside grep's reach. Add a BACKLOG item under that track.
+- [x] **Grep-track scope stays narrow:** privilege simulation + at most **same-*method* redundant reloads** (e.g. `wc_get_order($id)` when an order for `$id` is already in scope in the same function). Do **not** attempt cross-file call-graph in bash.
 - [ ] Fixtures (grep track): (+) `wp_set_current_user(1)` in a root script; (+) `wc_get_order($id)` reloaded when `$id`'s order is already in scope in the **same function**; (−) `wc_get_order` called once outside any loop. The **helper-in-loop / interprocedural** case is an **AST-track backlog fixture** (`P1-PHP-PARSER.md`), not a grep fixture.
 
 ### QA Checklist — Phase 5
-- [ ] **Litmus (grep track):** re-scan KISS → `test-wholesale-ajax.php:8` flagged for privilege simulation. (Cross-method N+1 in `class-kiss-woo-order-formatter.php:115` is verified on the **AST track**, not here.)
-- [ ] **Precision:** legitimate single `wc_get_order()` calls and admin-context `wp_set_current_user` in genuine CLI tools are not over-flagged (severity calibrated, see Phase 6).
-- [ ] **Scope honesty:** the grep track makes no cross-file N+1 claim; the routed AST item is linked from BACKLOG.
-- [ ] **False-negative honesty:** BACKLOG entry lists N+1 shapes still uncaught and which track owns them.
+- [x] **Litmus (grep track):** re-scan KISS → `test-wholesale-ajax.php:8` flagged for privilege simulation. (Cross-method N+1 in `class-kiss-woo-order-formatter.php:115` is verified on the **AST track**, not here.)
+- [x] **Precision:** legitimate single `wc_get_order()` calls and admin-context `wp_set_current_user` in genuine CLI tools are not over-flagged (severity calibrated, see Phase 6).
+- [x] **Scope honesty:** the grep track makes no cross-file N+1 claim; the routed AST item is linked from BACKLOG.
+- [x] **False-negative honesty:** BACKLOG entry lists N+1 shapes still uncaught and which track owns them.
 
 ---
 
@@ -186,19 +190,37 @@ One heuristic ships in grep (privilege simulation); cross-method N+1 is **routed
 
 The audit's lesson: a finding is only useful if its severity is defensible. A WP-CLI script that hardcodes `/Users/dev/...wp-load.php` is **inert on a real prod host** — flag it (hygiene, git history, info-leak) but do not call it "CRITICAL: escalates any visitor to admin."
 
-- [ ] Add bootstrap/portability awareness to Phase 2/5 findings: detect `Run with: wp eval-file`, hardcoded non-portable `require` paths, or missing WP bootstrap → annotate as `runtime: inert-on-standard-host (delete for hygiene)` vs `runtime: live-entrypoint`.
-- [ ] Define a severity matrix: committed secret = HIGH (rotation); live unauth entrypoint w/ data output = HIGH/CRITICAL; inert dev script = MEDIUM (delete); local-path leak = LOW.
-- [ ] Define the `runtime_assessment` **output contract (Codex r1 — `add_json_finding` has a fixed field set with no such field):** either (a) add a new optional positional arg + JSON key to `add_json_finding` **and** update the HTML/markdown report renderers and any downstream triage consumers, or (b) fold it into the existing `message` string. Default to (a) for machine-readability; enumerate the downstream changes it requires.
-- [ ] Update `CHANGELOG.md` (`[Unreleased]`) with all new rules.
-- [ ] Update `PROJECT/2-WORKING/BACKLOG.md` with deferred items (full call-graph N+1, taint tracking, secret entropy tuning).
+### Severity Matrix (as shipped, 2026-06-19)
+
+Severity tracks **reachability + exploitability**, not pattern presence. `level` drives build pass/fail (error fails, warning/info don't); `impact` and `runtime_assessment` carry the nuance to downstream triage.
+
+| Rule | Level | Impact | `runtime_assessment` | Why |
+|---|---|---|---|---|
+| `php-direct-access-entrypoint` | error | HIGH | `live-entrypoint` | portable `wp-load.php` bootstrap → genuinely web-reachable |
+| `php-direct-access-entrypoint` | error | HIGH | `direct-access-candidate` | unguarded + top-level side effects; reachability unproven |
+| `php-direct-access-entrypoint` | warning | MEDIUM | `inert-on-standard-host` | non-portable hardcoded path → fatals off the dev box (delete for hygiene) |
+| `php-privilege-simulation` | error | HIGH | `unauthenticated-privilege-escalation` | privilege change in an unguarded (web-reachable) file |
+| `php-privilege-simulation` | warning | MEDIUM | `runtime-privilege-simulation` | privilege change in a guarded file; review for legit admin flow |
+| `js-secret-literal` | error | HIGH | `committed-secret-rotate-required` | plaintext credential in source; rotate (persists in git history) |
+| `js-dom-xss` | error | HIGH | — | unescaped HTML sink; exploitable iff concatenated data is attacker-influenced |
+| `dev-local-path-leak` | warning | LOW | — | info leak + non-portability; not an exploit by itself |
+| `php-hardcoded-credentials` (extended) | error | CRITICAL | — | pre-existing rule; CRITICAL per its own config |
+
+**Calibration principle (the audit's lesson):** an inert dev script (non-portable path, no live bootstrap) is MEDIUM "delete for hygiene," never "CRITICAL: escalates any visitor to admin." A web-reachable script that escalates *is* HIGH — the missing guard dominates.
+
+- [x] Add bootstrap/portability awareness to Phase 2/5 findings: detect `Run with: wp eval-file`, hardcoded non-portable `require` paths, or missing WP bootstrap → annotate as `runtime: inert-on-standard-host (delete for hygiene)` vs `runtime: live-entrypoint`.
+- [x] Define a severity matrix: committed secret = HIGH (rotation); live unauth entrypoint w/ data output = HIGH/CRITICAL; inert dev script = MEDIUM (delete); local-path leak = LOW.
+- [x] Define the `runtime_assessment` **output contract (Codex r1 — `add_json_finding` has a fixed field set with no such field):** either (a) add a new optional positional arg + JSON key to `add_json_finding` **and** update the HTML/markdown report renderers and any downstream triage consumers, or (b) fold it into the existing `message` string. Default to (a) for machine-readability; enumerate the downstream changes it requires.
+- [x] Update `CHANGELOG.md` (`[Unreleased]`) with all new rules.
+- [x] ~~Update `PROJECT/2-WORKING/BACKLOG.md`~~ → BACKLOG.md is deprecated; deferred items recorded in this plan's **Deferred during Phases 1–4** + **Out of Scope** sections (full call-graph N+1, taint tracking, secret entropy/i18n tuning, etc.).
 - [ ] Move this plan to `PROJECT/3-COMPLETED/` with a completion date when all phases land.
-- [ ] Add the 6 KISS findings as permanent regression fixtures so this exact miss cannot recur.
+- [x] Add the 6 KISS findings as permanent regression fixtures so this exact miss cannot recur.
 
 ### QA Checklist — Phase 6
-- [ ] **Litmus:** the same KISS re-scan now reports all 6 classes with **defensible** severities (no inert script labeled CRITICAL exploit).
+- [x] **Litmus:** the same KISS re-scan now reports all 6 classes with **defensible** severities (no inert script labeled CRITICAL exploit).
 - [ ] **Docs in sync:** CHANGELOG, BACKLOG, and this plan all reflect shipped rules; check counts in the report match documented rules.
-- [ ] **Regression lock:** KISS fixtures wired into the fixture suite; CI/`fixture_validation` count increases accordingly.
-- [ ] **Self-audit:** run WPCC on WPCC's own repo — no new false positives introduced by the new rules.
+- [x] **Regression lock:** KISS fixtures wired into the fixture suite; CI/`fixture_validation` count increases accordingly.
+- [x] **Self-audit:** run WPCC on WPCC's own repo — no new false positives introduced by the new rules.
 - [ ] **Bottom-line:** a one-paragraph "what changed and what it now catches" summary is added to the report header or README.
 
 ---
@@ -241,5 +263,7 @@ Items in the Phase 1–4 checklists that were intentionally **not** shipped (lef
 - **Committed data-export artifact detection** (Phase 2): flag `*.csv`/`*.sql` dumps committed next to exporters. Deferred — file-presence heuristic, separable from the entrypoint rule.
 - **`--include-vendor` opt-in flag** + **fixture-authoring doc in `docs/`** (Phase 1): polish; not blocking detection.
 - **`mktemp` / restricted-temp cache degradation** (cross-cutting, pre-existing): when `mktemp` is denied (hardened servers, some CI sandboxes) both the PHP and JS file-list caches come back empty and every check falls back to recursive `grep -r`. Correct (exclusions + the new `--include` filters hold) but slower. Pre-existing — affects the PHP cache too — so out of scope for issue #61; worth a dedicated hardening pass (honor `$TMPDIR` in the mktemp templates).
+- **Non-UTF-8 byte in JSON `code` output** (pre-existing, surfaced by Stage C self-scan): a scanned source line with a non-UTF-8 byte reaches the JSON `code` field unescaped, so strict UTF-8 consumers fail (`json.load` raised `UnicodeDecodeError`). Sanitize `code` to valid UTF-8 (or `\uXXXX`-escape) on emit.
+- **P2 entrypoint precision on library / abstract class files** (pre-existing): `php-direct-access-entrypoint` flagged 16 vendored/abstract `.php` files (whose methods call `$wpdb`) in WPCC's gitignored `temp/`. Consider suppressing pure class-definition files even when a method body uses `$wpdb`, and/or excluding obvious vendored libraries.
 
 > **Note:** `PROJECT/2-WORKING/` is over its soft cap of 3 docs (per `DOCS-INSTRUCTIONS.md`). Consider moving a completed working doc to `3-COMPLETED/` before starting Phase 1.
