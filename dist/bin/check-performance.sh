@@ -145,7 +145,7 @@ HTTP_TIMEOUT_BACKWARD_LINES=20
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=24  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=28  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
 SKIP_MAGIC_STRINGS=false    # Magic String Detector runs by default (use --skip-magic-strings to disable)
 
@@ -2267,6 +2267,17 @@ run_fixture_validation() {
     "php-direct-access-entrypoint-class-only.php:class My_Class_Only:1"
     # (−) guarded file — confirm the ABSPATH guard is present (file integrity check)
     "php-direct-access-entrypoint-guarded.php:defined( 'ABSPATH' ) || exit:1"
+
+    # P3/P4 (issue #61) fixtures — integrity checks. Real detection is proven by
+    # the per-fixture scanner runs in the acceptance battery, not by these greps.
+    # (+) committed credential literal present in JS secret fixture
+    "js-secret-literal.js:Wholesale:1"
+    # (+) hardcoded macOS dev path present in PHP local-path fixture
+    "dev-local-path-leak.php:/Users/dev/Local Sites:1"
+    # (+) hardcoded Linux dev path present in JS local-path fixture
+    "dev-local-path-leak.js:/home/deploy:1"
+    # (+) DOM-XSS sink data present in js-dom-xss fixture
+    "js-dom-xss.js:order.total:1"
   )
 
   local fixture_count="$default_fixture_count"
@@ -3681,6 +3692,16 @@ cleanup_php_cache() {
 }
 trap cleanup_php_cache EXIT
 
+# Default file-type include filters for the JS/PHP source rules below. These
+# restrict the grep -r FALLBACK path (used when a cached file list is
+# unavailable — restricted temp dir, JS-only repo, etc.) to source files only;
+# without them the fallback scans .md/.html/.py/.json and produces false
+# positives (observed on a real plugin tree polluted with audit reports). They
+# are IGNORED on the cached xargs path (explicit file args), so passing them
+# always is safe in both modes.
+JS_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+PHP_INCLUDE="--include=*.php"
+
 # ============================================================================
 # OPTIMIZED GREP FUNCTION
 # ============================================================================
@@ -4839,6 +4860,182 @@ if [ "$DIRECT_ACCESS_FAIL" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "PHP direct-access entrypoint candidates" "$DIRECT_ACCESS_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: js-secret-literal  (issue #61, Phase 3)
+# ============================================================================
+# Flags committed plaintext credentials in JS/TS source: a credential keyword
+# assigned a quoted literal of >=8 realistic chars. Distinct from
+# headless/api-key-exposure.json (NEXT_PUBLIC client-bundle exposure) — this
+# catches dev/debug scripts that hardcode a real password/token (e.g. the
+# committed password in KISS debug-wholesale-orders.js).
+#
+# Runs on the JS/TS file list (js_cached_grep) so it works in mixed PHP+JS
+# repos. Two-stage: grep for credential-literal assignments, then filter env
+# reads and obvious placeholders inline (the JS direct runner has no exclude
+# support). Committed secrets persist in git history → the message says ROTATE.
+# ============================================================================
+JS_SECRET_SEVERITY=$(get_severity "js-secret-literal" "HIGH")
+JS_SECRET_COLOR="${YELLOW}"
+if [ "$JS_SECRET_SEVERITY" = "CRITICAL" ] || [ "$JS_SECRET_SEVERITY" = "HIGH" ]; then JS_SECRET_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Committed secrets in JS/TS (hardcoded credential literals) ${JS_SECRET_COLOR}[$JS_SECRET_SEVERITY]${NC}"
+JS_SECRET_FAIL=false
+JS_SECRET_FINDING_COUNT=0
+
+# Credential keyword (any case) assigned a quoted literal of >=8 chars, ':' or '=' form.
+JS_SECRET_MATCHES=$(js_cached_grep $JS_INCLUDE -iE \
+  "(password|passwd|pwd|secret|api_?key|access_?token|auth_?token|client_?secret|private_?key)[\"']?[[:space:]]*[:=][[:space:]]*['\"][^'\"]{8,}['\"]" \
+  || true)
+
+if [ -n "$JS_SECRET_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+
+    # Filter: environment reads (value is injected, not hardcoded)
+    if echo "$code" | grep -qE "process\.env|import\.meta\.env|getenv"; then
+      continue
+    fi
+    # Filter: obvious placeholders / examples (case-insensitive)
+    if echo "$code" | grep -qiE "your_|_here|yourkey|example|changeme|change-me|placeholder|dummy|sample|redacted|xxxx|<[^>]+>|\*\*\*"; then
+      continue
+    fi
+    if should_suppress_finding "js-secret-literal" "$file"; then
+      continue
+    fi
+
+    js_secret_msg="Hardcoded credential literal in client/source JS. Move to a server-side env var or secure config. ROTATE the value — committed secrets persist in git history; deletion alone is insufficient."
+    text_echo "  ${JS_SECRET_COLOR}→ $file:$line${NC}"
+    add_json_finding "js-secret-literal" "error" "$JS_SECRET_SEVERITY" \
+      "$file" "$line" "$js_secret_msg" "$code" \
+      "" "" "" "" "committed-secret-rotate-required"
+    JS_SECRET_FAIL=true
+    ((JS_SECRET_FINDING_COUNT++))
+  done <<< "$JS_SECRET_MATCHES"
+fi
+
+if [ "$JS_SECRET_FAIL" = true ]; then
+  text_echo "${RED}  ✗ FAILED${NC}"
+  ((ERRORS++))
+  add_json_check "Committed secrets in JS/TS" "$JS_SECRET_SEVERITY" "failed" "$JS_SECRET_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Committed secrets in JS/TS" "$JS_SECRET_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: dev-local-path-leak  (issue #61, Phase 3)
+# ============================================================================
+# Flags hardcoded developer filesystem paths in PHP or JS source:
+#   /Users/<name>/ , /home/<name>/ , .../Local Sites/...
+# These leak the build environment, break portability, and are the signal that
+# a "dev/debug" script was committed. LOW severity (hygiene/info leak) — not an
+# exploit by itself. Scans PHP (cached_grep) AND JS (js_cached_grep); sort -u
+# dedupes when a single-file scan hits both helpers.
+# ============================================================================
+LOCALPATH_SEVERITY=$(get_severity "dev-local-path-leak" "LOW")
+text_echo "${BLUE}▸ Hardcoded developer local paths (PHP + JS) ${YELLOW}[$LOCALPATH_SEVERITY]${NC}"
+LOCALPATH_FAIL=false
+LOCALPATH_FINDING_COUNT=0
+
+LOCALPATH_PATTERN="(/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/|Local Sites/)"
+LOCALPATH_MATCHES=$( { cached_grep $PHP_INCLUDE -E "$LOCALPATH_PATTERN"; js_cached_grep $JS_INCLUDE -E "$LOCALPATH_PATTERN"; } 2>/dev/null | sort -u || true)
+
+if [ -n "$LOCALPATH_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+    if should_suppress_finding "dev-local-path-leak" "$file"; then
+      continue
+    fi
+    localpath_msg="Hardcoded developer filesystem path. Leaks the build environment and breaks portability (the file will fatal or misbehave on any other host). Use relative paths, plugin/theme path helpers, or ABSPATH."
+    text_echo "  ${YELLOW}→ $file:$line${NC}"
+    add_json_finding "dev-local-path-leak" "warning" "$LOCALPATH_SEVERITY" \
+      "$file" "$line" "$localpath_msg" "$code"
+    LOCALPATH_FAIL=true
+    ((LOCALPATH_FINDING_COUNT++))
+  done <<< "$LOCALPATH_MATCHES"
+fi
+
+if [ "$LOCALPATH_FAIL" = true ]; then
+  text_echo "${YELLOW}  ⚠ WARNING${NC}"
+  ((WARNINGS++))
+  add_json_check "Hardcoded developer local paths" "$LOCALPATH_SEVERITY" "failed" "$LOCALPATH_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Hardcoded developer local paths" "$LOCALPATH_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: js-dom-xss  (issue #61, Phase 4)
+# ============================================================================
+# Flags DOM-XSS sinks fed unescaped, dynamically-built HTML in JS/TS:
+#   .html()/.append()/.prepend()/.before()/.after()/.replaceWith()/.wrap() with
+#   a quoted string concatenated (+) to an expression, OR
+#   innerHTML/outerHTML = <bare identifier or concatenation>, OR
+#   insertAdjacentHTML(pos, '<...>' + expr)
+# Two-stage: match HTML-building sinks, then drop lines that route through a
+# recognised escaper (escapeHtml/esc_html/DOMPurify/textContent/.text()/encodeURI).
+# Catches the KISS order.total-unescaped case; .text()/escaped sinks stay clean.
+# ============================================================================
+JS_XSS_SEVERITY=$(get_severity "js-dom-xss" "HIGH")
+JS_XSS_COLOR="${YELLOW}"
+if [ "$JS_XSS_SEVERITY" = "CRITICAL" ] || [ "$JS_XSS_SEVERITY" = "HIGH" ]; then JS_XSS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ JavaScript DOM-XSS (unescaped HTML sinks) ${JS_XSS_COLOR}[$JS_XSS_SEVERITY]${NC}"
+JS_XSS_FAIL=false
+JS_XSS_FINDING_COUNT=0
+
+# Stage 1: jQuery/DOM HTML sinks built via string concatenation, or innerHTML/
+# outerHTML assigned a non-constant expression.
+JS_XSS_MATCHES=$( {
+  js_cached_grep $JS_INCLUDE -E "\.(html|append|prepend|before|after|replaceWith|wrap)[[:space:]]*\([^)]*['\"][^)]*\+"
+  js_cached_grep $JS_INCLUDE -E "(inner|outer)HTML[[:space:]]*=[[:space:]]*['\"][^;]*\+"
+  js_cached_grep $JS_INCLUDE -E "(inner|outer)HTML[[:space:]]*=[[:space:]]*[A-Za-z_\$][A-Za-z0-9_\$.]*[[:space:]]*;"
+  js_cached_grep $JS_INCLUDE -E "insertAdjacentHTML[[:space:]]*\([^)]*,[[:space:]]*['\"][^)]*\+"
+} 2>/dev/null | sort -u || true)
+
+if [ -n "$JS_XSS_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+
+    # Filter: line routes the value through a recognised escaper → safe
+    if echo "$code" | grep -qiE "escapeHtml|esc_html|escape_html|DOMPurify|encodeURI|\.textContent|\.text[[:space:]]*\("; then
+      continue
+    fi
+    if should_suppress_finding "js-dom-xss" "$file"; then
+      continue
+    fi
+
+    js_xss_msg="DOM-XSS: HTML sink built from unescaped dynamic data. If any concatenated value is attacker-influenced (order/user/API data), it executes as HTML in the browser. Use a textContent assignment, an HTML-escape helper, or DOMPurify.sanitize()."
+    text_echo "  ${JS_XSS_COLOR}→ $file:$line${NC}"
+    add_json_finding "js-dom-xss" "error" "$JS_XSS_SEVERITY" \
+      "$file" "$line" "$js_xss_msg" "$code"
+    JS_XSS_FAIL=true
+    ((JS_XSS_FINDING_COUNT++))
+  done <<< "$JS_XSS_MATCHES"
+fi
+
+if [ "$JS_XSS_FAIL" = true ]; then
+  text_echo "${RED}  ✗ FAILED${NC}"
+  ((ERRORS++))
+  add_json_check "JavaScript DOM-XSS (unescaped HTML sinks)" "$JS_XSS_SEVERITY" "failed" "$JS_XSS_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "JavaScript DOM-XSS (unescaped HTML sinks)" "$JS_XSS_SEVERITY" "passed" 0
 fi
 text_echo ""
 
@@ -6858,10 +7055,15 @@ if [ -n "$DIRECT_PATTERNS" ]; then
       done
 
       # Run grep with the pattern
-      # PERFORMANCE: Use cached file list instead of grep -r
+      # MIXED-REPO FIX (issue #61): this is the JS/Node/headless runner, so scan
+      # the JS/TS file list — NOT the PHP-only cached_grep list. cached_grep xargs
+      # over PHP_FILE_LIST and grep ignores --include on explicit file args, so JS
+      # patterns silently matched nothing in any repo containing >=1 PHP file. That
+      # is exactly why the committed JS password and DOM-XSS were missed. js_cached_grep
+      # scans JS_FILE_LIST (mixed repos) and falls back to recursive grep for JS-only.
       matches=""
       match_count=0
-      matches=$(cached_grep $include_args -E "$pattern_search" || true)
+      matches=$(js_cached_grep $include_args -E "$pattern_search" || true)
 
       if [ -n "$matches" ]; then
         match_count=$(echo "$matches" | grep -c . 2>/dev/null)
