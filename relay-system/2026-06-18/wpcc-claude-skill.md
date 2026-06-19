@@ -4,9 +4,9 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Producer
+NEXT: Reviewer
 STATUS: Open
-ROUND: 1 / 5
+ROUND: 2 / 5
 
 ## ▶ TAKE YOUR TURN — read this first (works for ANY agent: Claude, Codex, Gemini)
 The operator just said "take your turn on this file." Everything you need is **in this file** — don't wait for pasted instructions.
@@ -76,5 +76,19 @@ The operator just said "take your turn on this file." Everything you need is **i
 - Should the plan add an explicit phase/step for an *install mechanism* (copy/symlink the skill into `~/.claude/skills/` and a way to update it), or is that correctly deferred to Out-of-Scope? → Add it in-scope. Cross-device packaging can stay deferred, but device-local install/update is required to satisfy the current Goal without a silent gap.
 - Is "device-local, no other-device sync" the right scope, or should portability via `install.sh` be in-scope from the start? → Device-local is the right v1 scope. Do not expand to cross-device sync or `install.sh` integration yet; first make the repo source-of-truth plus local install/update path explicit and correct.
 **Commit:** none (Codex sandbox; committed by Producer)
+
+### Round 2 · Producer · Claude Opus 4.8 · 2026-06-18 22:41 PDT
+**Verified before deciding:** Confirmed finding #2 against the scanner (`dist/bin/check-performance.sh:488` — `--strict   Fail on warnings (N+1 patterns)`) and finding #4 against the official Claude Code skills docs (via claude-code-guide agent: all frontmatter optional, invocation name = directory name, `description` drives auto-invocation). Both Codex claims are accurate. All findings valid.
+**Decisions on proposals:**
+- [Blocker] Missing install/sync mechanism + omission-diff — **Implemented** → Added "Source of truth & install" block to Phase 1 (`FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:74-79`): repo master at `skills/wpcc/SKILL.md`, `ln -sfn` symlink install (`cp -R` fallback), explicit update/re-sync item. Added Design-Decisions rows for source-of-truth + install method (`:48-50`), and rewrote Out-of-Scope so device-local install/update is in scope while cross-device + `install.sh` wiring stays deferred (`:174`). · Proof: textual (plan doc).
+- [Blocker] `--strict` / exit-code wording wrong — **Implemented** → New "Exit-code semantics (verified…)" Architecture note (`:63`): errors always fail, `--strict` additionally promotes warnings; non-zero can also mean execution failure; JSON-parses-or-it's-a-failure decision rule. Propagated to Phase 2 intent map (`:107`), Phase 3 exit-code item (`:133`) and two new Phase 3 litmus tests. · Proof: cross-checked scanner `:488`.
+- [Blocker] Path resolver hand-wavy/self-contradictory — **Implemented** → Replaced with exact 4-step ordered resolver in Phase 1 (`:80-86`): `$WPCC_HOME` → canonical path → `command -v wpcc` *only if a real PATH executable* → fail loud listing all paths tried. Design-Decisions row updated (`:51-52`); added "no alias dependence" litmus. · Proof: textual.
+- [Should] Frontmatter behavior overstated — **Implemented** → Rewrote Background (`:40`) and Architecture "Skill anatomy" (`:64`): all fields optional, `/wpcc` derives from directory name, `description` drives auto-invocation; listed the relevant shell-wrapping fields. · Proof: confirmed vs docs.
+- [Should] Invocation UX underspecified — **Implemented** → New Phase 2 item (`:104`) defining `$ARGUMENTS`/`$0`/`$1` arg shape with the exact example `/wpcc "/path with spaces" strict`, `argument-hint`, and a recorded `disable-model-invocation` decision (left unset → auto-invocation wanted). · Proof: textual.
+- [Pass] ×2 (alias conclusion, scanner entrypoint/flags) — no action; acknowledged.
+**Did:** Applied all 5 findings to the plan doc; no scanner changes (anti-goal held).
+**Verification:** N/A — non-executable artifact. Each `Implemented` reconciled against the artifact at the cited line before handoff; the two factual disputes were independently verified against scanner source + skills docs, not taken on Codex's word.
+**Re-review this:** (1) Is the 4-step resolver now concrete enough to build (Phase 1 `:80-86`)? (2) Does the exit-code decision rule (`:63`, `:133`) correctly capture strict-vs-error-vs-failure? (3) Any remaining Goal element with no phase item after the install-mechanism addition?
+**Commit:** 1f6af04
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->

@@ -37,7 +37,7 @@ WPCC is invoked today via `dist/bin/check-performance.sh --paths <dir>` or the `
 2. **Scanner lives in one repo, but must be callable from anywhere.** A session working in `~/Local Sites/some-plugin` has no relative path to the scanner. The skill must encode/resolve a stable absolute path to `check-performance.sh`.
 3. **Flags are non-obvious.** `--format json`, `--strict`, `--generate-baseline`, `--ai-triage`, `--verbose`, `--no-log` each change behavior. The skill should map plain-language intent ("scan this for security issues", "give me a baseline", "strict mode") to the right flags so the user never memorizes them.
 
-A **Claude skill** is the right vehicle: a `SKILL.md` with `name` + `description` frontmatter placed in `~/.claude/skills/<name>/` is auto-discovered in **every** session on the device and triggered by its description. This is exactly the "any claude session on this device" requirement.
+A **Claude skill** is the right vehicle: a `SKILL.md` placed in `~/.claude/skills/wpcc/` is a *personal* skill, auto-discovered in **every** session on the device regardless of working directory. The invocation name comes from the **directory** (`wpcc/` → `/wpcc`), not from frontmatter; all frontmatter fields are optional, but `description` is recommended because it (plus optional `when_to_use`) is what Claude uses to decide auto-invocation. This is exactly the "any claude session on this device" requirement.
 
 ---
 
@@ -45,9 +45,11 @@ A **Claude skill** is the right vehicle: a `SKILL.md` with `name` + `description
 
 | Decision | Choice | Why |
 |---|---|---|
-| Skill location | `~/.claude/skills/wpcc/SKILL.md` | User-level skills load in every session on the device (vs. project `.claude/skills/` which is repo-scoped). |
-| Scanner reference | Absolute path to `dist/bin/check-performance.sh`, with a fallback resolver | Bash tool can't see the `wpcc` alias; absolute path is the only reliable handle. |
-| Path portability | Resolve at run time (check known install dir, then `command -v wpcc`-style git-root probe), fail loud if not found | Survives the repo being moved; avoids a hard-coded path silently scanning nothing. |
+| Skill source of truth | A versioned `SKILL.md` **in this repo** (e.g. `skills/wpcc/SKILL.md`), installed to `~/.claude/skills/wpcc/` | Keeps the skill in git history/review; the device copy is a derivative, not the master. |
+| Skill location (installed) | `~/.claude/skills/wpcc/SKILL.md` (personal skill) | Personal skills load in every session on the device, any cwd (vs. project `.claude/skills/` which is repo-scoped). Invocation name = directory name → `/wpcc`. |
+| Install method | `ln -sfn <repo>/skills/wpcc ~/.claude/skills/wpcc` (symlink) | A symlink means repo edits are live with no re-copy; falls back to `cp -R` if symlinks are undesirable. |
+| Scanner reference | Absolute path to `dist/bin/check-performance.sh`, via an ordered resolver | Bash tool can't see the `wpcc` alias; a resolved absolute path is the only reliable handle. |
+| Path portability | Ordered resolver (see Phase 1): `$WPCC_HOME` → canonical path → `command -v wpcc` *only if* a real PATH executable → fail loud listing all paths tried | Survives the repo being moved; never silently scans nothing; never depends on a shell alias. |
 | Default target | The directory the user names; if none, the session's cwd | Matches how a human runs `wpcc <dir>`. |
 | Default format | `--format json` (parsed by skill), surface a human summary | JSON is machine-parseable so the skill can summarize cleanly instead of dumping raw scanner stdout into context. |
 | Raw output handling | Write full report to a temp/file path, summarize top findings inline | Honors context-window discipline — large scans don't flood the conversation. |
@@ -57,8 +59,9 @@ A **Claude skill** is the right vehicle: a `SKILL.md` with `name` + `description
 ## Architecture Notes <a id="architecture-notes"></a>
 
 - **Scanner entrypoint:** `dist/bin/check-performance.sh` (repo root: `/Users/noelsaw/Documents/GH Repos/wp-code-check`). Invocation: `check-performance.sh --paths <dir> [flags]`.
-- **Relevant flags** (from README/SHELL-QUICKSTART): `--paths <dir>`, `--format json`, `--strict` (non-zero exit on findings), `--generate-baseline`, `--ai-triage`, `--verbose`, `--no-log`.
-- **Skill anatomy:** `SKILL.md` requires YAML frontmatter with `name` and `description`. The `description` is the trigger surface — it must contain the phrases that should fire the skill ("scan with wpcc", "run wp code check", "check this plugin for performance/security issues").
+- **Relevant flags** (from README/SHELL-QUICKSTART): `--paths <dir>`, `--format json`, `--strict`, `--generate-baseline`, `--ai-triage`, `--verbose`, `--no-log`.
+- **Exit-code semantics (verified in `check-performance.sh`):** `--strict` means **"fail on warnings"** (e.g. N+1 patterns) — line 488. Errors always produce a non-zero exit; `--strict` *additionally* promotes warnings to a non-zero exit. A non-zero exit can therefore mean "findings present" **or** a real execution failure — so the skill must not treat non-zero as "scan succeeded with findings" unconditionally. Decision rule: if a JSON report was written and parses, summarize it; if JSON is missing/invalid, treat it as a scanner failure and surface stderr.
+- **Skill anatomy (verified against Claude Code skills docs):** all `SKILL.md` frontmatter fields are **optional**; `description` is recommended (drives auto-invocation, with optional `when_to_use`). The invocation command (`/wpcc`) derives from the **directory name**, not from `name:`. Fields relevant to a shell-wrapping skill: `description`, `when_to_use`, `argument-hint`, `allowed-tools` (e.g. `Bash(...)` pre-approval), `disable-model-invocation`, and `$ARGUMENTS` / `$0` / `$1` substitution in the body.
 - **No scanner changes.** This plan only adds a skill file plus (optionally) one small helper. If a helper script is needed it lives beside the skill in `~/.claude/skills/wpcc/`, not in the WPCC repo.
 - **Existing reference docs to mirror, not duplicate:** `SHELL-QUICKSTART.md`, `dist/TEMPLATES/_AI_INSTRUCTIONS.md`. The skill should point to these rather than restate them.
 
@@ -66,22 +69,30 @@ A **Claude skill** is the right vehicle: a `SKILL.md` with `name` + `description
 
 ## Phase 1 — Skill Scaffold & Scanner Path Resolution <a id="phase-1"></a>
 
-Goal: a discoverable, well-described skill stub that can reliably locate the scanner from any cwd.
+Goal: a discoverable, well-described skill that lives in the repo, installs to the device, and can reliably locate the scanner from any cwd.
 
-- [ ] Create directory `~/.claude/skills/wpcc/`.
-- [ ] Create `~/.claude/skills/wpcc/SKILL.md` with valid YAML frontmatter (`name: wpcc`, a `description` containing the trigger phrases listed in Architecture Notes).
+**Source of truth & install:**
+- [ ] Author the skill in the repo at `skills/wpcc/SKILL.md` (this versioned file is the master; the `~/.claude/` copy is a derivative).
+- [ ] Write the frontmatter: `description` (recommended — contains the trigger phrases below) and optionally `name: wpcc`. Note `/wpcc` comes from the **directory name**, so the install target dir must be `wpcc/`. Add `argument-hint` (e.g. `[path] [strict|baseline|triage]`) and consider `allowed-tools: Bash(...)` to pre-approve the scanner invocation.
+- [ ] Install to the device: `mkdir -p ~/.claude/skills && ln -sfn "$(pwd)/skills/wpcc" ~/.claude/skills/wpcc` (symlink keeps repo edits live; document `cp -R` as the fallback).
+- [ ] Document the **update/re-sync** path: with a symlink, repo edits are already live; with a copy, re-run the install command. State which was used.
+
+**Scanner path resolution (exact ordered resolver):**
 - [ ] In the skill body, record the canonical absolute scanner path: `/Users/noelsaw/Documents/GH Repos/wp-code-check/dist/bin/check-performance.sh`.
-- [ ] Add a runtime path-resolution snippet: (1) test the canonical path; (2) if missing, probe for a moved repo (e.g. search common parents / read a `WPCC_HOME` env var); (3) if still unresolved, **stop and tell the user** rather than scanning nothing.
-- [ ] Confirm the scanner is executable (`-x`); document the `chmod +x` remedy if not.
-- [ ] Verify the skill appears in the available-skills list of a **new** Claude session (no manual registration needed).
+- [ ] Implement the resolver in this exact order, returning the first hit: (1) `"$WPCC_HOME/dist/bin/check-performance.sh"` if `WPCC_HOME` is set and the file exists; (2) the canonical absolute path above; (3) `command -v wpcc` **only if** it resolves to a real executable on `PATH` (not a shell alias — aliases are invisible to the non-interactive Bash tool), then derive the scanner from its backing repo; (4) if none resolve, **stop and print the full list of paths tried** rather than scanning nothing.
+- [ ] Confirm the resolved scanner is executable (`-x`); document the `chmod +x` remedy if not.
+
+**Discovery:**
+- [ ] Verify the skill appears in the available-skills list of a **new** Claude session (no manual registration needed) and that `/wpcc` invokes it.
 
 ### QA Checklist — Phase 1
-- [ ] **DRY:** Scanner path defined once in the skill, referenced everywhere — not re-typed per command.
-- [ ] **Single source of truth:** Frontmatter `name` matches the directory name (`wpcc`); no second copy of the path elsewhere.
-- [ ] **Observability:** Path-resolution failure produces a clear, actionable message naming the path it tried.
-- [ ] **Litmus (discovery):** Open a brand-new session in an unrelated directory; the `wpcc` skill is listed and resolves the scanner.
-- [ ] **Litmus (portability):** Temporarily rename/move the repo; the resolver fails loud instead of silently doing nothing.
-- [ ] **Anti-goal check:** No edits made to `check-performance.sh` or anything in the WPCC repo.
+- [ ] **DRY:** Scanner path defined once (the resolver) and referenced everywhere — not re-typed per command.
+- [ ] **Single source of truth:** The repo `skills/wpcc/SKILL.md` is the master; the `~/.claude/skills/wpcc` copy is a symlink/derivative, not a divergent hand-edited file.
+- [ ] **Observability:** Path-resolution failure prints every path it tried, in order.
+- [ ] **Litmus (discovery):** Open a brand-new session in an unrelated directory; `/wpcc` is available and the resolver finds the scanner.
+- [ ] **Litmus (portability):** Set `WPCC_HOME` to a moved repo; resolver step 1 finds it. Unset it and move the canonical repo; resolver fails loud instead of silently doing nothing.
+- [ ] **Litmus (no alias dependence):** Confirm the resolver never succeeds *only* because of the `wpcc` shell alias (which the Bash tool can't see).
+- [ ] **Anti-goal check:** No edits to `check-performance.sh` or scanner logic; the only repo addition is the new `skills/wpcc/` directory.
 
 ---
 
@@ -90,9 +101,10 @@ Goal: a discoverable, well-described skill stub that can reliably locate the sca
 Goal: translate plain-language intent into a correct scanner command.
 
 - [ ] Document the default invocation: `check-performance.sh --paths <target> --format json`.
+- [ ] **Direct-invocation argument shape:** define how `/wpcc` receives the target and modifiers via `$ARGUMENTS` / `$0` / `$1` in the skill body, with at least one exact example — e.g. `/wpcc "/path with spaces" strict` → first arg = target (quoted), trailing words = modifier keywords. Set `argument-hint` accordingly. Decide and record whether `disable-model-invocation` should be `true` (user-only) or left unset to also allow natural-language auto-invocation; default = leave unset (auto-invocation wanted).
 - [ ] Define target resolution: use the path the user names; if none given, use the session cwd; confirm the target exists and looks like a WP plugin/theme/project before scanning.
 - [ ] Map intents → flags in the skill body:
-  - [ ] "strict" / "fail on findings" → `--strict`
+  - [ ] "strict" / "fail on warnings too" → `--strict` (promotes warnings like N+1 to a non-zero exit; errors already fail without it)
   - [ ] "baseline" / "snapshot current state" → `--generate-baseline`
   - [ ] "AI triage" / "explain the findings" → `--ai-triage`
   - [ ] "verbose" / "show everything" → `--verbose`
@@ -119,7 +131,7 @@ Goal: turn raw JSON scanner output into a concise, useful summary without floodi
 - [ ] Parse the JSON: total findings, counts by severity (CRITICAL / HIGH / etc.), and pass/fail check rollups.
 - [ ] Render an inline summary: severity counts + the top N findings (file:line, rule-id, message) — not the full dump.
 - [ ] Tell the user where the full report was written and how to view it (e.g. the JSON path, or the HTML via `json-to-html.py`).
-- [ ] Handle the `--strict` non-zero exit code gracefully (a non-zero exit means "findings present", not "scanner crashed").
+- [ ] Disambiguate exit codes correctly: a non-zero exit means "errors found" (always) or "warnings found in `--strict` mode" **or** a real execution failure. Decision rule: if the JSON report exists and parses → summarize findings (non-zero is expected); if JSON is missing/unparseable → treat as a scanner failure and surface stderr. (Exit 124 = timeout, handled in Phase 4.)
 - [ ] Handle empty / clean results with an explicit "no findings" message.
 
 ### QA Checklist — Phase 3
@@ -128,7 +140,8 @@ Goal: turn raw JSON scanner output into a concise, useful summary without floodi
 - [ ] **Context discipline:** Raw multi-hundred-line JSON is never pasted into the conversation; only the summary + path.
 - [ ] **Litmus (findings):** Scan a known-dirty fixture; severity counts match the JSON and top findings are accurate.
 - [ ] **Litmus (clean):** Scan a clean target; skill reports "no findings" and exits cleanly.
-- [ ] **Litmus (strict exit):** `--strict` run with findings is summarized, not reported as a failure/error.
+- [ ] **Litmus (strict exit):** `--strict` run with warnings exits non-zero but is summarized (JSON parsed), not reported as a crash.
+- [ ] **Litmus (real failure):** A genuine scanner failure (no/invalid JSON) is reported as a failure with stderr, not silently summarized as "no findings".
 
 ---
 
@@ -157,6 +170,6 @@ Goal: make the skill reliable on edge cases and document it for the user.
 ## Out of Scope / Deferred <a id="out-of-scope"></a>
 
 - Modifying the scanner (`check-performance.sh`) or its detection rules.
-- Bundling/distributing the skill as a Claude Code **plugin** (marketplace) — this plan ships a user-level skill only; packaging is a future follow-up.
-- Making the skill available on **other devices** — it is intentionally device-local per the request. A portable install step (`install.sh` copies the skill to `~/.claude/skills/`) is a deferred enhancement.
+- Bundling/distributing the skill as a Claude Code **plugin** (marketplace) — this plan ships a personal skill only; packaging is a future follow-up.
+- Making the skill available on **other devices** — it is intentionally device-local per the request. (Note: device-*local* install/update **is** in scope — see Phase 1. What's deferred is cross-device sync and wiring the skill install into the repo's `install.sh`.)
 - Auto-triage / LLM explanation of findings beyond passing `--ai-triage` through to the scanner.
