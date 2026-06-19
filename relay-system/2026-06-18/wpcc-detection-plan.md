@@ -4,9 +4,9 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Producer
+NEXT: Reviewer
 STATUS: Open
-ROUND: 1 / 5
+ROUND: 2 / 5
 
 ## ▶ TAKE YOUR TURN — read this first (works for ANY agent: Claude, Codex, Gemini)
 The operator just said "take your turn on this file." Everything you need is **in this file** — don't wait for pasted instructions.
@@ -79,5 +79,23 @@ The operator just said "take your turn on this file." Everything you need is **i
 - "Should cross-method N+1 ship or defer to BACKLOG?" → Defer to BACKLOG — the current scanner only correlates loop-body calls within a same-file window, not helper call chains.
 - "Is a 4-tier severity matrix right scope or over-engineered?" → Right scope — the scanner already speaks `CRITICAL/HIGH/MEDIUM/LOW`; the missing work is per-finding runtime downgrades.
 **Commit:** none (git metadata write blocked by sandbox; `git commit` failed creating `.git/index.lock`)
+
+### Round 2 · Producer · 2026-06-18 19:36 PDT
+**Verified every Codex claim against source before disposing** — all 4 checkable claims confirmed true: `dist/patterns/php-hardcoded-credentials.json` + `headless/api-key-exposure.json` exist; `EXCLUDE_DIRS` lists `vendor` at `check-performance.sh:146`; `PROJECT/3-COMPLETED/P1-PHP-PARSER.md` exists; `add_json_finding:1460` has a fixed field set with no `runtime_assessment`. The JS-cache Blocker is independently corroborated by the repo's own `cached_grep` PHP-only behavior.
+
+**Decisions on proposals:** (all Accepted — none declined)
+- [Blocker] JS-scan misstated — **Implemented** → Architecture Notes now states the PHP-only `cached_grep` limitation; Phase 1 adds a "JS/TS file path for mixed repos" item as a hard prereq for Phases 3–4 @ Architecture Notes + Phase 1. Proof: textual.
+- [Blocker] cross-fn N+1 not buildable — **Implemented (adopted your "defer" answer)** → routed to AST track (`P1-PHP-PARSER.md`); grep track rescoped to privilege-sim + same-method redundant reloads only @ Phase 5 + scorecard. Proof: textual.
+- [Blocker] omission-diff incomplete — **Implemented** → new "Audit-Item Disposition" section maps all 9 #61 items to this-plan / AST-track / plugin-fix-only; HPOS `o.type` left as author's-call optional heuristic @ new section + ToC. Proof: textual.
+- [Should] Phase 2 "web-reachable" overclaim — **Implemented** → reworded to "likely direct-access candidate"; rule/messages/QA say "candidate," not "proven reachable" @ Phase 2. Proof: textual.
+- [Should] Phase 1 "add vendor exclusion" wrong — **Implemented** → reframed to *leak fix* (EXCLUDE_DIRS already lists vendor @146); trace the bypassed scan path @ Phase 1 + scorecard. Proof: textual.
+- [Should] `runtime_assessment` no JSON contract — **Implemented** → Phase 6 now specifies (a) new field + downstream renderer/triage updates vs (b) fold into `message`, default (a) @ Phase 6. Proof: textual.
+- [Pass] `add_json_finding`/`add_json_check` anchors — acknowledged, no change.
+- [Pass] Phase 3 buildable + existing patterns — **Implemented** → Phase 3 reframed to *extend* `php-hardcoded-credentials.json` + `api-key-exposure.json` @ Phase 3 + scorecard. Proof: textual.
+
+**Did:** synced Gap Scorecard (secret = exists-but-leaks; N+1 → AST; vendor = leak; XSS depends on JS path), Phase 5 QA checklist, and ToC to the new scope.
+**Verification:** N/A — non-executable artifact (planning doc). Each disposition's source claim was verified against the live repo this turn (4/4 confirmed). No scanner code changed — implementation is the plan's job, not this turn's.
+**Re-review this:** (1) Is the Audit-Item Disposition table complete, and are the plugin-fix-only calls right — especially leaving HPOS `o.type` as an optional author's-call heuristic rather than committing it? (2) Does the Phase 1 "JS file path" framing capture the true root cause, or is there a cleaner fix inside the existing `OVERRIDE_GREP_INCLUDE` path? (3) Anything left internally inconsistent after the rerouting?
+**Commit:** 62e5493
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->

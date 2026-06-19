@@ -26,6 +26,7 @@ Source: Empirical gap analysis. WPCC v-current scanned KISS-woo-fast-search and 
 - [Phase 4 — JavaScript DOM-XSS Detection](#phase-4)
 - [Phase 5 — Privilege Simulation & Cross-Method N+1](#phase-5)
 - [Phase 6 — Severity Calibration & Documentation](#phase-6)
+- [Audit-Item Disposition (omission-diff vs #61)](#audit-disposition)
 - [Out of Scope / Deferred](#out-of-scope)
 
 ---
@@ -47,10 +48,10 @@ Two things this plan must fix:
 | 8 test/debug scripts web-reachable, no auth | ❌ no entrypoint check (no `ABSPATH` guard detection) | `php-direct-access-entrypoint` | 2 |
 | `wp_set_current_user(1)` in a shipped script | ❌ none | `php-privilege-simulation` | 5 |
 | Unauth coupon CSV export / data dump | ❌ only flagged `wpdb` prepare | covered by entrypoint + secret/export heuristics | 2, 3 |
-| Real password in `debug-wholesale-orders.js` | ❌ no secret check; JS not scanned for secrets | `secret-hardcoded` (PHP+JS) | 3 |
-| N+1 in `class-kiss-woo-order-formatter.php` | ❌ heuristic is single-function-scoped | `wc-n-plus-one-crossfn` | 5 |
-| XSS: `order.total` unescaped in admin JS | ❌ no JS DOM-XSS check | `js-dom-xss` | 4 |
-| (bonus) vendor/ scanned, false positives | ⚠️ scanned 1,217 files incl. `vendor/` | exclusion fix | 1 |
+| Real password in `debug-wholesale-orders.js` | ⚠️ secret patterns exist (`dist/patterns/…`) but JS not scanned in mixed repos | extend patterns + JS file path | 1, 3 |
+| N+1 in `class-kiss-woo-order-formatter.php` | ❌ heuristic is single-function-scoped | **AST track** (`P1-PHP-PARSER.md`) — not grep | 5→AST |
+| XSS: `order.total` unescaped in admin JS | ❌ no JS DOM-XSS check (and JS not scanned in mixed repos) | `js-dom-xss` + JS file path | 1, 4 |
+| (bonus) vendor/ scanned, false positives | ⚠️ exclusion exists (`EXCLUDE_DIRS`, line 146) but **leaks** | exclusion leak fix | 1 |
 | (bonus) `line 3709: [: : integer expression expected` | ⚠️ runtime bash error during magic-string phase | bug fix | 1 |
 
 ---
@@ -61,7 +62,10 @@ Two things this plan must fix:
 - Findings are emitted via `add_json_finding "rule-id" "severity" "impact" "file" "line" "message" "code" [...]` (line ~1460).
 - Check pass/fail rollups via `add_json_check "Name" "impact" "passed|failed" count` (line ~1596).
 - Detection is validated against **test fixtures** (scan reports `fixture_validation`, currently 20 fixtures). **Every new rule in this plan ships with at least one positive and one negative fixture.**
-- File discovery: `cached_grep` (line ~3440) / `fast_grep` (line ~3392) over a pre-cached PHP file list; JS handled via `OVERRIDE_GREP_INCLUDE` (lines ~3735–3786).
+- File discovery: `cached_grep` (line ~3440) / `fast_grep` (line ~3392) over a pre-cached **PHP-only** file list; it falls back to recursive `grep -r` **only for JS-only projects**. **Consequence (Codex r1):** in a *mixed* PHP+JS repo the JS files are not reliably fed to JS-capable checks — `OVERRIDE_GREP_INCLUDE` (lines ~3735–3786) is not sufficient alone. This is the root cause behind the missed JS password and JS XSS, and a hard prerequisite for Phases 3–4.
+- **Existing infra to extend, not rebuild (Codex r1):** vendor/build exclusion already exists — `EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"` (line 146) — yet the KISS scan still pulled 1,217 files incl. `vendor/`, so Phase 1 is a *leak fix*, not a new exclusion. Secret detection already has pattern files: `dist/patterns/php-hardcoded-credentials.json` and `dist/patterns/headless/api-key-exposure.json` — Phase 3 extends these.
+- `add_json_finding` has a **fixed positional field set** (rule-id, severity, impact, file, line, message, code, guards, sanitizers, guarded, sanitized) — **there is no `runtime_assessment` field**; Phase 6 must define how it is emitted.
+- A completed **AST/PHPStan track** exists (`PROJECT/3-COMPLETED/P1-PHP-PARSER.md`) — interprocedural / nullability / unresolved-symbol analysis belongs there, not in grep. Phase 5's cross-method N+1 is routed to it.
 - Portable timeout wrapper: `run_with_timeout` (line ~1215). `MAX_SCAN_TIME` default 300s.
 
 ---
@@ -71,7 +75,8 @@ Two things this plan must fix:
 
 **Why first:** accuracy of every later phase depends on not scanning `vendor/` and on a clean run. This phase has no new detectors — it removes noise and fixes two known defects.
 
-- [ ] Exclude `vendor/`, `node_modules/`, `dist/`, and build dirs from file discovery (confirm `EXCLUDE_FILES`/path-prune covers directories, not just `*.min.js`).
+- [ ] **Fix the exclusion *leak*, don't "add" exclusion (Codex r1):** `EXCLUDE_DIRS` already lists `vendor node_modules .git tests .next dist build` (line 146) yet the KISS scan pulled 1,217 files incl. `vendor/`. Trace which scan path bypasses `GREP_EXCLUSIONS` (line ~1008) and close it so exclusion holds across `cached_grep`, `fast_grep`, **and** the JS override paths.
+- [ ] **Establish a JS/TS file path for mixed repos (Codex r1):** add a JS/TS file cache or a forced recursive scan for non-PHP checks, because `cached_grep` uses a PHP-only list (see Architecture Notes). **Hard prerequisite for Phases 3–4** — without it, JS detectors silently never run in PHP+JS repos.
 - [ ] Re-scan KISS-woo-fast-search; confirm `files_analyzed` drops from ~1,217 to the plugin's real count and **0 findings reference `vendor/`** (today it false-positives `php-shell-exec-functions` in `nikic/php-parser/.../ShellExec.php`).
 - [ ] Fix `dist/bin/check-performance.sh:3709` `[: : integer expression expected` (guard the numeric comparison against empty/unset values in the magic-string detector).
 - [ ] Add a `--include-vendor` opt-in flag for the rare case a user wants vendor scanned (default OFF).
@@ -89,7 +94,7 @@ Two things this plan must fix:
 <a name="phase-2"></a>
 ## Phase 2 — Direct-Access / Unauthenticated Entrypoint Detection
 
-**Highest-value detector.** A single rule catches all 8 KISS scripts. Flags any `.php` file that is web-reachable and lacks an `ABSPATH`/`WPINC` guard while doing real work (DB, output, side effects).
+**Highest-value detector.** A single rule catches all 8 KISS scripts. Flags any `.php` file that is a **likely direct-access candidate** — lacks an `ABSPATH`/`WPINC` guard while doing real work (DB, output, side effects). **NB (Codex r1):** grep can prove *missing guard + top-level side effects*, **not** actual webserver/route reachability — the rule id, messages, and QA all say **"candidate,"** never "proven reachable."
 
 - [ ] New rule `php-direct-access-entrypoint`: a PHP file under a plugin/theme/mu-plugin root that **does not** contain `defined( 'ABSPATH' ) || exit` (or `if ( ! defined( 'ABSPATH' ) ) exit;`, `WPINC` guard, or a class-only file with no top-level side effects).
 - [ ] Suppress on files that are pure class/function definitions with no top-level executable statements (autoloaded includes are not entrypoints).
@@ -109,9 +114,9 @@ Two things this plan must fix:
 <a name="phase-3"></a>
 ## Phase 3 — Secret & Local-Path Detection (PHP + JS)
 
-Catches the committed password (the single most legitimately serious item in the audit) plus hardcoded emails and developer local paths. **Must scan `.js`, not just `.php`.**
+Catches the committed password (the single most legitimately serious item in the audit) plus hardcoded emails and developer local paths. **Must scan `.js`, not just `.php` — which depends on the Phase 1 JS file path.**
 
-- [ ] New rule `secret-hardcoded`: detect `password`/`passwd`/`pwd`/`secret`/`api[_-]?key`/`token`/`bearer` assigned a non-empty string literal, in `.php` **and** `.js/.ts`.
+- [ ] **Extend the existing detectors, don't rebuild (Codex r1):** `dist/patterns/php-hardcoded-credentials.json` and `dist/patterns/headless/api-key-exposure.json` already exist. Add `password`/`passwd`/`pwd`/`secret`/`token`/`bearer` literal coverage and confirm they actually execute on `.js/.ts` files in a mixed repo (blocked on Phase 1 — this is *why* the JS password was missed, not "no check exists").
 - [ ] Detect hardcoded developer filesystem paths: `/Users/<name>/`, `/home/<name>/`, `C:\\Users\\`, `...Local Sites/...` (info-leak + non-portability signal).
 - [ ] Detect hardcoded personal/role emails used as defaults (`*@<domain>` in benchmark/query defaults).
 - [ ] Entropy/format heuristics to cut false positives (skip obvious placeholders: `your_password_here`, `xxxx`, empty strings, `process.env.*`, `getenv(...)`).
@@ -132,6 +137,8 @@ Catches the committed password (the single most legitimately serious item in the
 
 Catches `order.total` rendered unescaped, and the more telling **inconsistent-escaping** signal (same field escaped elsewhere in the file).
 
+**Depends on Phase 1's JS file path (Codex r1)** — DOM-XSS detection cannot fire if mixed-repo JS files never reach the check.
+
 - [ ] New rule `js-dom-xss`: sink (`.html(`, `.append(`, `.prepend(`, `.before(`, `.after(`, `innerHTML =`, `insertAdjacentHTML`) fed a concatenation containing an unescaped identifier (not wrapped in `escapeHtml`/`esc_html`/`textContent`/`DOMPurify`).
 - [ ] Bonus signal `js-inconsistent-escape`: the same property (e.g. `order.total`) is escaped in one sink and not in another within the same file — high-confidence real bug.
 - [ ] Respect existing `EXCLUDE_FILES` (skip `*.min.js`, bundles).
@@ -149,19 +156,18 @@ Catches `order.total` rendered unescaped, and the more telling **inconsistent-es
 <a name="phase-5"></a>
 ## Phase 5 — Privilege Simulation & Cross-Method N+1
 
-Two heuristics that need light data-flow awareness.
+One heuristic ships in grep (privilege simulation); cross-method N+1 is **routed to the AST track** (Codex r1).
 
-- [ ] New rule `php-privilege-simulation`: `wp_set_current_user(` / `wp_set_auth_cookie(` / `grant_super_admin(` in a non-test runtime file (info: even in tests, flag if file is web-reachable per Phase 2).
-- [ ] Extend N+1 detection `wc-n-plus-one-crossfn`: flag a per-item WC/meta call (`wc_get_order`, `get_post_meta`, `wc_get_product`) inside a method (e.g. `get_edit_url()`) that is itself invoked from a `foreach`/`while` over a result set in another method/file.
-  - [ ] Minimum viable version: flag `wc_get_order($id)` inside a helper when an order object for `$id` was already loaded by the caller (redundant reload) — covers the KISS formatter case without full call-graph analysis.
+- [ ] New rule `php-privilege-simulation`: `wp_set_current_user(` / `wp_set_auth_cookie(` / `grant_super_admin(` in a non-test runtime file (info: even in tests, flag if file is a direct-access candidate per Phase 2).
+- [ ] **Route cross-method N+1 to the AST/PHPStan track (Codex r1):** `PROJECT/3-COMPLETED/P1-PHP-PARSER.md`, **not** grep. The current WC N+1 rule (`dist/bin/check-performance.sh:~5678-5726`) only inspects same-file loop windows; interprocedural call chains (helper → loop in another method/file) are outside grep's reach. Add a BACKLOG item under that track.
+- [ ] **Grep-track scope stays narrow:** privilege simulation + at most **same-*method* redundant reloads** (e.g. `wc_get_order($id)` when an order for `$id` is already in scope in the same function). Do **not** attempt cross-file call-graph in bash.
 - [ ] Fixtures: (+) `wp_set_current_user(1)` in a root script; (+) helper calling `wc_get_order` invoked inside a formatter loop; (−) `wc_get_order` called once outside any loop.
 
 ### QA Checklist — Phase 5
-- [ ] **Litmus:** re-scan KISS → `test-wholesale-ajax.php:8` flagged for privilege simulation; `class-kiss-woo-order-formatter.php:115` flagged for cross-method N+1.
+- [ ] **Litmus (grep track):** re-scan KISS → `test-wholesale-ajax.php:8` flagged for privilege simulation. (Cross-method N+1 in `class-kiss-woo-order-formatter.php:115` is verified on the **AST track**, not here.)
 - [ ] **Precision:** legitimate single `wc_get_order()` calls and admin-context `wp_set_current_user` in genuine CLI tools are not over-flagged (severity calibrated, see Phase 6).
-- [ ] **Observability:** N+1 finding names the calling loop site, not just the helper line.
-- [ ] **Complexity guard:** cross-fn heuristic has a bounded search (no full-repo call graph); document the boundary and what it will miss.
-- [ ] **False-negative honesty:** BACKLOG entry lists N+1 shapes still uncaught.
+- [ ] **Scope honesty:** the grep track makes no cross-file N+1 claim; the routed AST item is linked from BACKLOG.
+- [ ] **False-negative honesty:** BACKLOG entry lists N+1 shapes still uncaught and which track owns them.
 
 ---
 
@@ -172,7 +178,7 @@ The audit's lesson: a finding is only useful if its severity is defensible. A WP
 
 - [ ] Add bootstrap/portability awareness to Phase 2/5 findings: detect `Run with: wp eval-file`, hardcoded non-portable `require` paths, or missing WP bootstrap → annotate as `runtime: inert-on-standard-host (delete for hygiene)` vs `runtime: live-entrypoint`.
 - [ ] Define a severity matrix: committed secret = HIGH (rotation); live unauth entrypoint w/ data output = HIGH/CRITICAL; inert dev script = MEDIUM (delete); local-path leak = LOW.
-- [ ] Emit a one-line `runtime_assessment` per entrypoint finding so a triager sees exploitability, not just pattern presence.
+- [ ] Define the `runtime_assessment` **output contract (Codex r1 — `add_json_finding` has a fixed field set with no such field):** either (a) add a new optional positional arg + JSON key to `add_json_finding` **and** update the HTML/markdown report renderers and any downstream triage consumers, or (b) fold it into the existing `message` string. Default to (a) for machine-readability; enumerate the downstream changes it requires.
 - [ ] Update `CHANGELOG.md` (`[Unreleased]`) with all new rules.
 - [ ] Update `PROJECT/2-WORKING/BACKLOG.md` with deferred items (full call-graph N+1, taint tracking, secret entropy tuning).
 - [ ] Move this plan to `PROJECT/3-COMPLETED/` with a completion date when all phases land.
@@ -184,6 +190,25 @@ The audit's lesson: a finding is only useful if its severity is defensible. A WP
 - [ ] **Regression lock:** KISS fixtures wired into the fixture suite; CI/`fixture_validation` count increases accordingly.
 - [ ] **Self-audit:** run WPCC on WPCC's own repo — no new false positives introduced by the new rules.
 - [ ] **Bottom-line:** a one-paragraph "what changed and what it now catches" summary is added to the report header or README.
+
+---
+
+<a name="audit-disposition"></a>
+## Audit-Item Disposition (omission-diff vs #61)
+
+Codex r1 flagged that three audit items were named in the relay but given no home. Every issue #61 finding now has an explicit disposition:
+
+| Issue #61 item | Disposition |
+|---|---|
+| 8 public scripts / no auth | **This plan** — Phase 2 |
+| `wp_set_current_user(1)` | **This plan** — Phase 5 |
+| Committed secret / emails / local paths | **This plan** — Phase 3 (extends existing patterns) |
+| JS DOM-XSS (`order.total`) | **This plan** — Phase 4 (+ Phase 1 JS path) |
+| N+1 in order formatter | **AST track** (`P1-PHP-PARSER.md`) — routed out of grep |
+| HPOS query missing `o.type = 'shop_order'` | **Plugin-fix-only** by default; an *optional* narrow SQL alias-misuse heuristic is the author's call — **not** committed here |
+| `$parts[0]` access w/o empty-array guard | **Plugin-fix-only** — array-bounds is an AST/PHPStan concern, not a grep rule |
+| Toolbar `floatingSearchBar` null-guard | **Plugin-fix-only** — JS null-deref is out of WPCC's current scope |
+| Pagination dead handler / undefined fn | **Plugin-fix-only** — unresolved-symbol analysis is out of scope (AST track candidate) |
 
 ---
 
