@@ -145,7 +145,7 @@ HTTP_TIMEOUT_BACKWARD_LINES=20
 # Note: 'tests' exclusion is dynamically removed when --paths targets a tests directory
 EXCLUDE_DIRS="vendor node_modules .git tests .next dist build"
 EXCLUDE_FILES="*.min.js *bundle*.js *.min.css"
-DEFAULT_FIXTURE_VALIDATION_COUNT=20  # Number of fixtures to validate by default (can be overridden)
+DEFAULT_FIXTURE_VALIDATION_COUNT=30  # Number of fixtures to validate by default (can be overridden)
 SKIP_CLONE_DETECTION=false  # Clone detection runs by default (use --skip-clone-detection to disable)
 SKIP_MAGIC_STRINGS=false    # Magic String Detector runs by default (use --skip-magic-strings to disable)
 
@@ -1029,7 +1029,13 @@ json_escape() {
 # Count PHP files in scan path
 count_analyzed_files() {
   local scan_path="$1"
-  find "$scan_path" -name "*.php" -type f 2>/dev/null | wc -l | tr -d '[:space:]'
+  # Honor EXCLUDE_DIRS (vendor/node_modules/etc.) so the reported count matches
+  # what is actually scanned — otherwise vendor inflates files_analyzed.
+  if [ -n "$GREP_EXCLUSIONS" ]; then
+    sh -c "find '$scan_path' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" | wc -l | tr -d '[:space:]'
+  else
+    find "$scan_path" -name "*.php" -type f 2>/dev/null | wc -l | tr -d '[:space:]'
+  fi
 }
 
 # Count total lines of code in PHP files
@@ -1039,8 +1045,13 @@ count_lines_of_code() {
   
   # Use find + wc for efficient line counting
   if command -v find &> /dev/null && command -v wc &> /dev/null; then
-    # Count lines in all PHP files, sum the results
-    total_lines=$(find "$scan_path" -name "*.php" -type f -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' 2>/dev/null || echo "0")
+    if [ -n "$GREP_EXCLUSIONS" ]; then
+      # Honor EXCLUDE_DIRS; sum per-file to stay robust on empty lists and spaced paths
+      total_lines=$(sh -c "find '$scan_path' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" | while IFS= read -r f; do wc -l < "$f" 2>/dev/null; done | awk '{s+=$1} END{print s+0}')
+    else
+      # Count lines in all PHP files, sum the results
+      total_lines=$(find "$scan_path" -name "*.php" -type f -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' 2>/dev/null || echo "0")
+    fi
   fi
   
   # Ensure we return a number
@@ -1457,7 +1468,10 @@ fi
 # ============================================================================
 
 # Add a finding to the JSON findings array
-# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"] ["guarded_bool"] ["sanitized_bool"]
+# Usage: add_json_finding "rule-id" "error|warning" "CRITICAL|HIGH|MEDIUM|LOW" "file" "line" "message" "code_snippet" ["guards"] ["sanitizers"] ["guarded_bool"] ["sanitized_bool"] ["runtime_assessment"]
+# runtime_assessment (optional, 12th arg): one-line exploitability note for severity
+#   calibration, e.g. "inert-on-standard-host" / "live-entrypoint". JSON string when
+#   set, else null. Report renderers/triage display is wired in Phase 6.
 # Phase 2 Enhancement: Optional guards/sanitizers context arrays; Phase 2.2: optional guarded/sanitized booleans for downstream consumers
 add_json_finding() {
   local rule_id="$1"
@@ -1471,6 +1485,7 @@ add_json_finding() {
   local sanitizers="${9:-}"  # Optional: space-separated list of detected sanitizers
   local guarded_flag="${10:-}"     # Optional: "true"/"false" when guarded status is known
   local sanitized_flag="${11:-}"   # Optional: "true"/"false" when sanitized status is known
+  local runtime_assessment="${12:-}"  # Optional: one-line exploitability note (e.g. "inert-on-standard-host", "live-entrypoint")
 
   # Truncate code snippet to 200 characters for display
   local truncated_code="$code"
@@ -1585,8 +1600,16 @@ add_json_finding() {
     fi
   fi
 
+  # Optional one-line runtime exploitability assessment (severity calibration).
+  # Emitted as a JSON string when provided, else null — so existing rules stay
+  # schema-compatible and consumers (report renderers, AI triage) feature-detect it.
+  local runtime_json="null"
+  if [ -n "$runtime_assessment" ]; then
+    runtime_json="\"$(json_escape "$runtime_assessment")\""
+  fi
+
   local finding=$(cat <<EOF
-{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json,"guarded":$guarded_json,"sanitized":$sanitized_json}
+{"id":"$(json_escape "$rule_id")","severity":"$severity","impact":"$impact","file":"$(json_escape "$file")","line":$line,"message":"$(json_escape "$message")","code":"$(json_escape "$truncated_code")","context":$context_json,"guards":$guards_json,"sanitizers":$sanitizers_json,"guarded":$guarded_json,"sanitized":$sanitized_json,"runtime_assessment":$runtime_json}
 EOF
 )
   JSON_FINDINGS+=("$finding")
@@ -2234,6 +2257,33 @@ run_fixture_validation() {
     "wp-user-query-meta-bloat.php:new WP_User_Query:1"
     "limit-multiplier-from-count.php:count( \$user_ids ):1"
     "array-merge-in-loop.php:array_merge:1"
+
+    # php-direct-access-entrypoint fixtures
+    # (+) unguarded $wpdb work at top level — must be flagged; confirm escalator pattern present
+    "php-direct-access-entrypoint-wpdb.php:wpdb->get_results:1"
+    # (+) portable wp-load.php bootstrap with no guard — must be flagged (escalated); confirm bootstrap pattern present
+    "php-direct-access-entrypoint-wpload.php:wp-load.php:1"
+    # (−) class-only include — confirm the class definition is present (file integrity check)
+    "php-direct-access-entrypoint-class-only.php:class My_Class_Only:1"
+    # (−) guarded file — confirm the ABSPATH guard is present (file integrity check)
+    "php-direct-access-entrypoint-guarded.php:defined( 'ABSPATH' ) || exit:1"
+
+    # P3/P4 (issue #61) fixtures — integrity checks. Real detection is proven by
+    # the per-fixture scanner runs in the acceptance battery, not by these greps.
+    # (+) committed credential literal present in JS secret fixture
+    "js-secret-literal.js:Wholesale:1"
+    # (+) hardcoded macOS dev path present in PHP local-path fixture
+    "dev-local-path-leak.php:/Users/dev/Local Sites:1"
+    # (+) hardcoded Linux dev path present in JS local-path fixture
+    "dev-local-path-leak.js:/home/deploy:1"
+    # (+) DOM-XSS sink data present in js-dom-xss fixture
+    "js-dom-xss.js:order.total:1"
+
+    # P5 (issue #61) privilege-simulation fixtures — integrity checks
+    # (+) unguarded privilege escalation present (per-fixture scan proves HIGH/unauthenticated)
+    "php-privilege-simulation-unguarded.php:wp_set_current_user:1"
+    # (+) guarded privilege simulation present (per-fixture scan proves MEDIUM/runtime)
+    "php-privilege-simulation-guarded.php:wp_set_current_user:1"
   )
 
   local fixture_count="$default_fixture_count"
@@ -2818,7 +2868,7 @@ process_aggregated_pattern() {
   local matches
   local grep_exit_code=0
 
-  if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+  if [ "${PHP_FILE_COUNT:-0}" -eq 1 ]; then
     # Single file - use direct grep
     matches=$(run_with_timeout "$MAX_SCAN_TIME" grep -Hn $include_args -E "$pattern_search" "$PHP_FILE_LIST" 2>/dev/null) || grep_exit_code=$?
   else
@@ -3455,8 +3505,8 @@ run_check() {
   # When there are no PHP files (e.g., JS/Node-only projects), fall back
   # to recursive grep over the original paths so JS/headless patterns
   # still run.
-  if [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
-    if [ "$PHP_FILE_COUNT" -eq 1 ]; then
+  if [ "${PHP_FILE_COUNT:-0}" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+    if [ "${PHP_FILE_COUNT:-0}" -eq 1 ]; then
       result=$(grep -Hn $include_args $patterns "$PHP_FILE_LIST" 2>/dev/null) || true
     else
       result=$(cat "$PHP_FILE_LIST" | xargs grep -Hn $include_args $patterns 2>/dev/null) || true
@@ -3593,7 +3643,7 @@ else
 
   PHP_FILE_COUNT=$(wc -l < "$PHP_FILE_LIST_CACHE" | tr -d ' ')
 
-  if [ "$PHP_FILE_COUNT" -eq 0 ]; then
+  if [ "${PHP_FILE_COUNT:-0}" -eq 0 ]; then
     # Relaxed PHP gate: it's valid to have JS/Node-only projects.
     # We log for debugging but do not exit, so JS/Node/Headless checks can still run.
     debug_echo "No PHP files found in: $PATHS"
@@ -3607,14 +3657,56 @@ else
   fi
 fi
 
+# ============================================================================
+# JS/TS FILE LIST CACHE (mixed-repo support)
+# ============================================================================
+# PHP_FILE_LIST above is PHP-only. JS-capable checks (secret scan, DOM-XSS) must
+# scan JS/TS files, which in a mixed PHP+JS repo are otherwise never reached
+# (cached_grep over the PHP-only list silently matches nothing). Build a parallel
+# JS file list honoring EXCLUDE_DIRS and skipping minified/bundled files. Consumed
+# by js_cached_grep(); single-file paths are handled directly in that function.
+JS_FILE_LIST=""
+JS_FILE_COUNT=0
+JS_FILE_LIST_CACHE=""
+if [ ! -f "$PATHS" ]; then
+  JS_FILE_LIST_CACHE=$(mktemp)
+  if [ -n "$GREP_EXCLUSIONS" ]; then
+    sh -c "find '$PATHS' \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \) -type f 2>/dev/null | $GREP_EXCLUSIONS" | grep -vE '(\.min\.js|bundle[^/]*\.js)$' > "$JS_FILE_LIST_CACHE"
+  else
+    find "$PATHS" \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \) -type f 2>/dev/null | grep -vE '(\.min\.js|bundle[^/]*\.js)$' > "$JS_FILE_LIST_CACHE"
+  fi
+  JS_FILE_COUNT=$(wc -l < "$JS_FILE_LIST_CACHE" | tr -d ' ')
+  if [ "${JS_FILE_COUNT:-0}" -eq 0 ]; then
+    rm -f "$JS_FILE_LIST_CACHE"
+    JS_FILE_LIST=""
+  else
+    debug_echo "Cached $JS_FILE_COUNT JS/TS files"
+    JS_FILE_LIST="$JS_FILE_LIST_CACHE"
+  fi
+fi
+
 # Cleanup function to remove cache on exit
 cleanup_php_cache() {
   if [ -n "$PHP_FILE_LIST_CACHE" ] && [ -f "$PHP_FILE_LIST_CACHE" ]; then
     rm -f "$PHP_FILE_LIST_CACHE"
     debug_echo "Cleaned up PHP file cache"
   fi
+  if [ -n "$JS_FILE_LIST_CACHE" ] && [ -f "$JS_FILE_LIST_CACHE" ]; then
+    rm -f "$JS_FILE_LIST_CACHE"
+    debug_echo "Cleaned up JS file cache"
+  fi
 }
 trap cleanup_php_cache EXIT
+
+# Default file-type include filters for the JS/PHP source rules below. These
+# restrict the grep -r FALLBACK path (used when a cached file list is
+# unavailable — restricted temp dir, JS-only repo, etc.) to source files only;
+# without them the fallback scans .md/.html/.py/.json and produces false
+# positives (observed on a real plugin tree polluted with audit reports). They
+# are IGNORED on the cached xargs path (explicit file args), so passing them
+# always is safe in both modes.
+JS_INCLUDE="--include=*.js --include=*.jsx --include=*.ts --include=*.tsx"
+PHP_INCLUDE="--include=*.php"
 
 # ============================================================================
 # OPTIMIZED GREP FUNCTION
@@ -3660,7 +3752,7 @@ fast_grep() {
       cat "$PHP_FILE_LIST" | xargs grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
     else
       # Fallback to recursive grep if cache not available
-      grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+      grep -rHn $EXCLUDE_ARGS "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
     fi
   fi
 }
@@ -3706,7 +3798,7 @@ cached_grep() {
   # recursive grep on the original paths. This lets JS/Node-only repos
   # (no PHP files) still be scanned safely without depending on the
   # PHP_FILE_LIST cache.
-  elif [ "$PHP_FILE_COUNT" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+  elif [ "${PHP_FILE_COUNT:-0}" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
     # Use cached file list with xargs for parallel processing
     # -Hn adds filename and line number (like -rHn but without recursion)
     # FIX v2.2.3: Use null-delimited input (tr '\n' '\0') with xargs -0
@@ -3715,7 +3807,39 @@ cached_grep() {
     tr '\n' '\0' < "$PHP_FILE_LIST" | xargs -0 grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
   else
     # No PHP cache (e.g., JS-only project). Fall back to recursive grep.
-    grep -rHn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+    grep -rHn $EXCLUDE_ARGS "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+  fi
+}
+
+# ============================================================================
+# JS/TS GREP HELPER (mixed-repo aware)
+# ============================================================================
+# Like cached_grep(), but scans the JS/TS file list (JS_FILE_LIST) instead of the
+# PHP one — so JS-targeted checks (secret scan, DOM-XSS) actually run in mixed
+# PHP+JS repos. Same calling convention: js_cached_grep [grep_options] pattern
+js_cached_grep() {
+  local grep_args=()
+  local pattern=""
+
+  while [ $# -gt 0 ]; do
+    if [ $# -eq 1 ]; then
+      pattern="$1"
+      shift
+    else
+      grep_args+=("$1")
+      shift
+    fi
+  done
+
+  if [ -f "$PATHS" ]; then
+    # Single file mode: scan it directly (caller owns the extension choice).
+    grep -Hn "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
+  elif [ "${JS_FILE_COUNT:-0}" -gt 0 ] && [ -n "$JS_FILE_LIST" ] && [ -f "$JS_FILE_LIST" ]; then
+    # Null-delimited to survive paths with spaces (e.g. "/Users/name/Local Sites/...").
+    tr '\n' '\0' < "$JS_FILE_LIST" | xargs -0 grep -Hn "${grep_args[@]}" "$pattern" 2>/dev/null || true
+  else
+    # No JS cache (e.g. PHP-only repo). Fall back to recursive grep with exclusions.
+    grep -rHn $EXCLUDE_ARGS "${grep_args[@]}" "$pattern" "$PATHS" 2>/dev/null || true
   fi
 }
 
@@ -4548,6 +4672,445 @@ if [ "$AJAX_NONCE_FAIL" = true ]; then
 else
   text_echo "${GREEN}  ✓ Passed${NC}"
   add_json_check "wp_ajax handlers without nonce validation" "$AJAX_NONCE_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Direct-Access / Unauthenticated Entrypoint Detection
+# Rule: php-direct-access-entrypoint
+# Flags .php files that lack an ABSPATH/WPINC guard while performing real work
+# (DB access, output, WP bootstrap, file I/O) at the top level.
+#
+# Suppression: pure class/function-definition files are skipped (no top-level
+# executable statements).
+#
+# Escalators (raise impact + record in message):
+#   wp-load    — file bootstraps WP via require/include of wp-load.php
+#   db         — top-level $wpdb usage
+#   output     — top-level echo / print_r
+#   file-io    — top-level fopen / fputcsv
+#   privilege  — top-level wp_set_current_user
+#
+# Severity calibration (runtime_assessment):
+#   live-entrypoint          — portable wp-load.php bootstrap found → HIGH
+#   inert-on-standard-host   — non-portable hardcoded path OR no WP bootstrap → MEDIUM
+#   direct-access-candidate  — escalators present but no bootstrap detected → HIGH
+# ============================================================================
+
+DIRECT_ACCESS_SEVERITY=$(get_severity "php-direct-access-entrypoint" "HIGH")
+DIRECT_ACCESS_COLOR="${YELLOW}"
+if [ "$DIRECT_ACCESS_SEVERITY" = "CRITICAL" ] || [ "$DIRECT_ACCESS_SEVERITY" = "HIGH" ]; then DIRECT_ACCESS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ PHP direct-access entrypoint candidates (no ABSPATH guard) ${DIRECT_ACCESS_COLOR}[$DIRECT_ACCESS_SEVERITY]${NC}"
+DIRECT_ACCESS_FAIL=false
+DIRECT_ACCESS_FINDING_COUNT=0
+
+# Collect all PHP files that do NOT contain an ABSPATH/WPINC guard.
+# We search for files that DO have the guard, then invert — this is cheaper
+# than per-file negative grep in a large tree.
+# SAFEGUARD: "$PATHS" MUST be quoted - paths with spaces will break otherwise
+# Anchored to the start of a code line (optionally after `<?php`, `if (`, `!`) so a
+# guard mention inside a docblock/comment (e.g. "// no defined('ABSPATH') guard")
+# does NOT count as a real guard — that would falsely suppress the finding.
+GUARDED_FILES=$(run_with_timeout "$MAX_SCAN_TIME" grep -rlnE $EXCLUDE_ARGS --include="*.php" \
+  -e "^[[:space:]]*(<\?php[[:space:]]+)?(if[[:space:]]*\([[:space:]]*)?!?[[:space:]]*defined[[:space:]]*\([[:space:]]*['\"]ABSPATH['\"]" \
+  -e "^[[:space:]]*(<\?php[[:space:]]+)?(if[[:space:]]*\([[:space:]]*)?!?[[:space:]]*defined[[:space:]]*\([[:space:]]*['\"]WPINC['\"]" \
+  "$PATHS" 2>/dev/null || true)
+
+# Build the full PHP file list for this check (respects PHP_FILE_LIST cache)
+DA_ALL_FILES=""
+if [ -f "$PATHS" ]; then
+  DA_ALL_FILES="$PATHS"
+elif [ "${PHP_FILE_COUNT:-0}" -gt 0 ] && [ -n "$PHP_FILE_LIST" ] && [ -f "$PHP_FILE_LIST" ]; then
+  DA_ALL_FILES=$(cat "$PHP_FILE_LIST" 2>/dev/null || true)
+elif [ -n "$GREP_EXCLUSIONS" ]; then
+  # Fallback when the PHP cache is not visible in this context — still honor
+  # EXCLUDE_DIRS so vendor/node_modules/etc. never leak into entrypoint findings.
+  DA_ALL_FILES=$(run_with_timeout "$MAX_SCAN_TIME" sh -c "find '$PATHS' -name '*.php' -type f 2>/dev/null | $GREP_EXCLUSIONS" || true)
+else
+  DA_ALL_FILES=$(run_with_timeout "$MAX_SCAN_TIME" find "$PATHS" -name "*.php" -type f 2>/dev/null || true)
+fi
+
+if [ -n "$DA_ALL_FILES" ]; then
+  # SAFEGUARD: Use safe_file_iterator() for file paths that may contain spaces
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    # Skip if this file has a guard
+    if echo "$GUARDED_FILES" | grep -qxF "$file"; then
+      continue
+    fi
+
+    if should_suppress_finding "php-direct-access-entrypoint" "$file"; then
+      continue
+    fi
+
+    # Read file content once for all pattern checks below
+    file_content=$(cat "$file" 2>/dev/null || true)
+    [ -z "$file_content" ] && continue
+
+    # ------------------------------------------------------------------
+    # Escalator detection — check which risk signals are present at the
+    # file level. These serve dual purpose: (a) measure real-world impact
+    # and (b) suppress pure class/function-definition files that have no
+    # top-level executable statements (an autoloaded include with only a
+    # class body will fire no escalator and is silently skipped below).
+    # ------------------------------------------------------------------
+    escalators=""
+    escalator_notes=""
+
+    # Escalator: WP bootstrap via wp-load.php
+    bootstrap_portable=false
+    bootstrap_nonportable=false
+    if echo "$file_content" | grep -qE "(require|include)(_once)?[^;]*wp-load\.php"; then
+      # Portable path (relative / dirname / ABSPATH-derived) vs hardcoded local path.
+      # Non-portable = the wp-load require also names a developer-local absolute path.
+      if echo "$file_content" | grep -qE "(require|include)(_once)?[^;]*(/Users/|/home/[^/]+/|Local Sites/)[^;]*wp-load\.php"; then
+        bootstrap_nonportable=true
+        escalators="${escalators} wp-load-nonportable"
+        escalator_notes="${escalator_notes} bootstraps-WP(non-portable-path)"
+      else
+        bootstrap_portable=true
+        escalators="${escalators} wp-load"
+        escalator_notes="${escalator_notes} bootstraps-WP(portable)"
+      fi
+    fi
+
+    # Escalator: $wpdb usage anywhere in file (class methods included —
+    # a class that directly calls $wpdb without being loaded through WP is
+    # an entrypoint concern if the file itself lacks a guard)
+    if echo "$file_content" | grep -qE '\$wpdb->'; then
+      escalators="${escalators} db"
+      escalator_notes="${escalator_notes} wpdb-access"
+    fi
+
+    # Escalator: output statements (echo / print_r)
+    if echo "$file_content" | grep -qE '(^|;)[[:space:]]*(echo|print_r)[[:space:](]'; then
+      escalators="${escalators} output"
+      escalator_notes="${escalator_notes} outputs-data"
+    fi
+
+    # Escalator: file I/O
+    if echo "$file_content" | grep -qE '(fopen|fputcsv|file_put_contents)[[:space:](]'; then
+      escalators="${escalators} file-io"
+      escalator_notes="${escalator_notes} file-io"
+    fi
+
+    # Escalator: privilege simulation
+    if echo "$file_content" | grep -qE 'wp_set_current_user[[:space:](]'; then
+      escalators="${escalators} privilege"
+      escalator_notes="${escalator_notes} sets-current-user"
+    fi
+
+    # Trim leading space from notes
+    escalator_notes="${escalator_notes# }"
+    escalators="${escalators# }"
+
+    # ------------------------------------------------------------------
+    # Suppression: if NO escalator fired, this file has none of the
+    # interesting side-effect patterns — skip it (pure definitions,
+    # config arrays, etc. are not entrypoint candidates).
+    # ------------------------------------------------------------------
+    if [ -z "$escalators" ]; then
+      continue
+    fi
+
+    # ------------------------------------------------------------------
+    # Severity calibration + runtime_assessment
+    # ------------------------------------------------------------------
+    finding_severity="$DIRECT_ACCESS_SEVERITY"
+    runtime_assessment="direct-access-candidate"
+
+    if [ "$bootstrap_portable" = true ]; then
+      finding_severity="HIGH"
+      runtime_assessment="live-entrypoint"
+    elif [ "$bootstrap_nonportable" = true ]; then
+      finding_severity="MEDIUM"
+      runtime_assessment="inert-on-standard-host"
+    else
+      finding_severity="$DIRECT_ACCESS_SEVERITY"
+      runtime_assessment="direct-access-candidate"
+    fi
+
+    # ------------------------------------------------------------------
+    # Build message
+    # ------------------------------------------------------------------
+    if [ -n "$escalator_notes" ]; then
+      da_message="Direct-access entrypoint candidate: no ABSPATH/WPINC guard found. Escalators: ${escalator_notes}. An unauthenticated HTTP request can reach this file and trigger the flagged operations. Add defined(ABSPATH)||exit at the top, or move the file outside the webroot."
+    else
+      da_message="Direct-access entrypoint candidate: no ABSPATH/WPINC guard found. File contains top-level executable statements reachable via direct HTTP request. Add defined(ABSPATH)||exit at the top, or move the file outside the webroot."
+    fi
+
+    # Use line 1 as the finding location (the missing guard belongs at the top)
+    da_line=1
+    da_code=$(echo "$file_content" | head -5 | tr '\n' ' ')
+
+    text_echo "  $file:$da_line [escalators: ${escalators:-none}] $runtime_assessment"
+    add_json_finding "php-direct-access-entrypoint" "error" "$finding_severity" \
+      "$file" "$da_line" "$da_message" "$da_code" \
+      "" "" "" "" "$runtime_assessment"
+
+    DIRECT_ACCESS_FAIL=true
+    ((DIRECT_ACCESS_FINDING_COUNT++))
+  done < <(safe_file_iterator "$DA_ALL_FILES")
+fi
+
+if [ "$DIRECT_ACCESS_FAIL" = true ]; then
+  if [ "$DIRECT_ACCESS_SEVERITY" = "CRITICAL" ] || [ "$DIRECT_ACCESS_SEVERITY" = "HIGH" ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"
+    ((ERRORS++))
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"
+    ((WARNINGS++))
+  fi
+  add_json_check "PHP direct-access entrypoint candidates" "$DIRECT_ACCESS_SEVERITY" "failed" "$DIRECT_ACCESS_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "PHP direct-access entrypoint candidates" "$DIRECT_ACCESS_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: js-secret-literal  (issue #61, Phase 3)
+# ============================================================================
+# Flags committed plaintext credentials in JS/TS source: a credential keyword
+# assigned a quoted literal of >=8 realistic chars. Distinct from
+# headless/api-key-exposure.json (NEXT_PUBLIC client-bundle exposure) — this
+# catches dev/debug scripts that hardcode a real password/token (e.g. the
+# committed password in KISS debug-wholesale-orders.js).
+#
+# Runs on the JS/TS file list (js_cached_grep) so it works in mixed PHP+JS
+# repos. Two-stage: grep for credential-literal assignments, then filter env
+# reads and obvious placeholders inline (the JS direct runner has no exclude
+# support). Committed secrets persist in git history → the message says ROTATE.
+# ============================================================================
+JS_SECRET_SEVERITY=$(get_severity "js-secret-literal" "HIGH")
+JS_SECRET_COLOR="${YELLOW}"
+if [ "$JS_SECRET_SEVERITY" = "CRITICAL" ] || [ "$JS_SECRET_SEVERITY" = "HIGH" ]; then JS_SECRET_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ Committed secrets in JS/TS (hardcoded credential literals) ${JS_SECRET_COLOR}[$JS_SECRET_SEVERITY]${NC}"
+JS_SECRET_FAIL=false
+JS_SECRET_FINDING_COUNT=0
+
+# Credential keyword (any case) assigned a quoted literal of >=8 chars, ':' or '=' form.
+JS_SECRET_MATCHES=$(js_cached_grep $JS_INCLUDE -iE \
+  "(password|passwd|pwd|secret|api_?key|access_?token|auth_?token|client_?secret|private_?key)[\"']?[[:space:]]*[:=][[:space:]]*['\"][^'\"]{8,}['\"]" \
+  || true)
+
+if [ -n "$JS_SECRET_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+
+    # Filter: environment reads (value is injected, not hardcoded)
+    if echo "$code" | grep -qE "process\.env|import\.meta\.env|getenv"; then
+      continue
+    fi
+    # Filter: obvious placeholders / examples (case-insensitive)
+    if echo "$code" | grep -qiE "your_|_here|yourkey|example|changeme|change-me|placeholder|dummy|sample|redacted|xxxx|<[^>]+>|\*\*\*"; then
+      continue
+    fi
+    if should_suppress_finding "js-secret-literal" "$file"; then
+      continue
+    fi
+
+    js_secret_msg="Hardcoded credential literal in client/source JS. Move to a server-side env var or secure config. ROTATE the value — committed secrets persist in git history; deletion alone is insufficient."
+    text_echo "  ${JS_SECRET_COLOR}→ $file:$line${NC}"
+    add_json_finding "js-secret-literal" "error" "$JS_SECRET_SEVERITY" \
+      "$file" "$line" "$js_secret_msg" "$code" \
+      "" "" "" "" "committed-secret-rotate-required"
+    JS_SECRET_FAIL=true
+    ((JS_SECRET_FINDING_COUNT++))
+  done <<< "$JS_SECRET_MATCHES"
+fi
+
+if [ "$JS_SECRET_FAIL" = true ]; then
+  text_echo "${RED}  ✗ FAILED${NC}"
+  ((ERRORS++))
+  add_json_check "Committed secrets in JS/TS" "$JS_SECRET_SEVERITY" "failed" "$JS_SECRET_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Committed secrets in JS/TS" "$JS_SECRET_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: dev-local-path-leak  (issue #61, Phase 3)
+# ============================================================================
+# Flags hardcoded developer filesystem paths in PHP or JS source:
+#   /Users/<name>/ , /home/<name>/ , .../Local Sites/...
+# These leak the build environment, break portability, and are the signal that
+# a "dev/debug" script was committed. LOW severity (hygiene/info leak) — not an
+# exploit by itself. Scans PHP (cached_grep) AND JS (js_cached_grep); sort -u
+# dedupes when a single-file scan hits both helpers.
+# ============================================================================
+LOCALPATH_SEVERITY=$(get_severity "dev-local-path-leak" "LOW")
+text_echo "${BLUE}▸ Hardcoded developer local paths (PHP + JS) ${YELLOW}[$LOCALPATH_SEVERITY]${NC}"
+LOCALPATH_FAIL=false
+LOCALPATH_FINDING_COUNT=0
+
+LOCALPATH_PATTERN="(/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/|Local Sites/)"
+LOCALPATH_MATCHES=$( { cached_grep $PHP_INCLUDE -E "$LOCALPATH_PATTERN"; js_cached_grep $JS_INCLUDE -E "$LOCALPATH_PATTERN"; } 2>/dev/null | sort -u || true)
+
+if [ -n "$LOCALPATH_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+    if should_suppress_finding "dev-local-path-leak" "$file"; then
+      continue
+    fi
+    localpath_msg="Hardcoded developer filesystem path. Leaks the build environment and breaks portability (the file will fatal or misbehave on any other host). Use relative paths, plugin/theme path helpers, or ABSPATH."
+    text_echo "  ${YELLOW}→ $file:$line${NC}"
+    add_json_finding "dev-local-path-leak" "warning" "$LOCALPATH_SEVERITY" \
+      "$file" "$line" "$localpath_msg" "$code"
+    LOCALPATH_FAIL=true
+    ((LOCALPATH_FINDING_COUNT++))
+  done <<< "$LOCALPATH_MATCHES"
+fi
+
+if [ "$LOCALPATH_FAIL" = true ]; then
+  text_echo "${YELLOW}  ⚠ WARNING${NC}"
+  ((WARNINGS++))
+  add_json_check "Hardcoded developer local paths" "$LOCALPATH_SEVERITY" "failed" "$LOCALPATH_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "Hardcoded developer local paths" "$LOCALPATH_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: js-dom-xss  (issue #61, Phase 4)
+# ============================================================================
+# Flags DOM-XSS sinks fed unescaped, dynamically-built HTML in JS/TS:
+#   .html()/.append()/.prepend()/.before()/.after()/.replaceWith()/.wrap() with
+#   a quoted string concatenated (+) to an expression, OR
+#   innerHTML/outerHTML = <bare identifier or concatenation>, OR
+#   insertAdjacentHTML(pos, '<...>' + expr)
+# Two-stage: match HTML-building sinks, then drop lines that route through a
+# recognised escaper (escapeHtml/esc_html/DOMPurify/textContent/.text()/encodeURI).
+# Catches the KISS order.total-unescaped case; .text()/escaped sinks stay clean.
+# ============================================================================
+JS_XSS_SEVERITY=$(get_severity "js-dom-xss" "HIGH")
+JS_XSS_COLOR="${YELLOW}"
+if [ "$JS_XSS_SEVERITY" = "CRITICAL" ] || [ "$JS_XSS_SEVERITY" = "HIGH" ]; then JS_XSS_COLOR="${RED}"; fi
+text_echo "${BLUE}▸ JavaScript DOM-XSS (unescaped HTML sinks) ${JS_XSS_COLOR}[$JS_XSS_SEVERITY]${NC}"
+JS_XSS_FAIL=false
+JS_XSS_FINDING_COUNT=0
+
+# Stage 1: jQuery/DOM HTML sinks built via string concatenation, or innerHTML/
+# outerHTML assigned a non-constant expression.
+JS_XSS_MATCHES=$( {
+  js_cached_grep $JS_INCLUDE -E "\.(html|append|prepend|before|after|replaceWith|wrap)[[:space:]]*\([^)]*['\"][^)]*\+"
+  js_cached_grep $JS_INCLUDE -E "(inner|outer)HTML[[:space:]]*=[[:space:]]*['\"][^;]*\+"
+  js_cached_grep $JS_INCLUDE -E "(inner|outer)HTML[[:space:]]*=[[:space:]]*[A-Za-z_\$][A-Za-z0-9_\$.]*[[:space:]]*;"
+  js_cached_grep $JS_INCLUDE -E "insertAdjacentHTML[[:space:]]*\([^)]*,[[:space:]]*['\"][^)]*\+"
+} 2>/dev/null | sort -u || true)
+
+if [ -n "$JS_XSS_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+
+    # Filter: line routes the value through a recognised escaper → safe
+    if echo "$code" | grep -qiE "escapeHtml|esc_html|escape_html|DOMPurify|encodeURI|\.textContent|\.text[[:space:]]*\("; then
+      continue
+    fi
+    if should_suppress_finding "js-dom-xss" "$file"; then
+      continue
+    fi
+
+    js_xss_msg="DOM-XSS: HTML sink built from unescaped dynamic data. If any concatenated value is attacker-influenced (order/user/API data), it executes as HTML in the browser. Use a textContent assignment, an HTML-escape helper, or DOMPurify.sanitize()."
+    text_echo "  ${JS_XSS_COLOR}→ $file:$line${NC}"
+    add_json_finding "js-dom-xss" "error" "$JS_XSS_SEVERITY" \
+      "$file" "$line" "$js_xss_msg" "$code"
+    JS_XSS_FAIL=true
+    ((JS_XSS_FINDING_COUNT++))
+  done <<< "$JS_XSS_MATCHES"
+fi
+
+if [ "$JS_XSS_FAIL" = true ]; then
+  text_echo "${RED}  ✗ FAILED${NC}"
+  ((ERRORS++))
+  add_json_check "JavaScript DOM-XSS (unescaped HTML sinks)" "$JS_XSS_SEVERITY" "failed" "$JS_XSS_FINDING_COUNT"
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "JavaScript DOM-XSS (unescaped HTML sinks)" "$JS_XSS_SEVERITY" "passed" 0
+fi
+text_echo ""
+
+# ============================================================================
+# Rule: php-privilege-simulation  (issue #61, Phase 5)
+# ============================================================================
+# Flags runtime privilege simulation in PHP: wp_set_current_user(),
+# wp_set_auth_cookie(), grant_super_admin(). A plugin/theme file that
+# programmatically assumes another user (especially admin id 1) is a
+# privilege-escalation smell. Calibrated by reachability (runtime_assessment):
+#   unauthenticated-privilege-escalation — file lacks an ABSPATH/WPINC guard,
+#       so an unauthenticated direct request can reach it -> HIGH (error)
+#   runtime-privilege-simulation         — guarded file (not web-reachable; may be
+#       a legit admin flow or a test harness) -> MEDIUM (warning), review
+# This is the KISS test-wholesale-ajax.php case: an unguarded "test" script that
+# escalates to admin is HIGH — the missing guard dominates the test-name signal.
+# Same-method / cross-method N+1 reload heuristics are DEFERRED to the AST track
+# (function-scope tracking is outside grep's reach) — see plan Deferred section.
+# ============================================================================
+PRIV_SIM_SEVERITY=$(get_severity "php-privilege-simulation" "HIGH")
+PRIV_SIM_COLOR="${RED}"
+text_echo "${BLUE}▸ PHP privilege simulation (wp_set_current_user / auth-cookie / super-admin) ${PRIV_SIM_COLOR}[$PRIV_SIM_SEVERITY]${NC}"
+PRIV_SIM_FAIL=false
+PRIV_SIM_HAS_HIGH=false
+PRIV_SIM_FINDING_COUNT=0
+
+PRIV_SIM_MATCHES=$(cached_grep $PHP_INCLUDE -E "(wp_set_current_user|wp_set_auth_cookie|grant_super_admin)[[:space:]]*\(" || true)
+
+if [ -n "$PRIV_SIM_MATCHES" ]; then
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    file=$(echo "$match" | cut -d: -f1)
+    line=$(echo "$match" | cut -d: -f2)
+    code=$(echo "$match" | cut -d: -f3-)
+    [[ "$line" =~ ^[0-9]+$ ]] || continue
+    if should_suppress_finding "php-privilege-simulation" "$file"; then
+      continue
+    fi
+
+    # Guard detection — anchored to a code line (optionally after <?php / if ( / !)
+    # so an ABSPATH mention inside a docblock/comment does not count as a guard.
+    if grep -qE "^[[:space:]]*(<\?php[[:space:]]+)?(if[[:space:]]*\([[:space:]]*)?!?[[:space:]]*defined[[:space:]]*\([[:space:]]*['\"](ABSPATH|WPINC)['\"]" "$file" 2>/dev/null; then
+      priv_level="warning"; priv_impact="MEDIUM"; priv_rt="runtime-privilege-simulation"
+      priv_msg="Runtime privilege simulation in a guarded PHP file. Programmatically assuming another user (esp. admin id 1) outside an explicit, audited admin flow is a privilege-escalation risk. Verify it is gated behind capability checks; remove from shipped runtime code."
+    else
+      priv_level="error"; priv_impact="HIGH"; priv_rt="unauthenticated-privilege-escalation"; PRIV_SIM_HAS_HIGH=true
+      priv_msg="Privilege simulation in a web-reachable PHP file (no ABSPATH/WPINC guard). An unauthenticated direct request can reach this and assume another user's identity (commonly admin id 1). Add defined(ABSPATH)||exit and remove runtime privilege changes."
+    fi
+
+    text_echo "  ${PRIV_SIM_COLOR}→ $file:$line [$priv_rt]${NC}"
+    add_json_finding "php-privilege-simulation" "$priv_level" "$priv_impact" \
+      "$file" "$line" "$priv_msg" "$code" \
+      "" "" "" "" "$priv_rt"
+    PRIV_SIM_FAIL=true
+    ((PRIV_SIM_FINDING_COUNT++))
+  done <<< "$PRIV_SIM_MATCHES"
+fi
+
+if [ "$PRIV_SIM_FAIL" = true ]; then
+  if [ "$PRIV_SIM_HAS_HIGH" = true ]; then
+    text_echo "${RED}  ✗ FAILED${NC}"; ((ERRORS++))
+    add_json_check "PHP privilege simulation" "HIGH" "failed" "$PRIV_SIM_FINDING_COUNT"
+  else
+    text_echo "${YELLOW}  ⚠ WARNING${NC}"; ((WARNINGS++))
+    add_json_check "PHP privilege simulation" "MEDIUM" "failed" "$PRIV_SIM_FINDING_COUNT"
+  fi
+else
+  text_echo "${GREEN}  ✓ Passed${NC}"
+  add_json_check "PHP privilege simulation" "$PRIV_SIM_SEVERITY" "passed" 0
 fi
 text_echo ""
 
@@ -6567,10 +7130,15 @@ if [ -n "$DIRECT_PATTERNS" ]; then
       done
 
       # Run grep with the pattern
-      # PERFORMANCE: Use cached file list instead of grep -r
+      # MIXED-REPO FIX (issue #61): this is the JS/Node/headless runner, so scan
+      # the JS/TS file list — NOT the PHP-only cached_grep list. cached_grep xargs
+      # over PHP_FILE_LIST and grep ignores --include on explicit file args, so JS
+      # patterns silently matched nothing in any repo containing >=1 PHP file. That
+      # is exactly why the committed JS password and DOM-XSS were missed. js_cached_grep
+      # scans JS_FILE_LIST (mixed repos) and falls back to recursive grep for JS-only.
       matches=""
       match_count=0
-      matches=$(cached_grep $include_args -E "$pattern_search" || true)
+      matches=$(js_cached_grep $include_args -E "$pattern_search" || true)
 
       if [ -n "$matches" ]; then
         match_count=$(echo "$matches" | grep -c . 2>/dev/null)

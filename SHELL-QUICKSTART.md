@@ -45,6 +45,31 @@ source ~/.zshrc
 
 ---
 
+## 🤖 Claude Code Integration
+
+If you use **Claude Code** (the AI coding assistant), a global `/wpcc` skill is available
+that lets any Claude session on this machine scan a plugin or theme without remembering flags:
+
+```
+/wpcc /path/to/your-plugin
+/wpcc /path/to/your-plugin strict
+/wpcc /path/to/your-plugin baseline
+/wpcc /path/to/your-plugin triage
+```
+
+Or just say *"run wpcc on this plugin"* and Claude will invoke it automatically.
+
+**One-time device install** (symlink — repo edits stay live):
+```bash
+mkdir -p ~/.claude/skills
+ln -sfn "$(pwd)/skills/wpcc" ~/.claude/skills/wpcc
+```
+
+The skill resolves the scanner path automatically, summarises findings, and never dumps
+raw JSON into the conversation. See [`skills/wpcc/SKILL.md`](skills/wpcc/SKILL.md) for details.
+
+---
+
 ## ⚡ Special Commands
 
 ### Interactive Setup Wizard

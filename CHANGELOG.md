@@ -6,17 +6,30 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Issue #61 detection-gap rules (branch `rules/issue-61-detection-gaps`):
+  - `php-direct-access-entrypoint` (HIGH) — flags `.php` files lacking an `ABSPATH`/`WPINC` guard while doing real work (DB/output/bootstrap/file-IO/privilege); severity calibrated via `runtime_assessment` (`live-entrypoint` / `inert-on-standard-host` / `direct-access-candidate`)
+  - `js-secret-literal` (HIGH) — committed credential literals in JS/TS source, with env-read and placeholder filtering; message flags git-history rotation
+  - `dev-local-path-leak` (LOW) — hardcoded developer paths (`/Users//home//Local Sites/`) in PHP and JS (portability + info leak)
+  - `js-dom-xss` (HIGH) — unescaped HTML sinks (`.html`/`.append`/`.prepend`/`.before`/`.after`/`innerHTML`/`insertAdjacentHTML`) built by concatenation, with escaper filtering (`escapeHtml`/`esc_html`/`DOMPurify`/`textContent`/`.text()`)
+  - `php-privilege-simulation` (HIGH/MEDIUM) — runtime privilege simulation (`wp_set_current_user`/`wp_set_auth_cookie`/`grant_super_admin`), calibrated by reachability: unguarded (web-reachable) → HIGH `unauthenticated-privilege-escalation`, guarded → MEDIUM `runtime-privilege-simulation`
+- JS/TS file-list cache and `js_cached_grep()` so JS-targeted checks run in mixed PHP+JS repos (PHP-only `cached_grep` previously matched no JS)
+- Optional `runtime_assessment` field on `add_json_finding` for severity-calibration annotations
+- 10 detection test fixtures (4 entrypoint, 4 secret/path/XSS, 2 privilege-simulation); `DEFAULT_FIXTURE_VALIDATION_COUNT` 20 → 30
 - AST hook analysis: new `HookRegistrationVisitor` (`dist/bin/ast/HookRegistrationVisitor.php`) extracts `add_action`, `add_filter`, `do_action`, `apply_filters`, `remove_action`, and `remove_filter` calls from the AST, along with function/method parameter counts for cross-referencing
 - New AST rule `hook-arg-mismatch` with three checks:
   - `arg_count`: detects callbacks that require more parameters than `accepted_args` will provide, or define extra parameters that will never receive values
   - `priority_conflict`: flags multiple different callbacks registered on the same hook at the same priority within the scanned codebase
   - `fire_arg_count`: detects `do_action`/`apply_filters` fire points that pass fewer arguments than registered callbacks expect
 - New AST rule `hook-inventory`: outputs all hook registrations and fire points found in scanned files, sorted by hook name and priority — no findings, just structured data for audit and exploration
+- `wpcc` Claude Code personal skill (`skills/wpcc/SKILL.md`) — invoke WPCC from any Claude Code session on this device with `/wpcc [path] [strict|baseline|triage|verbose]`; includes 4-step ordered path resolver (`$WPCC_HOME` → canonical → PATH executable → fail-loud), plain-language flag mapping, JSON summarization with severity breakdown, and correct exit-code disambiguation (`--strict` warnings vs errors vs timeout vs crash). Install: `ln -sfn "$(pwd)/skills/wpcc" ~/.claude/skills/wpcc`
 - Test fixture `dist/tests/fixtures/ast-hook-mismatch.php` covering all three hook-arg-mismatch checks including class-based `[$this, 'method']` callbacks
 - Example config `dist/bin/ast/config/hook-arg-mismatch.example.json` with `target_hooks` and `checks` options
 
 ### Changed
 
+- JS/headless/Node pattern runner now scans via `js_cached_grep` (JS file list) instead of `cached_grep` (PHP-only list). Fixes JS patterns — including the existing `headless/api-key-exposure.json` secret detector — silently matching nothing in any repo containing ≥1 PHP file (issue #61)
+- Extended `php-hardcoded-credentials.json` keyword coverage (`pwd`, `private_key`, `client_secret`)
+- New source-rule helper calls pass `--include` file-type filters so the `grep -r` fallback (restricted-temp / JS-only repos) only scans source files, not `.md/.html/.py/.json`
 - Admin-only hook whitelist for `spo-004-missing-cap-check`: `add_action()` calls using inherently-admin-only hooks (`admin_notices`, `admin_init`, `admin_menu`, `admin_head`, `admin_footer`, `admin_enqueue_scripts`, `admin_print_styles`, `admin_print_scripts`, `network_admin_menu`, `user_admin_menu`, `network_admin_notices`, `admin_bar_init`, `admin_action_*`, `load-*`) are now downgraded to INFO severity instead of HIGH, reducing false positives for capability check findings
 
 - N+1 loop detection (`find_meta_in_loop_line`) now uses brace-depth tracking to verify `get_*_meta` calls are lexically inside a loop body, not just within 80 lines of a loop keyword. Eliminates false positives from sequential meta calls after loop closure
@@ -33,6 +46,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Vendor/exclusion leak in file discovery and `cached_grep`/`fast_grep` fallbacks: a KISS-woo-fast-search scan dropped from 1,207 inflated `files_analyzed` (incl. `vendor/`) to 25, with 0 findings referencing `vendor/` (issue #61)
+- `[: : integer expression expected` runtime error during the magic-string phase (unguarded numeric comparison against empty `PHP_FILE_COUNT`)
 - Fixed bash `local: can only be used in a function` errors that appeared on every scan invocation. The simple-pattern runner loop uses `local` in top-level scope; replaced with plain variable assignments
 
 - Calibrated `wp_ajax handlers without nonce validation` detection in `dist/bin/check-performance.sh` to catch missing CSRF protection reliably:
