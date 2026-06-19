@@ -11,7 +11,17 @@ Source: Empirical gap analysis. WPCC v-current scanned KISS-woo-fast-search and 
 
 | Most Recently Completed Phase | What's Next |
 |---|---|
-| None — plan created 2026-06-18 | **Phase 1 — Scanner Hygiene & Calibration Foundation** |
+| **Phase 4 — JavaScript DOM-XSS Detection** (2026-06-19) | **Phase 5 — Privilege Simulation & Cross-Method N+1** |
+
+### Progress Log
+
+- **2026-06-19 — Phases 1–4 landed** on branch `rules/issue-61-detection-gaps` (3 commits):
+  - `fe41e9c` **Stage A / Phase 1** — exclusion-leak fix (KISS `files_analyzed` 1207→25, 0 vendor findings), `[: : integer expression expected` bug fixed, JS/TS file-list cache + `js_cached_grep()` added (unblocks P3/P4), `runtime_assessment` field added to `add_json_finding`.
+  - `4b6fbf3` **Phase 2** — `php-direct-access-entrypoint` rule with escalator detection + severity calibration (live-entrypoint / inert-on-standard-host / direct-access-candidate). 4 fixtures.
+  - `f2f27fb` **Phases 3–4** — root-cause plumbing fix (JS/headless runner was `cached_grep` over the PHP-only list → JS patterns no-op'd in any mixed repo; now `js_cached_grep`). New rules `js-secret-literal` (HIGH), `dev-local-path-leak` (LOW), `js-dom-xss` (HIGH); `php-hardcoded-credentials.json` regex extended. 4 fixtures.
+  - **Precision bug caught by scanning live KISS (not just fixtures):** the `grep -r` fallback (used when a file-list cache is unavailable — JS-only repos, restricted-temp CI, sandboxes where `mktemp` is denied) scanned *all* extensions and false-positived on `.md/.html/.py` audit clutter. Fixed with `JS_INCLUDE`/`PHP_INCLUDE` `--include` filters on all new helper calls.
+  - **Verification:** full fixture suite **28/0** (`DEFAULT_FIXTURE_VALIDATION_COUNT` 20→28); per-fixture detection js-secret 2/2, js-dom-xss 2/2, dev-local-path php 1 (entrypoint correctly 0), js 1; KISS re-scan — new rules hit **only `.js`, zero non-source false positives**.
+  - **Note:** KISS-woo-fast-search was fully remediated by its maintainer mid-effort (all 8 root scripts + JS password + unescaped `order.total` removed), so the **fixtures are the durable regression test**, not the moving live plugin.
 
 ---
 
@@ -75,10 +85,10 @@ Two things this plan must fix:
 
 **Why first:** accuracy of every later phase depends on not scanning `vendor/` and on a clean run. This phase has no new detectors — it removes noise and fixes two known defects.
 
-- [ ] **Fix the exclusion *leak*, don't "add" exclusion (Codex r1):** `EXCLUDE_DIRS` already lists `vendor node_modules .git tests .next dist build` (line 146) yet the KISS scan pulled 1,217 files incl. `vendor/`. Trace which scan path bypasses `GREP_EXCLUSIONS` (line ~1008) and close it so exclusion holds across `cached_grep`, `fast_grep`, **and** the JS override paths.
-- [ ] **Establish a JS/TS file path for mixed repos (Codex r1):** add a JS/TS file cache or a forced recursive scan for non-PHP checks, because `cached_grep` uses a PHP-only list (see Architecture Notes). **Hard prerequisite for Phases 3–4** — without it, JS detectors silently never run in PHP+JS repos.
-- [ ] Re-scan KISS-woo-fast-search; confirm `files_analyzed` drops from ~1,217 to the plugin's real count and **0 findings reference `vendor/`** (today it false-positives `php-shell-exec-functions` in `nikic/php-parser/.../ShellExec.php`).
-- [ ] Fix `dist/bin/check-performance.sh:3709` `[: : integer expression expected` (guard the numeric comparison against empty/unset values in the magic-string detector).
+- [x] **Fix the exclusion *leak*, don't "add" exclusion (Codex r1):** `EXCLUDE_DIRS` already lists `vendor node_modules .git tests .next dist build` (line 146) yet the KISS scan pulled 1,217 files incl. `vendor/`. Trace which scan path bypasses `GREP_EXCLUSIONS` (line ~1008) and close it so exclusion holds across `cached_grep`, `fast_grep`, **and** the JS override paths.
+- [x] **Establish a JS/TS file path for mixed repos (Codex r1):** add a JS/TS file cache or a forced recursive scan for non-PHP checks, because `cached_grep` uses a PHP-only list (see Architecture Notes). **Hard prerequisite for Phases 3–4** — without it, JS detectors silently never run in PHP+JS repos.
+- [x] Re-scan KISS-woo-fast-search; confirm `files_analyzed` drops from ~1,217 to the plugin's real count and **0 findings reference `vendor/`** (today it false-positives `php-shell-exec-functions` in `nikic/php-parser/.../ShellExec.php`).
+- [x] Fix `dist/bin/check-performance.sh:3709` `[: : integer expression expected` (guard the numeric comparison against empty/unset values in the magic-string detector).
 - [ ] Add a `--include-vendor` opt-in flag for the rare case a user wants vendor scanned (default OFF).
 - [ ] Document the fixture-authoring pattern (positive + negative) in `docs/` so Phases 2–5 follow one recipe.
 
@@ -96,11 +106,11 @@ Two things this plan must fix:
 
 **Highest-value detector.** A single rule catches all 8 KISS scripts. Flags any `.php` file that is a **likely direct-access candidate** — lacks an `ABSPATH`/`WPINC` guard while doing real work (DB, output, side effects). **NB (Codex r1):** grep can prove *missing guard + top-level side effects*, **not** actual webserver/route reachability — the rule id, messages, and QA all say **"candidate,"** never "proven reachable."
 
-- [ ] New rule `php-direct-access-entrypoint`: a PHP file under a plugin/theme/mu-plugin root that **does not** contain `defined( 'ABSPATH' ) || exit` (or `if ( ! defined( 'ABSPATH' ) ) exit;`, `WPINC` guard, or a class-only file with no top-level side effects).
-- [ ] Suppress on files that are pure class/function definitions with no top-level executable statements (autoloaded includes are not entrypoints).
-- [ ] Raise impact when the unguarded file also: bootstraps WP (`require .../wp-load.php`), echoes/`print_r`s data, runs `$wpdb`, `fopen`/`fputcsv`, or calls `wp_set_current_user`.
+- [x] New rule `php-direct-access-entrypoint`: a PHP file under a plugin/theme/mu-plugin root that **does not** contain `defined( 'ABSPATH' ) || exit` (or `if ( ! defined( 'ABSPATH' ) ) exit;`, `WPINC` guard, or a class-only file with no top-level side effects).
+- [x] Suppress on files that are pure class/function definitions with no top-level executable statements (autoloaded includes are not entrypoints).
+- [x] Raise impact when the unguarded file also: bootstraps WP (`require .../wp-load.php`), echoes/`print_r`s data, runs `$wpdb`, `fopen`/`fputcsv`, or calls `wp_set_current_user`.
 - [ ] Detect committed data-export artifacts next to exporters (`*.csv`, `*.sql` dumps) and flag as potential exposed output.
-- [ ] Fixtures: (+) script doing `$wpdb` work with no guard; (+) script with `require wp-load.php`; (−) class-only include; (−) file with proper `ABSPATH` guard.
+- [x] Fixtures: (+) script doing `$wpdb` work with no guard; (+) script with `require wp-load.php`; (−) class-only include; (−) file with proper `ABSPATH` guard.
 
 ### QA Checklist — Phase 2
 - [ ] **Litmus (recall):** re-scan KISS-woo-fast-search → all 8 root scripts flagged by `php-direct-access-entrypoint`.
@@ -116,12 +126,12 @@ Two things this plan must fix:
 
 Catches the committed password (the single most legitimately serious item in the audit) plus hardcoded emails and developer local paths. **Must scan `.js`, not just `.php` — which depends on the Phase 1 JS file path.**
 
-- [ ] **Extend the existing detectors, don't rebuild (Codex r1):** `dist/patterns/php-hardcoded-credentials.json` and `dist/patterns/headless/api-key-exposure.json` already exist. Add `password`/`passwd`/`pwd`/`secret`/`token`/`bearer` literal coverage and confirm they actually execute on `.js/.ts` files in a mixed repo (blocked on Phase 1 — this is *why* the JS password was missed, not "no check exists").
-- [ ] Detect hardcoded developer filesystem paths: `/Users/<name>/`, `/home/<name>/`, `C:\\Users\\`, `...Local Sites/...` (info-leak + non-portability signal).
+- [x] **Extend the existing detectors, don't rebuild (Codex r1):** `dist/patterns/php-hardcoded-credentials.json` and `dist/patterns/headless/api-key-exposure.json` already exist. Add `password`/`passwd`/`pwd`/`secret`/`token`/`bearer` literal coverage and confirm they actually execute on `.js/.ts` files in a mixed repo (blocked on Phase 1 — this is *why* the JS password was missed, not "no check exists").
+- [x] Detect hardcoded developer filesystem paths: `/Users/<name>/`, `/home/<name>/`, `C:\\Users\\`, `...Local Sites/...` (info-leak + non-portability signal).
 - [ ] Detect hardcoded personal/role emails used as defaults (`*@<domain>` in benchmark/query defaults).
-- [ ] Entropy/format heuristics to cut false positives (skip obvious placeholders: `your_password_here`, `xxxx`, empty strings, `process.env.*`, `getenv(...)`).
-- [ ] Note in the finding that committed secrets persist in git history (rotation, not just deletion, is required).
-- [ ] Fixtures: (+) `password: 'RealLooking#Value1'` in JS; (+) `$api_key = 'sk-...'` in PHP; (+) `/Users/dev/Local Sites/...`; (−) `password: process.env.WP_PASS`; (−) `'your_api_key_here'`.
+- [x] Entropy/format heuristics to cut false positives (skip obvious placeholders: `your_password_here`, `xxxx`, empty strings, `process.env.*`, `getenv(...)`).
+- [x] Note in the finding that committed secrets persist in git history (rotation, not just deletion, is required).
+- [x] Fixtures: (+) `password: 'RealLooking#Value1'` in JS; (+) `$api_key = 'sk-...'` in PHP; (+) `/Users/dev/Local Sites/...`; (−) `password: process.env.WP_PASS`; (−) `'your_api_key_here'`.
 
 ### QA Checklist — Phase 3
 - [ ] **Litmus:** re-scan KISS → `debug-wholesale-orders.js` flagged for the committed password; the three hardcoded-email/path files flagged.
@@ -139,10 +149,10 @@ Catches `order.total` rendered unescaped, and the more telling **inconsistent-es
 
 **Depends on Phase 1's JS file path (Codex r1)** — DOM-XSS detection cannot fire if mixed-repo JS files never reach the check.
 
-- [ ] New rule `js-dom-xss`: sink (`.html(`, `.append(`, `.prepend(`, `.before(`, `.after(`, `innerHTML =`, `insertAdjacentHTML`) fed a concatenation containing an unescaped identifier (not wrapped in `escapeHtml`/`esc_html`/`textContent`/`DOMPurify`).
+- [x] New rule `js-dom-xss`: sink (`.html(`, `.append(`, `.prepend(`, `.before(`, `.after(`, `innerHTML =`, `insertAdjacentHTML`) fed a concatenation containing an unescaped identifier (not wrapped in `escapeHtml`/`esc_html`/`textContent`/`DOMPurify`).
 - [ ] Bonus signal `js-inconsistent-escape`: the same property (e.g. `order.total`) is escaped in one sink and not in another within the same file — high-confidence real bug.
-- [ ] Respect existing `EXCLUDE_FILES` (skip `*.min.js`, bundles).
-- [ ] Fixtures: (+) `$el.html('<td>' + order.total + '</td>')`; (+) `innerHTML = data.name`; (−) `$el.text(order.total)`; (−) `$el.html(escapeHtml(order.total))`.
+- [x] Respect existing `EXCLUDE_FILES` (skip `*.min.js`, bundles).
+- [x] Fixtures: (+) `$el.html('<td>' + order.total + '</td>')`; (+) `innerHTML = data.name`; (−) `$el.text(order.total)`; (−) `$el.html(escapeHtml(order.total))`.
 
 ### QA Checklist — Phase 4
 - [ ] **Litmus:** re-scan KISS → `admin/kiss-woo-admin.js:132` flagged; line 597 (`escapeHtml(order.total...)`) **not** flagged.
@@ -219,5 +229,17 @@ Codex r1 flagged that three audit items were named in the relay but given no hom
 - Secret scanning of git history (WPCC scans the working tree; history scanning is a separate tool — note in finding text, don't implement here).
 - Auto-fixing / auto-deleting flagged files (report only).
 - Framework-specific entrypoint conventions outside WordPress.
+
+### Deferred during Phases 1–4 implementation (2026-06-19)
+
+Items in the Phase 1–4 checklists that were intentionally **not** shipped (left unchecked above), with rationale — these are the active follow-ups (BACKLOG.md is deprecated; track them here):
+
+- **`js-inconsistent-escape`** (Phase 4 bonus): same property escaped in one sink, unescaped in another within a file. Deferred — needs cross-line same-file state; `js-dom-xss` already catches the unescaped sink directly.
+- **Inline-JS-in-PHP DOM-XSS**: `js-dom-xss` is scoped to `.js/.ts` files, so `.html(... + ...)` inside `<script>` blocks in `.php` (e.g. KISS `class-kiss-woo-self-test.php`) is not flagged. Belongs on a PHP-aware / AST track that can extract embedded JS.
+- **DOM-XSS i18n precision tuning**: `js-dom-xss` flags all concatenation-into-HTML sinks (7 on live KISS, several building UI from i18n/static strings). Defensible as "review" findings, but an allow-list for purely-i18n/static concatenation would cut noise. Severity stays HIGH with hedged messaging for now.
+- **Hardcoded personal/role email detection** (Phase 3): `*@<domain>` defaults in benchmark/query code. Deferred — narrower value than secrets/paths; revisit if it recurs in audits.
+- **Committed data-export artifact detection** (Phase 2): flag `*.csv`/`*.sql` dumps committed next to exporters. Deferred — file-presence heuristic, separable from the entrypoint rule.
+- **`--include-vendor` opt-in flag** + **fixture-authoring doc in `docs/`** (Phase 1): polish; not blocking detection.
+- **`mktemp` / restricted-temp cache degradation** (cross-cutting, pre-existing): when `mktemp` is denied (hardened servers, some CI sandboxes) both the PHP and JS file-list caches come back empty and every check falls back to recursive `grep -r`. Correct (exclusions + the new `--include` filters hold) but slower. Pre-existing — affects the PHP cache too — so out of scope for issue #61; worth a dedicated hardening pass (honor `$TMPDIR` in the mktemp templates).
 
 > **Note:** `PROJECT/2-WORKING/` is over its soft cap of 3 docs (per `DOCS-INSTRUCTIONS.md`). Consider moving a completed working doc to `3-COMPLETED/` before starting Phase 1.
