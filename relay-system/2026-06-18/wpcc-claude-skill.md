@@ -4,7 +4,7 @@
   Read this ENTIRE file before doing anything. Act only on your turn.
 -->
 
-NEXT: Reviewer
+NEXT: Producer
 STATUS: Open
 ROUND: 1 / 5
 
@@ -60,5 +60,21 @@ The operator just said "take your turn on this file." Everything you need is **i
 - Should the plan add an explicit phase/step for an *install mechanism* (copy/symlink the skill into `~/.claude/skills/` and a way to update it), or is that correctly deferred to Out-of-Scope?
 - Is "device-local, no other-device sync" the right scope, or should portability via `install.sh` be in-scope from the start?
 **Commit:** 1cc4d7f
+
+### Round 1 · Reviewer · Codex · 2026-06-18 22:36 PDT
+**Verdict:** Changes requested
+**Basis:** N/A — non-executable artifact
+**Findings & proposals:**
+- [Blocker] Missing install/sync mechanism and explicit omission-diff @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:6,71-76,143-145,157-161` — The stated Goal is to author a real device-global skill at `~/.claude/skills/wpcc/SKILL.md`, but no phase item covers: `1.` what file in the repo is the source of truth, `2.` how that file gets installed into `~/.claude/skills/wpcc/`, or `3.` how later edits are kept in sync. Proposed fix: add an explicit Phase 1 checklist item for source-of-truth plus install/update, e.g. version the skill under the repo, then install with an exact `mkdir -p ~/.claude/skills && ln -sfn <repo-skill-dir> ~/.claude/skills/wpcc` or copy command, and add a re-sync/update verification item.
+- [Blocker] `--strict` / non-zero-exit handling is factually wrong enough to mislead the implementation @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:60,122` — In this repo, `--strict` means “fail on warnings,” and exit `1` means errors found, or warnings in strict mode; it does not mean “any findings,” and non-zero can also mean a real execution failure. Proposed fix: change the wording to “errors always fail; `--strict` additionally promotes warnings to exit 1,” and add a concrete decision rule: if JSON output exists and parses, summarize findings; if JSON is missing/invalid, surface stderr as scanner failure.
+- [Blocker] Runtime path resolution is still hand-wavy and partly self-contradictory @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:50,74` — “search common parents / read `WPCC_HOME` / `command -v wpcc`-style git-root probe” is not a buildable resolver as written, and one branch leans on `wpcc` after the doc says alias-based lookup is unreliable. Proposed fix: replace this with an exact ordered resolver, for example: `1.` `${WPCC_HOME}/dist/bin/check-performance.sh` if `WPCC_HOME` is set, `2.` the canonical absolute path, `3.` `command -v wpcc` only if it resolves to an executable wrapper on `PATH` rather than an alias, then derive its backing repo if needed, `4.` fail with the full searched list.
+- [Should] Claude skill discovery/frontmatter behavior is overstated or inaccurate @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:40,61,72` — For Claude Code skills, `~/.claude/skills/<dir>/SKILL.md` is the right personal-skill location, but `name` is not required, all frontmatter fields are optional, and the command name comes from the directory name; `description` helps auto-invocation, it does not define `/wpcc`. Proposed fix: rewrite those lines to say “put `SKILL.md` in `~/.claude/skills/wpcc/`; include `description` (recommended) and optionally `name: wpcc`; direct invocation is `/wpcc` because the directory is named `wpcc`; auto-loading is relevance-based from `description`/`when_to_use`.”
+- [Should] Invocation UX for passing the target path is underspecified @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:92-102` — The plan explains how to build the scanner command once a target exists, but not how the skill receives that target in a concrete Claude-skill shape. Proposed fix: add a checklist item for direct invocation semantics using `argument-hint` and `$ARGUMENTS`/`$0`, with at least one exact example like `/wpcc "/path with spaces" strict`, plus whether `disable-model-invocation` should be `true` or not.
+- [Pass] The “don’t rely on the alias” conclusion is sound @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:36,49,100` — This repo’s `install.sh` writes shell RC aliases, while Claude skill shell execution defaults to Bash; alias-based discovery is not dependable. Using the resolved script path is the right baseline. Nuance: `command -v wpcc` is valid only as a fallback for a real executable wrapper on `PATH` (for example AI-DDTK), not for the alias added by this repo’s installer.
+- [Pass] Scanner entrypoint and key flags mostly line up with the repo @ `PROJECT/1-INBOX/FEATURE-2026-06-18-WPCC-CLAUDE-SKILL.md:59-60,92-102,118-123,139-145` — `dist/bin/check-performance.sh`, `--paths`, `--format json`, `--generate-baseline`, `--ai-triage`, and `MAX_SCAN_TIME=300` all exist. The main correction needed is the stricter exit-code wording above.
+**Answers:**
+- Should the plan add an explicit phase/step for an *install mechanism* (copy/symlink the skill into `~/.claude/skills/` and a way to update it), or is that correctly deferred to Out-of-Scope? → Add it in-scope. Cross-device packaging can stay deferred, but device-local install/update is required to satisfy the current Goal without a silent gap.
+- Is "device-local, no other-device sync" the right scope, or should portability via `install.sh` be in-scope from the start? → Device-local is the right v1 scope. Do not expand to cross-device sync or `install.sh` integration yet; first make the repo source-of-truth plus local install/update path explicit and correct.
+**Commit:** none (Codex sandbox; committed by Producer)
 
 <!-- ↓↓↓  NEXT TURN GOES ABOVE THIS LINE — keep this marker last  ↓↓↓ -->
