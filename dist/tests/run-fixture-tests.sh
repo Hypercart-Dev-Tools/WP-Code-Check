@@ -167,6 +167,11 @@ CRON_INTERVAL_EXPECTED_ERRORS=1  # 1 error with 3 findings (lines 15, 24, 33)
 CRON_INTERVAL_EXPECTED_WARNINGS_MIN=0
 CRON_INTERVAL_EXPECTED_WARNINGS_MAX=0
 
+# ts-type-suppression.ts - TypeScript suppression directives should warn once
+TS_TYPE_SUPPRESSION_EXPECTED_ERRORS=0
+TS_TYPE_SUPPRESSION_EXPECTED_WARNINGS_MIN=1
+TS_TYPE_SUPPRESSION_EXPECTED_WARNINGS_MAX=1
+
 # ============================================================
 # Helper Functions
 # ============================================================
@@ -369,12 +374,18 @@ if [ ! -f "$FIXTURES_DIR/ajax-safe.php" ]; then
   exit 1
 fi
 
+if [ ! -f "$FIXTURES_DIR/ts-type-suppression.ts" ]; then
+  echo -e "${RED}Error: ts-type-suppression.ts fixture not found${NC}"
+  exit 1
+fi
+
 # Run tests (passing: errors, warnings_min, warnings_max)
 run_test "$FIXTURES_DIR/antipatterns.php" "$ANTIPATTERNS_EXPECTED_ERRORS" "$ANTIPATTERNS_EXPECTED_WARNINGS_MIN" "$ANTIPATTERNS_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/clean-code.php" "$CLEAN_CODE_EXPECTED_ERRORS" "$CLEAN_CODE_EXPECTED_WARNINGS_MIN" "$CLEAN_CODE_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/ajax-antipatterns.php" "$AJAX_PHP_EXPECTED_ERRORS" "$AJAX_PHP_EXPECTED_WARNINGS_MIN" "$AJAX_PHP_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/ajax-antipatterns.js" "$AJAX_JS_EXPECTED_ERRORS" "$AJAX_JS_EXPECTED_WARNINGS_MIN" "$AJAX_JS_EXPECTED_WARNINGS_MAX" || true
 run_test "$FIXTURES_DIR/ajax-safe.php" "$AJAX_SAFE_EXPECTED_ERRORS" "$AJAX_SAFE_EXPECTED_WARNINGS_MIN" "$AJAX_SAFE_EXPECTED_WARNINGS_MAX" || true
+run_test "$FIXTURES_DIR/ts-type-suppression.ts" "$TS_TYPE_SUPPRESSION_EXPECTED_ERRORS" "$TS_TYPE_SUPPRESSION_EXPECTED_WARNINGS_MIN" "$TS_TYPE_SUPPRESSION_EXPECTED_WARNINGS_MAX" || true
 
 # ============================================================
 # JSON Output Format Test

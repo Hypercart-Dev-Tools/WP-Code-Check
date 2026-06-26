@@ -1,0 +1,40 @@
+{
+  "id": "ts-type-suppression",
+  "version": "1.0.0",
+  "enabled": true,
+  "detection_type": "direct",
+  "category": "typescript",
+  "severity": "LOW",
+  "title": "TypeScript type-system suppression directives",
+  "description": "Detects TypeScript suppression directives that bypass the type checker in .ts and .tsx files.",
+  "rationale": "Type-system suppression comments hide real typing problems, weaken refactors, and make unsafe assumptions harder to audit. Documented exceptions should stay explicit and rare.",
+  "detection": {
+    "type": "grep",
+    "file_patterns": ["*.ts", "*.tsx"],
+    "patterns": [
+      {
+        "id": "ts-ignore-directive",
+        "pattern": "^[[:space:]]*//[[:space:]]*@ts-ignore([[:space:]]|$)",
+        "description": "Flags @ts-ignore directives because they silence the type checker without an explicit contract."
+      },
+      {
+        "id": "ts-nocheck-directive",
+        "pattern": "^[[:space:]]*//[[:space:]]*@ts-nocheck([[:space:]]|$)",
+        "description": "Flags @ts-nocheck directives because they disable type checking for the file."
+      },
+      {
+        "id": "ts-expect-error-directive",
+        "pattern": "^[[:space:]]*//[[:space:]]*@ts-expect-error[[:space:]]*$",
+        "description": "Flags bare @ts-expect-error directives that do not explain why the suppression is needed."
+      }
+    ],
+    "exclude_patterns": [
+      "^ *// *@ts-expect-error +[^ ].*$"
+    ]
+  },
+  "test_fixture": {
+    "path": "dist/tests/fixtures/ts-type-suppression.ts",
+    "expected_violations": 3,
+    "notes": "Fixture covers @ts-ignore, @ts-nocheck, and bare @ts-expect-error while sparing documented suppressions and string literals."
+  }
+}
